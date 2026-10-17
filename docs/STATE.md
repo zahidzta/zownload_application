@@ -9,6 +9,6 @@
 - Key decisions: one task per session; each completed task records evidence here and gets its own `task-<id>` branch and PR when GitHub is available.
 - Key decisions: `docs/` is no longer ignored. Existing design images are still untracked and belong to inventory task 0A-06.
 - Repository note: this checkout has no scaffold, lockfiles, CI, or toolchain record yet; `PROJECT.md:15` describes a different accepted checkpoint. The owner approved rebuilding Gate 0A here.
-- Delivery note: `origin` is configured, but `gh` is unavailable in this environment; the 0A-07 branch is local and its PR is pending.
+- Delivery: `task-0a-07` is pushed to `origin`; PR #1 is open at https://github.com/zahidzta/zownload_application/pull/1. The PR also includes the inherited Gate 0A brief clarification commit (`e0ddd23`), which is not yet on `main`.
 - Open question for `0A-01`: confirm minimum OS matrix against the pinned toolchain (`PROJECT.md:208,715`).
 - Checkpoint: do not begin Gate 0B until Gate 0A evidence is complete and the owner explicitly accepts it.
