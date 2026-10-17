@@ -20,6 +20,10 @@ Selected 2026-10-17 for the empty Tauri 2 foundation. These are **pins for the f
 | Android SDK Command-Line Tools | `22.0` (`cmdline-tools;22.0`, standalone archive build `15859902`) | Google's [current standalone download](https://developer.android.com/studio#command-line-tools-only) names archive build `15859902`; install the versioned SDK package to avoid a moving `latest` path. |
 | Tauri updater plugin | `2.13.0` | Already required by `PROJECT.md:385`; [updater release](https://github.com/tauri-apps/plugins-workspace/releases/tag/updater-v2.13.0). No updater code belongs in Gate 0A. |
 
+### NDK version review (2026-10-17)
+
+The local SDK has r27c (`27.2.12479018`), which is the observation recorded below, not the build pin. Within the r27 series, r27d (`27.3.13750724`) is the better choice: Android's [r27 changelog](https://github.com/android/ndk/wiki/Changelog-r27#r27d) records a newer Clang build and fixes for `lldb.sh` on paths with spaces and for Python lookup on macOS. Android's [unsupported downloads list](https://github.com/android/ndk/wiki/Unsupported-Downloads#r27d) confirms the exact r27d version and classifies it as obsolete. The [NDK release page](https://github.com/android/ndk/wiki#ndk-r30-2026-lts) lists r30 (`30.0.16248370`) as the supported LTS. Keep r30 as the Gate 0A pin, consistent with the current stable toolchain rule in `PROJECT.md:389`.
+
 The Android Gradle Plugin and Gradle wrapper are selected and committed with the generated Android project in **0A-08**. That task must check the generated versions against JDK 17, SDK 36 and NDK r30 before accepting them; the [AGP compatibility table](https://developer.android.com/build/releases/agp-9-4-0-release-notes) is a compatibility reference, not an instruction to replace Tauri's generated template blindly.
 
 ## Setup commands
