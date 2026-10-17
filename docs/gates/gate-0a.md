@@ -1,6 +1,6 @@
 # Gate 0A — reproducible foundation
 
-Scope: the empty Tauri 2/React foundation, contract parity, Android skeleton, pinned toolchain, legal templates, CI skeleton and preserved design inventory (`PROJECT.md:751`). No production UI or real download engine. This brief applies only if the owner confirms Gate 0A should run in this checkout: `PROJECT.md:15` claims it was already accepted, while this checkout lacks its deliverables. Follow the delivery rule at `PROJECT.md:736-745`. The owner's Codex instruction replaces the old `opencode.json` item at `PROJECT.md:751`; do not create that file.
+Scope: the empty Tauri 2/React foundation, contract parity, Android skeleton, pinned toolchain, legal templates, CI skeleton and preserved design inventory (`PROJECT.md:751`). No production UI or real download engine. On 2026-10-17 the owner approved running Gate 0A from scratch in this checkout and ruled out restoring a prior checkpoint. Follow the delivery rule at `PROJECT.md:736-745`. The owner's Codex instruction replaces the old `opencode.json` item; do not create that file.
 
 Each item is one roughly 30-minute session on `task-<id>`. Every task also updates `docs/STATE.md` and records command results there. Independent tasks may be delegated only when supported; dependent tasks need their predecessors integrated. Do not start Gate 0B until the owner accepts the Gate 0A checkpoint.
 
@@ -9,7 +9,7 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 - Goal: choose current compatible exact versions and record installation, setup and minimum-OS evidence.
 - Files to touch: `docs/toolchain.md`, `docs/STATE.md`.
 - Read: `PROJECT.md:196-210,359-390,694-719,747-751`.
-- Dependencies: owner resolves gate-status question; independent of 0A-06 and 0A-07.
+- Dependencies: none; independent of 0A-06 and 0A-07.
 - Acceptance: exact Tauri/Rust/Node/package-manager/JDK/NDK/SDK versions, source links, setup commands and OS matrix are recorded; no unresolved version placeholders.
 - Exact verification command: `rg -n 'Tauri|Rust|Node|package manager|JDK|NDK|SDK|Windows|macOS|Android' docs/toolchain.md` (review each match and version manually).
 
@@ -42,11 +42,11 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 
 ### 0A-05 — Contract compile and JSON parity
 
-- Goal: wire the existing TypeScript/Rust contracts into their builds and compare representative serialized fixtures.
-- Files to touch: `shared/contract.ts`, `src-tauri/src/contract.rs`, `shared/fixtures/**`, `src-tauri/tests/**`, contract-check script, `package.json`, `docs/STATE.md`.
+- Goal: wire the existing TypeScript/Rust contracts into their builds and compare representative serialized fixtures; do not edit contract files, and report conflicts to the owner.
+- Files to touch: `shared/fixtures/**`, `src-tauri/tests/**`, contract-check script, `package.json`, `docs/STATE.md`. Read but do not edit `shared/contract.ts` or `src-tauri/src/contract.rs`.
 - Read: `PROJECT.md:5-22,383,548-590,747-751`.
 - Dependencies: 0A-02 and 0A-03; independent of 0A-06 and 0A-07.
-- Acceptance: frontend types and Rust compile; equivalent values serialize to identical camelCase JSON; any contract conflict goes to the owner.
+- Acceptance: frontend types and Rust compile; equivalent values serialize to identical camelCase JSON; both contract files remain unchanged, and any conflict is reported to the owner.
 - Exact verification command: `npm run check:contracts` and `cargo test --manifest-path src-tauri/Cargo.toml`.
 
 ### 0A-06 — Design inventory check
@@ -74,6 +74,7 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 - Read: `PROJECT.md:196-210,341-352,370-373,747-753`.
 - Dependencies: 0A-01 and 0A-03; independent of 0A-06 and 0A-07.
 - Acceptance: generated project and Gradle wrapper are present, pinned settings match `docs/toolchain.md`, and no Kotlin engine plugin exists yet.
+- Time limit: if this task would exceed roughly 30 minutes, stop and propose a split instead of continuing.
 - Exact verification command: `rg -n 'distributionUrl|compileSdk|ndkVersion' src-tauri/gen/android` (review values against `docs/toolchain.md`).
 
 ### 0A-09 — Android debug-build proof
@@ -83,6 +84,7 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 - Read: `PROJECT.md:196-210,341-352,747-753`.
 - Dependencies: 0A-08; independent of 0A-06 and 0A-07.
 - Acceptance: debug APK is produced without download-engine or production UI code; fix only foundation issues.
+- Time limit: if this task would exceed roughly 30 minutes, stop and propose a split instead of continuing.
 - Exact verification command: `npm run android:debug`.
 
 ### 0A-10 — CI skeleton and local verification entrypoint
