@@ -1,0 +1,27 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs y archivos temporales
+*.log
+*.tmp
+*.temp
+
+# Editores e IDEs
+.vscode/
+.idea/
+
+# Dependencias y artefactos de compilacion
+node_modules/
+dist/
+build/
+target/
+
+# Configuracion y documentacion local
+.codex/
+docs/
