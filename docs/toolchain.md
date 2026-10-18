@@ -1,6 +1,6 @@
 # Gate 0A toolchain and OS matrix
 
-Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffold and Android project are present, and the Android debug APK build passed in 0A-09. CI and clean-checkout proof remain later Gate 0A tasks and must verify the pins before feature work.
+Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffold and Android project are present. The Android debug APK build passed in 0A-09, hosted CI passed in 0A-10, and a clean Windows checkout passed in 0A-11. Final checkpoint review belongs to 0A-12.
 
 **Android NDK build pin: r30 (`30.0.16248370`).** The r27c version in the NDK review is a dated local-installation observation. The setup and verification commands below use r30.
 
@@ -103,3 +103,15 @@ The owner subsequently installed the pinned Android NDK r30 (`30.0.16248370`) in
 The Ubuntu 24.04 Android job uses the same Node/npm and Rust pins, adds Rust target `aarch64-linux-android`, and installs SDK platform API 36, Build-Tools `36.0.0`, Platform-Tools `37.0.1`, Command-Line Tools `22.0` (archive build `15859902`), and NDK `30.0.16248370`. It checks each installed SDK revision before running `npm ci` and `npm run android:debug`. Google's unversioned `platform-tools` package is checked against the recorded `37.0.1` pin so a changed upstream resolution fails instead of silently changing the build. The generated Gradle wrapper is marked executable on the Linux runner; its committed file currently lacks the executable bit.
 
 The Android job downloads the exact [Corretto 21.0.11.10.1 Linux x64 archive](https://github.com/corretto/corretto-21/releases/tag/21.0.11.10.1) and checks the vendor's SHA-256 `5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394` before extracting it to the runner's temporary directory and setting `JAVA_HOME`. Workflow setup uses [setup-node](https://github.com/actions/setup-node), [setup-android](https://github.com/android-actions/setup-android), and Tauri's [Linux prerequisites](https://tauri.app/start/prerequisites/). No installer, release, publish, or artifact-upload step is configured. Hosted-run evidence is assigned to 0A-12.
+
+## 0A-11 clean-checkout Windows proof (2026-10-18)
+
+`scripts/verify-clean.ps1` clones the current named branch into a unique system temporary directory with `git clone --no-local --single-branch --branch`, confirms that the clone is clean and its HEAD matches the source commit, runs `npm ci`, then invokes the existing foundation verifier from inside the clone. It checks the exact Node, npm, Rust, and Cargo pins before installation and removes only its validated temporary clone path afterward. Run from the repository root with the pinned tools on `PATH`:
+
+```powershell
+powershell -NoProfile -File scripts/verify-clean.ps1
+```
+
+The command passed on Windows NT `10.0.26200.0` from branch `task-0a-11` at source and clone commit `a6c52810274c729a6b8fef1f9633e7d4abd14770`. Node `v24.22.0` and bundled npm `11.19.1` came from the [official Windows x64 archive](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip), checked against its [release checksum file](https://nodejs.org/dist/v24.22.0/SHASUMS256.txt): SHA-256 `f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3`. Rust and Cargo both reported `1.99.1`.
+
+The fresh clone's `npm ci` installed 47 packages and reported zero vulnerabilities. `npm run build` passed TypeScript checking and Vite (16 modules transformed); `npm run check:contracts` matched the shared JSON fixture; `cargo test --manifest-path src-tauri/Cargo.toml` passed three contract unit tests and one parity integration test after a 7m 06s clean Rust test build; and `scripts/check-design.ps1` confirmed all nine tracked PNG dimensions. The first sandboxed attempt was blocked by npm registry/cache access; the completed run had the required network and filesystem access and exited `0`. The temporary clone was removed.
