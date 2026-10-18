@@ -2,6 +2,8 @@
 
 Selected 2026-10-17 for the empty Tauri 2 foundation. These are **pins for the forthcoming scaffold and CI**, not claims that this checkout has installed or built them. Commit `package-lock.json`, `Cargo.lock`, a Rust toolchain file, and the generated Gradle wrapper in their assigned Gate 0A tasks. CI and clean-checkout work must verify the pins before feature work.
 
+**Android NDK build pin: r30 (`30.0.16248370`).** The r27c version in the NDK review is a dated local-installation observation. The setup and verification commands below use r30.
+
 ## Exact versions
 
 | Component | Pin | Evidence / use |
@@ -22,7 +24,7 @@ Selected 2026-10-17 for the empty Tauri 2 foundation. These are **pins for the f
 
 ### NDK version review (2026-10-17)
 
-The local SDK has r27c (`27.2.12479018`), which is the observation recorded below, not the build pin. Within the r27 series, r27d (`27.3.13750724`) is the better choice: Android's [r27 changelog](https://github.com/android/ndk/wiki/Changelog-r27#r27d) records a newer Clang build and fixes for `lldb.sh` on paths with spaces and for Python lookup on macOS. Android's [unsupported downloads list](https://github.com/android/ndk/wiki/Unsupported-Downloads#r27d) confirms the exact r27d version and classifies it as obsolete. The [NDK release page](https://github.com/android/ndk/wiki#ndk-r30-2026-lts) lists r30 (`30.0.16248370`) as the supported LTS. Keep r30 as the Gate 0A pin, consistent with the current stable toolchain rule in `PROJECT.md:389`.
+The local SDK has r27c (`27.2.12479018`), a dated observation of this Windows machine. Within the r27 series, r27d (`27.3.13750724`) is the better choice: Android's [r27 changelog](https://github.com/android/ndk/wiki/Changelog-r27#r27d) records a newer Clang build and fixes for `lldb.sh` on paths with spaces and for Python lookup on macOS. Android's [unsupported downloads list](https://github.com/android/ndk/wiki/Unsupported-Downloads#r27d) confirms the exact r27d version and classifies it as obsolete. The [NDK release page](https://github.com/android/ndk/wiki#ndk-r30-2026-lts) lists r30 (`30.0.16248370`) as the supported LTS. Keep r30 as the Gate 0A pin, consistent with the current stable toolchain rule in `PROJECT.md:389`.
 
 The Android Gradle Plugin and Gradle wrapper are selected and committed with the generated Android project in **0A-08**. That task must check the generated versions against JDK 17, SDK 36 and NDK r30 before accepting them; the [AGP compatibility table](https://developer.android.com/build/releases/agp-9-4-0-release-notes) is a compatibility reference, not an instruction to replace Tauri's generated template blindly.
 
@@ -66,4 +68,4 @@ These OS minima are the proposed `PROJECT.md:208,715` baseline checked against f
 
 ## Local observation on 2026-10-17
 
-Before scaffold work, this Windows checkout reported Node `24.14.0`, npm `11.21.0`, Rust/Cargo `1.99.0`, and Oracle JDK `26.0.2`; its SDK had Command-Line Tools `19.0`, Platform-Tools `37.0.0`, Build-Tools `36.0.0`, API 36, and NDK `27.2.12479018`. These are observations, not accepted pins. Install the pinned versions before the exact build checks in later tasks; record the actual setup commands/results there.
+Before scaffold work, this Windows checkout reported Node `24.14.0`, npm `11.21.0`, Rust/Cargo `1.99.0`, and Oracle JDK `26.0.2`; its SDK had Command-Line Tools `19.0`, Platform-Tools `37.0.0`, Build-Tools `36.0.0`, and API 36. The locally installed NDK is recorded in the NDK version review above. These are observations, not accepted pins. Install the pinned versions before the exact build checks in later tasks; record the actual setup commands/results there.
