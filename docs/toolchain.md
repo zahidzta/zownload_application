@@ -1,6 +1,6 @@
 # Gate 0A toolchain and OS matrix
 
-Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffold and Android project are present. The Android debug APK build passed in 0A-09, hosted CI passed in 0A-10, and a clean Windows checkout passed in 0A-11. Final checkpoint review belongs to 0A-12.
+Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffold and Android project are present. The Android debug APK build passed in 0A-09, hosted CI passed in 0A-10 and 0A-12, and a clean Windows checkout passed in 0A-11. Gate 0A awaits the owner's checkpoint review and explicit acceptance.
 
 **Android NDK build pin: r30 (`30.0.16248370`).** The r27c version in the NDK review is a dated local-installation observation. The setup and verification commands below use r30.
 
@@ -115,3 +115,16 @@ powershell -NoProfile -File scripts/verify-clean.ps1
 The command passed on Windows NT `10.0.26200.0` from branch `task-0a-11` at source and clone commit `a6c52810274c729a6b8fef1f9633e7d4abd14770`. Node `v24.22.0` and bundled npm `11.19.1` came from the [official Windows x64 archive](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip), checked against its [release checksum file](https://nodejs.org/dist/v24.22.0/SHASUMS256.txt): SHA-256 `f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3`. Rust and Cargo both reported `1.99.1`.
 
 The fresh clone's `npm ci` installed 47 packages and reported zero vulnerabilities. `npm run build` passed TypeScript checking and Vite (16 modules transformed); `npm run check:contracts` matched the shared JSON fixture; `cargo test --manifest-path src-tauri/Cargo.toml` passed three contract unit tests and one parity integration test after a 7m 06s clean Rust test build; and `scripts/check-design.ps1` confirmed all nine tracked PNG dimensions. The first sandboxed attempt was blocked by npm registry/cache access; the completed run had the required network and filesystem access and exited `0`. The temporary clone was removed.
+
+## 0A-12 hosted CI and checkpoint evidence (2026-10-18)
+
+The exact `gh run list --limit 5` command showed [Foundation CI run 39177425523](https://github.com/zahidzta/zownload_application/actions/runs/39177425523) on `main` at merge commit `f51aeb63538da39e6161d26953b33fbff402e7d8` as `completed/success` (started 2026-10-18 23:39:19 UTC; duration 4m 16s). `gh run view` confirmed both jobs completed successfully:
+
+| Hosted job | Runner | Successful checks |
+|---|---|---|
+| `foundation` | `windows-2025` | Node `24.22.0` and npm `11.19.1` pin checks, Rust `1.99.1` setup, `npm ci`, then `scripts/verify-foundation.ps1`: frontend build/type-check, TypeScript JSON contract fixtures, Rust unit and parity tests, and the nine indexed design PNGs. |
+| `android` | `ubuntu-24.04` | Same Node/npm and Rust pins, Corretto `21.0.11.10.1`, SDK API `36`, Build-Tools `36.0.0`, Platform-Tools `37.0.1`, Command-Line Tools `22.0`, NDK `30.0.16248370`, `npm ci`, then `npm run android:debug` for `aarch64`. |
+
+The exact selected tool versions, source links and setup commands are in the tables and sections above. The generated Android project additionally pins Gradle `9.6.1`, Android Gradle Plugin `9.3.1`, and Kotlin Gradle Plugin `2.2.10`; `src-tauri/Cargo.lock` and `package-lock.json` record the dependency trees.
+
+The local APK still exists at `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`: 136,162,644 bytes, SHA-256 `11B696468F8B586E5C3EBE48BBB38887210EE619B826879DF5475B8494D7D25A`, rechecked during 0A-12. Hosted CI also completed its Android build, but the workflow does not upload the APK as an artifact; the checked file and hash are from the local 0A-09/0A-10 build. The 0A-11 section above records the independent clean-checkout Windows proof. Gate 0A owner acceptance is pending; Android device behavior and release installers are later-stage checks.

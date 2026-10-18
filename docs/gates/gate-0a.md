@@ -117,3 +117,15 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 ## Gate exit
 
 Owner reviews the empty app, clean-checkout and CI evidence, Android debug APK, version/OS matrix, contract parity, legal templates and preserved design references. Record explicit acceptance in `docs/STATE.md` before preparing Gate 0B.
+
+## 0A-12 checkpoint evidence (2026-10-18)
+
+| Review item | Evidence |
+|---|---|
+| Hosted CI | Exact `gh run list --limit 5` reported [main push run 39177425523](https://github.com/zahidzta/zownload_application/actions/runs/39177425523) at merge commit `f51aeb63538da39e6161d26953b33fbff402e7d8` as `completed/success`; `gh run view` showed both `foundation` (Windows 2025) and `android` (Ubuntu 24.04) jobs `completed/success`. |
+| Foundation and contracts | The hosted Windows job ran `npm ci` and `scripts/verify-foundation.ps1`, which runs the frontend build/type-check, TypeScript JSON fixture comparison, Rust contract unit and parity tests, and design check. The 0A-11 clean Windows clone independently passed those checks with pinned Node/npm and Rust/Cargo. |
+| Android skeleton | The hosted Ubuntu job ran `npm run android:debug` successfully with the recorded JDK/SDK/NDK pins. The local debug APK exists at `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk` (136,162,644 bytes; SHA-256 `11B696468F8B586E5C3EBE48BBB38887210EE619B826879DF5475B8494D7D25A`). Hosted CI does not upload its APK; this file and hash are local build evidence. |
+| Versions and OS matrix | Exact Tauri, Rust, Node, npm, Corretto, Android SDK/NDK, Gradle and plugin versions, source links, setup commands, and the selected OS matrix are in `docs/toolchain.md`. |
+| Legal and design inventory | `LICENSE` contains MIT text; `docs/THIRD-PARTY-NOTICES.md` provides the engine notice template. The hosted design check passed for all nine indexed, tracked PNG paths and dimensions. No production UI or download engine was added in Gate 0A. |
+
+The evidence meets the Gate 0A technical checks. Owner review and explicit checkpoint acceptance remain pending; do not begin Gate 0B until acceptance is recorded in `docs/STATE.md`.
