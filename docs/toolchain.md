@@ -1,6 +1,6 @@
 # Gate 0A toolchain and OS matrix
 
-Selected 2026-10-17 for the empty Tauri 2 foundation. These are **pins for the forthcoming scaffold and CI**, not claims that this checkout has installed or built them. Commit `package-lock.json`, `Cargo.lock`, a Rust toolchain file, and the generated Gradle wrapper in their assigned Gate 0A tasks. CI and clean-checkout work must verify the pins before feature work.
+Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffold and Android project are present; Android debug-build, CI and clean-checkout proof remain later Gate 0A tasks. CI and clean-checkout work must verify the pins before feature work.
 
 **Android NDK build pin: r30 (`30.0.16248370`).** The r27c version in the NDK review is a dated local-installation observation. The setup and verification commands below use r30.
 
@@ -26,7 +26,23 @@ Selected 2026-10-17 for the empty Tauri 2 foundation. These are **pins for the f
 
 The local SDK initially had r27c (`27.2.12479018`), a dated observation of this Windows machine. Within the r27 series, r27d (`27.3.13750724`) is the better choice: Android's [r27 changelog](https://github.com/android/ndk/wiki/Changelog-r27#r27d) records a newer Clang build and fixes for `lldb.sh` on paths with spaces and for Python lookup on macOS. Android's [unsupported downloads list](https://github.com/android/ndk/wiki/Unsupported-Downloads#r27d) confirms the exact r27d version and classifies it as obsolete. The [NDK release page](https://github.com/android/ndk/wiki#ndk-r30-2026-lts) lists r30 (`30.0.16248370`) as the supported LTS. Keep r30 as the Gate 0A pin, consistent with the current stable toolchain rule in `PROJECT.md:389`.
 
-The Android Gradle Plugin and Gradle wrapper are selected and committed with the generated Android project in **0A-08**. That task must check the generated versions against JDK 17, SDK 36 and NDK r30 before accepting them; the [AGP compatibility table](https://developer.android.com/build/releases/agp-9-4-0-release-notes) is a compatibility reference, not an instruction to replace Tauri's generated template blindly.
+## Android project pins (0A-08)
+
+`npm run tauri -- android init --ci --skip-targets-install` with Tauri CLI 2.12.0 generated `src-tauri/gen/android`. The generated wrapper pins **Gradle 9.6.1**, and both generated build scripts pin **Android Gradle Plugin 9.3.1**; the root build script pins **Kotlin Gradle Plugin 2.2.10**. These generated versions are retained. [Tauri 2.12's Android template notes](https://github.com/tauri-apps/tauri-docs/blob/v2/src/content/docs/blog/tauri-2.12.mdx) describe the move to Gradle 9 and Kotlin 2; [Android's AGP compatibility guidance](https://developer.android.com/build/releases/about-agp) documents the Gradle/JDK relationship.
+
+The generated app module explicitly sets `compileSdk = 36`, `targetSdk = 36`, `minSdk = 24`, `buildToolsVersion = "36.0.0"`, and `ndkVersion = "30.0.16248370"`, matching the selected SDK, Build-Tools, NDK and OS pins above. The template's API 37 defaults were changed to API 36 because API 36 is the Gate 0A platform pin. Java and Kotlin compile targets are set to 17. Run Gradle with the pinned Temurin JDK 17 through `JAVA_HOME`; a compile target alone does not select the Gradle runtime. [Android's JDK guidance](https://developer.android.com/build/jdks) documents the compile settings. No Kotlin engine plugin is present.
+
+After installing the pinned JDK/SDK and running the Rust target setup above, use these commands from the repository root on Windows:
+
+```powershell
+$env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+$env:JAVA_HOME = '<installed Temurin 17.0.20.1+1 JDK directory>'
+$env:NDK_HOME = Join-Path $env:ANDROID_HOME 'ndk\30.0.16248370'
+npm ci
+npm run android:debug
+```
+
+`android:debug` requests one `aarch64` debug APK through the Tauri CLI. The APK build and resulting path are **0A-09** evidence; 0A-08 only initializes and checks the generated project. On this Windows checkout, Temurin 17 and versioned Command-Line Tools 22.0 are not yet installed (JDK 26 and Command-Line Tools `latest` are present), so the pinned local build environment still needs setup before 0A-09.
 
 ## Setup commands
 
