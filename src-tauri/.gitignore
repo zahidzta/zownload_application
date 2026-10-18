@@ -1,0 +1,5 @@
+# Tauri regenerates these schemas during Rust builds.
+/gen/schemas/
+
+# iOS is outside the supported platform set.
+/icons/ios/
