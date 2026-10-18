@@ -60,11 +60,29 @@ jobs:
       - name: Check SDK and NDK pins
         run: |
           android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}"
-          grep -Eq '^Pkg.Revision = 22\.0$' "$android_sdk/cmdline-tools/22.0/source.properties"
-          grep -Eq '^Pkg.Revision = 37\.0\.1$' "$android_sdk/platform-tools/source.properties"
-          grep -Eq '^Pkg.Revision = 36\.0\.0$' "$android_sdk/build-tools/36.0.0/source.properties"
-          grep -Eq '^Pkg.Revision = 30\.0\.16248370$' "$android_sdk/ndk/30.0.16248370/source.properties"
-          test -f "$android_sdk/platforms/android-36/android.jar"
+          check_revision() {
+            local package="$1" expected="$2"
+            local properties="$android_sdk/$package/source.properties"
+            if [[ ! -f "$properties" ]]; then
+              echo "::error::Missing $properties" >&2
+              return 1
+            fi
+            local actual
+            actual="$(sed -nE 's/^Pkg[.]Revision[[:space:]]*=[[:space:]]*([^[:space:]]+)[[:space:]]*$/\1/p' "$properties")"
+            echo "$package revision: ${actual:-missing} (expected $expected)"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error::Unexpected $package revision" >&2
+              return 1
+            fi
+          }
+          check_revision 'cmdline-tools/22.0' '22.0'
+          check_revision 'platform-tools' '37.0.1'
+          check_revision 'build-tools/36.0.0' '36.0.0'
+          check_revision 'ndk/30.0.16248370' '30.0.16248370'
+          if [[ ! -f "$android_sdk/platforms/android-36/android.jar" ]]; then
+            echo '::error::Android SDK platform 36 is missing' >&2
+            exit 1
+          fi
           echo "ANDROID_HOME=$android_sdk" >> "$GITHUB_ENV"
           echo "NDK_HOME=$android_sdk/ndk/30.0.16248370" >> "$GITHUB_ENV"
       - name: Install pinned Rust and Android target
