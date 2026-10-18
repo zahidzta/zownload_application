@@ -12,6 +12,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "check:contracts": "tsc --project tsconfig.contracts.json && node scripts/check-contracts.mjs",
+    "verify:foundation": "powershell -NoProfile -File scripts/verify-foundation.ps1",
     "preview": "vite preview",
     "tauri": "tauri",
     "android:debug": "tauri android build --debug --apk --target aarch64 --ci"
