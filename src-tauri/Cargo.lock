@@ -4310,6 +4310,7 @@ name = "zownload"
 version = "0.0.0"
 dependencies = [
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]
