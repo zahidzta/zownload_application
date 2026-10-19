@@ -1,0 +1,17 @@
+# 0B-09 Android arm64 QuickJS build evidence (2026-10-19)
+
+Host: GitHub Actions `ubuntu-24.04` x86_64, [engine run 39277745181](https://github.com/zahidzta/zownload_application/actions/runs/39277745181), `quickjs-android-arm64` job, exit 0.
+Exact gate command: `bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify`, with `NDK_HOME=/usr/local/lib/android/sdk/ndk/30.0.16248370` set by the workflow.
+The source was the locked upstream `quickjs-2026-06-04.tar.xz`; SHA-256 `b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a`. No prebuilt QuickJS binary was used.
+
+- NDK `source.properties`: `Pkg.Revision = 30.0.16248370`. Target `arm64-v8a`, minimum Android API 24.
+- Target compiler: NDK r30 Android Clang `21.0.0` (LLVM revision `9f872551d3c681d06fd303b36f16ed5c274735eb`); `--target=aarch64-linux-android24`.
+- Host compiler for upstream `host-qjsc` and `repl.c`: GCC `13.3.0` (`x86_64-linux-gnu`). Build tool: GNU Make `4.3`.
+- Make arguments: `CC=<NDK>/bin/clang HOST_CC=gcc-13 CONFIG_LTO= CONFIG_TEMPORAL_INTL=y CROSS_PREFIX=android- CC=<NDK>/bin/clang --target=aarch64-linux-android24 LIBS=-lm -ldl qjs`. The final `CC` overrides the initial one.
+- Target compile flags shown for `qjs.c`: `-g -Wall -MMD -Wno-array-bounds -Wno-format-truncation -Wno-infinite-recursion -fwrapv -D_GNU_SOURCE -DCONFIG_VERSION=\"2026-06-04\" -O2 -c`.
+- Link command: `<NDK>/bin/clang --target=aarch64-linux-android24 -g -rdynamic -o qjs .obj/qjs.o .obj/repl.o .obj/quickjs.o .obj/dtoa.o .obj/libregexp.o .obj/libunicode.o .obj/cutils.o .obj/quickjs-libc.o -lm -ldl`.
+- Ignored output: `work/engine/build/quickjs/android-arm64/qjs`; 5,405,000 bytes; SHA-256 `4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185`.
+- `file`: ELF 64-bit LSB PIE executable, ARM aarch64, dynamically linked, interpreter `/system/bin/linker64`, with debug info, unstripped.
+- NDK `llvm-readelf`: type `DYN`, machine `AArch64`; interpreter `/system/bin/linker64`; `DT_NEEDED` libraries `libm.so`, `libdl.so`, `libc.so` only.
+
+The first CI attempt ([39276717166](https://github.com/zahidzta/zownload_application/actions/runs/39276717166)) reached the linker but failed because upstream Make linked `-lpthread`; Android has pthread functions in `libc`, so the target recipe overrides `LIBS`. The second attempt ([39277118148](https://github.com/zahidzta/zownload_application/actions/runs/39277118148)) built the ELF but a verifier string comparison rejected the spacing of `llvm-readelf`'s `Machine:` line. The final run passed the corrected inspection. Device execution and APK packaging remain Gate 0C work.
