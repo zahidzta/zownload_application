@@ -1,0 +1,31 @@
+Gate 0B task 0B-08: macOS arm64 QuickJS build evidence
+Date: 2026-10-19 (America/Mexico_City); CI timestamps: 2026-10-19 UTC
+
+Input source: https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz
+Source SHA-256: b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+Host: GitHub Actions macos-15 (macOS 15.7.9, arm64; image 20260907.0337.1)
+Xcode: 16.4, build 16F6
+SDK: macOS 15.5 (/Applications/Xcode_16.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk)
+Compiler: Apple clang 17.0.0 (clang-1700.0.13.5), target arm64-apple-darwin24.6.0
+Build tool: GNU Make 3.81
+Command: bash scripts/gate-0b/build-quickjs.sh macos-arm64 --verify
+Exit status: 0 in both clean CI attempts
+Make arguments: CC=/Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang HOST_CC=/Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang CONFIG_LTO= CONFIG_TEMPORAL_INTL=y LDFLAGS=-g -Wl,-reproducible qjs
+Compile command: /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -g -Wall -MMD -MF .obj/qjs.o.d -Wextra -Wno-sign-compare -Wno-missing-field-initializers -Wundef -Wuninitialized -Wunused -Wno-unused-parameter -Wwrite-strings -Wchar-subscripts -funsigned-char -MMD -MF .obj/qjs.o.d -fwrapv -D_GNU_SOURCE -DCONFIG_VERSION=\"2026-06-04\" -O2 -c -o .obj/qjs.o qjs.c
+Link command: /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -g -Wl,-reproducible -rdynamic -o qjs .obj/qjs.o .obj/repl.o .obj/quickjs.o .obj/dtoa.o .obj/libregexp.o .obj/libunicode.o .obj/cutils.o .obj/quickjs-libc.o -lm -lpthread -ldl
+Build log: work/engine/build/quickjs/macos-arm64/build.log (ignored on CI host)
+Output: work/engine/build/quickjs/macos-arm64/qjs (ignored on CI host)
+Output size: 1,158,656 bytes
+Output SHA-256, attempt 1: fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43
+Output SHA-256, attempt 2: fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43
+Format: Mach-O 64-bit executable arm64
+Mach-O UUID, both attempts: A98023C6-9D92-3BF3-81FD-6190CFBC361B
+Version output: QuickJS version 2026-06-04
+Smoke script: print(1 + 1)
+Smoke output: 2
+CI run ID: 39263966810 (attempts 1 and 2; job quickjs-macos-arm64)
+CI run URL: https://github.com/zahidzta/zownload_application/actions/runs/39263966810
+
+Both attempts fetched and verified the pinned source independently before
+building. Linux x64 and macOS x64 jobs also passed in the workflow. No
+prebuilt QuickJS binary was used or committed.

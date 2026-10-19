@@ -166,3 +166,6 @@ source SHA-256, Mach-O arm64 format, reported QuickJS version and
 `print(1 + 1)` result. The full log and binary stay ignored. The compiler,
 flags, output hash and CI run are recorded in
 [`gates/evidence/0b/quickjs-macos-arm64.txt`](gates/evidence/0b/quickjs-macos-arm64.txt).
+Two clean `macos-15` CI attempts with Xcode 16.4 produced the same
+1,158,656-byte Mach-O arm64 binary with SHA-256
+`fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43`.
