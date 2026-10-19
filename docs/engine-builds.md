@@ -85,3 +85,29 @@ The exact commands, build-log flags, and output are recorded in
 [`gates/evidence/0b/quickjs-windows.txt`](gates/evidence/0b/quickjs-windows.txt).
 The binary and full build log remain ignored local artifacts; run the command
 above to regenerate them.
+
+## 0B-06 — Linux x64 QuickJS binary
+
+The Linux build uses the same attested upstream QuickJS `2026-06-04` archive
+and SHA-256 listed above. The build host is the Gate 0A Ubuntu `24.04` x64 CI
+baseline. Its system GCC 13, GNU Make, `curl`, `sha256sum`, `tar`, and `file`
+are checked before compilation. On a clean Ubuntu 24.04 host, the setup is:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gcc-13 make curl coreutils tar xz-utils file
+bash scripts/gate-0b/build-quickjs.sh linux-x64 --verify
+```
+
+The script downloads the exact locked URL only when its local archive is
+absent, rejects a different source hash, and builds from a new extraction.
+It invokes upstream Make with `CC=gcc-13 HOST_CC=gcc-13 CONFIG_LTO=
+CONFIG_TEMPORAL_INTL=y qjs`. This selects GCC 13 and keeps the upstream x64
+Temporal/Intl configuration while disabling LTO. The Makefile supplies the
+release version define, `-O2`, `-fwrapv`, and its Linux libraries. The script
+checks the ELF architecture, built-in QuickJS version, and `print(1 + 1)`.
+Its output is `work/engine/build/quickjs/linux-x64/qjs`; the binary and full
+build log remain ignored. The GitHub Actions job in
+`.github/workflows/gate-0b-engines.yml` runs the exact command on
+`ubuntu-24.04` after checkout. The run output and resulting hash are recorded
+in [`gates/evidence/0b/quickjs-linux.txt`](gates/evidence/0b/quickjs-linux.txt).
