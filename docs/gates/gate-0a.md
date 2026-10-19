@@ -117,6 +117,7 @@ Each item is one roughly 30-minute session on `task-<id>`. Every task also updat
 ## Gate exit
 
 Owner reviews the empty app, clean-checkout and CI evidence, Android debug APK, version/OS matrix, contract parity, legal templates and preserved design references. Record explicit acceptance in `docs/STATE.md` before preparing Gate 0B.
+Gate 0A accepted by the owner on 2026-10-18 (CI run 39177425523, PR #14 merged).
 
 ## 0A-12 checkpoint evidence (2026-10-18)
 

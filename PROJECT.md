@@ -1,6 +1,6 @@
 # Zownload — Technical Specification
 
-Repository state: restarting from scratch. No code exists yet. Current work: Gate 0A.
+Repository state: Gate 0A accepted by the owner on 2026-10-18. Work is limited to Gate 0B — Real CLI and licensing proof; its builds and real CLI capabilities are not yet verified.
 
 ## 0. How to read this document
 
@@ -12,7 +12,7 @@ Repository state: restarting from scratch. No code exists yet. Current work: Gat
 | `[PROPOSAL]` | Suggested by the assistant and not rejected, but not explicitly approved. Treat as the default; the owner may change it. Includes everything in the contract files unless noted. |
 | `[PENDING]` | Undecided or unknown. Needs an owner decision or a technical spike. Do not silently pick an answer; ask or document the assumption. |
 
-**Current repository state:** Gate 0A is accepted by the owner. On 2026-10-13 the owner confirmed approval of the preview and reported green GitHub Actions, passing tests from a clean checkout, and a debug Android APK that builds and works. These are owner-reported results, consistent with the earlier project record; hosted logs, clean-checkout tests and device playback were not independently rerun during the Gate 0B preflight. Historical pending/failure entries remain in the Gate 0A log. Work is now limited to **Gate 0B — Real CLI and licensing proof**, tracked in `odd/tasks/gate-0b-cli-licensing.md`; its builds and real CLI capabilities are not yet verified. The repository contains:
+**Current repository state:** Gate 0A is accepted by the owner (2026-10-18). Work is now limited to **Gate 0B — Real CLI and licensing proof**; its builds and real CLI capabilities are not yet verified. The repository contains:
 
 - `shared/contract.ts` — TypeScript side of the UI ↔ engine contract.
 - `src-tauri/src/contract.rs` — Rust mirror of the same contract.
