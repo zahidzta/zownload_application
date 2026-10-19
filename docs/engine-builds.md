@@ -169,3 +169,30 @@ flags, output hash and CI run are recorded in
 Two clean `macos-15` CI attempts with Xcode 16.4 produced the same
 1,158,656-byte Mach-O arm64 binary with SHA-256
 `fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43`.
+
+## 0B-09 — Android arm64 QuickJS binary
+
+The Android build uses the same locked QuickJS `2026-06-04` archive and source
+SHA-256 as the desktop builds. Run it on the Gate 0A Ubuntu 24.04 x64 baseline
+with Android NDK r30 (`30.0.16248370`), GCC 13, GNU Make, `curl`, `tar`,
+`sha256sum`, and `file`. With Android SDK Command-Line Tools 22.0 installed:
+
+```bash
+sdkmanager 'ndk;30.0.16248370'
+export NDK_HOME="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/ndk/30.0.16248370"
+bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify
+```
+
+The CI job installs that exact NDK package with `android-actions/setup-android`
+and checks `source.properties` before compilation. The recipe follows
+[Android's NDK guidance for non-CMake Make projects](https://developer.android.com/ndk/guides/other_build_systems):
+NDK Clang targets `aarch64-linux-android24` for the app's minimum API 24.
+Upstream Make uses host GCC 13 to generate `repl.c` with `host-qjsc`, then NDK
+Clang builds `qjs`. `CONFIG_LTO=` and `CONFIG_TEMPORAL_INTL=y` match the
+desktop recipe. The script extracts the source afresh at the stable ignored
+path `work/engine/build/quickjs/android-arm64/`, checks ELF AArch64 and the
+Android linker path, and lists every linked shared library with the NDK's
+`llvm-readelf`. It does not execute the Android binary on the Linux host.
+Device execution and Android packaging are Gate 0C work. The exact compiler,
+flags, ELF inspection, artifact hash and CI run are recorded in
+[`gates/evidence/0b/quickjs-android.txt`](gates/evidence/0b/quickjs-android.txt).

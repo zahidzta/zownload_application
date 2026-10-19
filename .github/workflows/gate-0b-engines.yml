@@ -28,3 +28,16 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build and verify QuickJS macOS arm64
         run: bash scripts/gate-0b/build-quickjs.sh macos-arm64 --verify
+  quickjs-android-arm64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: '15859902'
+          packages: 'ndk;30.0.16248370'
+          log-accepted-android-sdk-licenses: false
+      - name: Build and inspect QuickJS Android arm64
+        run: |
+          export NDK_HOME="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}/ndk/30.0.16248370"
+          bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify
