@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist')]
     [string]$Case
 )
 
@@ -9,8 +9,8 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -eq 'mp3-singles') {
-    Join-Path $root ('work\engine\cli\mp3-singles\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist')) {
+    Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
 }
@@ -82,7 +82,7 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
     finally { $process.Dispose() }
 }
 
-if (-not $Case) { throw 'Specify -Case analyze or -Case mp3-singles' }
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles or mp3-playlist' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -95,9 +95,57 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-if ($Case -eq 'mp3-singles') {
+if ($Case -in @('mp3-singles', 'mp3-playlist')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'mp3-playlist') {
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
+    $playlist = Invoke-Engine 'playlist-flat' ($common + @('--flat-playlist', '--dump-single-json', '--', $fixtures.archiveAudio.url)) 180
+    Assert-Runtime $playlist 'playlist-flat'
+    $playlistJson = $playlist.Stdout | ConvertFrom-Json
+    Assert-Shape ($playlistJson._type -eq 'playlist' -and $playlistJson.id -eq $fixtures.archiveAudio.id) 'Archive playlist identity changed'
+    Assert-Shape ($fixtures.archiveAudio.entries.Count -eq 3 -and $playlistJson.entries.Count -ge 4) 'Archive bounded playlist shape changed'
+    for ($i = 0; $i -lt 3; $i++) {
+        $expectedId = "$($fixtures.archiveAudio.id)/$($fixtures.archiveAudio.entries[$i])"
+        Assert-Shape ($playlistJson.entries[$i + 1].id -eq $expectedId) "Archive entry $($i + 2) changed"
+    }
+    $mismatches = @()
+    foreach ($preset in @(@{ Name = 'max'; Bitrate = 320 }, @{ Name = 'min'; Bitrate = 128 })) {
+        $outputDir = Join-Path $runDir $preset.Name
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        $arguments = $common + @('--playlist-items', '2:4', '-f', 'ba/b', '-x', '--audio-format', 'mp3',
+            '--audio-quality', "$($preset.Bitrate)K", '--ffmpeg-location', $ffmpegDir,
+            '-o', (Join-Path $outputDir '%(playlist_index)s.%(ext)s'), '--', $fixtures.archiveAudio.url)
+        $result = Invoke-Engine $preset.Name $arguments 180
+        Assert-Runtime $result $preset.Name
+        for ($index = 2; $index -le 4; $index++) {
+            $output = Join-Path $outputDir "$index.mp3"
+            Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "$($preset.Name) entry $index output is missing"
+            $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- $output | Out-String)
+            Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for $($preset.Name) entry $index"
+            [IO.File]::WriteAllText((Join-Path $runDir "$($preset.Name)-$index.ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+            $probe = $probeText | ConvertFrom-Json
+            $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+            Assert-Shape ($audio.Count -eq 1 -and $probe.streams.Count -eq 1 -and $audio[0].codec_name -eq 'mp3') "$($preset.Name) entry $index is not audio-only MP3"
+            Assert-Shape ([double]$probe.format.duration -gt 0 -and [double]$probe.format.duration -lt 30) "$($preset.Name) entry $index duration is unexpected"
+            $actual = [int]$audio[0].bit_rate
+            $target = $preset.Bitrate * 1000
+            if ([math]::Abs($actual - $target) -gt ($target * 0.01)) {
+                $mismatches += "$($preset.Name) entry $index ($($fixtures.archiveAudio.entries[$index - 2])): $actual bps, expected $target bps"
+            }
+            $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Output "$($preset.Name) entry $index`: stream=$actual bps format=$($probe.format.bit_rate) bps duration=$($probe.format.duration)s sha256=$hash"
+        }
+        Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -Filter '*.mp3' -File).Count -eq 3) "$($preset.Name) did not produce exactly three MP3 files"
+    }
+    Write-Output "Full stdout/stderr, ffprobe JSON and MP3 outputs: $runDir (ignored)"
+    Assert-Shape ($mismatches.Count -eq 0) ("playlist presets missed intended bitrates: " + ($mismatches -join '; '))
+    return
+}
+
+if ($Case -eq 'mp3-singles') {
     $hashes = @{}
     foreach ($bitrate in @(320, 256, 192, 128)) {
         $outputDir = Join-Path $runDir "$bitrate"

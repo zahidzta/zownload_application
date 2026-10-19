@@ -97,3 +97,37 @@ is already MP3. On the locked Archive `effect-acid.mp3` entry, both 320K and
 That finding is preserved in the same evidence file. The Commons result proves
 the presets for a non-MP3 source only; the Phase 1/2 UI behavior for an
 already-MP3 source remains an open owner decision.
+
+## 0B-15 — MP3 playlist Max/Min (stopped)
+
+The verifier first confirms the locked Archive playlist's 39 flat entries and
+the three bounded IDs at positions 2–4, then runs one playlist CLI invocation
+for Max and one for Min. The tested media command, repeated for B=320 and
+B=128, is:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Path
+foreach ($B in @(320, 128)) {
+    $out = Join-Path (Get-Location) "work/engine/cli/mp3-playlist/manual/$B"
+    New-Item -ItemType Directory -Path $out -Force | Out-Null
+    & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '2:4' -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --ffmpeg-location $ff -o "$out/%(playlist_index)s.%(ext)s" -- 'https://archive.org/details/PureDataSoundEffects'
+}
+```
+
+The reproducible verifier command is:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-playlist
+```
+
+On 2026-10-19 the media commands both exited 0 and processed all three locked
+entries. yt-dlp skipped conversion for all six downloaded MP3s. Pinned ffprobe
+reported 128000 bps on every file: Min met 128 kbps; Max missed 320 kbps for
+all three. For each entry the Max and Min hashes were identical. VLC 3.0.24
+opened and advanced all six files beyond two seconds. The verifier exited 1
+on the Max mismatch, so 0B-15 is not accepted. Per-entry CLI invocations remain
+untested. See [`mp3-playlist.txt`](gates/evidence/0b/mp3-playlist.txt) for the
+exact input lock, hashes, durations, logs and playback result. Gate 0B stops
+pending an owner decision about a separate non-MP3 playlist fixture task.

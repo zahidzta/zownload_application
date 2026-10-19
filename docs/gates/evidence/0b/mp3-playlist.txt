@@ -1,0 +1,53 @@
+0B-15 — MP3 playlist Max/Min probe (STOP, 2026-10-19)
+
+Exact verification command from the repository root:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-playlist
+Exit status: 1. The fixture preflight passed immediately before the CLI run.
+It confirmed the three public, rights-documented Archive entries at positions
+2–4. Pinned yt-dlp flat analysis returned a 39-entry playlist and confirmed
+their IDs at those positions before media downloads.
+
+Pinned executables checked by the verifier:
+  yt-dlp stable@2026.08.19 SHA-256 66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  QuickJS 2026-06-04 SHA-256 bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+  ffmpeg 8.1.3 SHA-256 fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe 8.1.3 SHA-256 bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+All three yt-dlp invocations reported only quickjs-2026-06-04 enabled and
+bundled yt_dlp_ejs-0.8.0. Flat analysis took 4.36 s, Max 7.75 s, Min 8.66 s.
+
+Exact bounded media command for B=320 (Max) and B=128 (Min), with $yt, $qjs,
+$ff and $out resolved to absolute paths in the verifier:
+  & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '2:4' -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --ffmpeg-location $ff -o "$out/%(playlist_index)s.%(ext)s" -- 'https://archive.org/details/PureDataSoundEffects'
+Both CLI invocations exited 0 and processed exactly three selected entries.
+For all six files yt-dlp logged `[ExtractAudio] Not converting audio ...; file
+is already in target format mp3`. No requested bitrate conversion occurred.
+The verifier used pinned ffprobe on each output with:
+  & (Join-Path $ff 'ffprobe.exe') -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- $output
+All six probes exited 0 and reported one MP3 audio stream with no video.
+
+Entry (playlist index)       Preset   Stream bps  Format bps  Duration s  SHA-256
+effect-acid.mp3 (2)         Max 320  128000      128386      10.840813   15ef1a95749a885aa0a054d2412b64ac370ca52de5c5c9e80656c4bff572840a
+effect-alarm-siren.mp3 (3)  Max 320  128000      128482       9.430188   f5164fb046f2afcf327e55cae8237852c48362673ba6831a510b0167dd5c39bf
+effect-alarmclock.mp3 (4)   Max 320  128000      128525       8.071813   c01423a23d3ea98a0fa74a82167ac7c8c98e8a0c4fd1e2d911b102d32c8e5123
+effect-acid.mp3 (2)         Min 128  128000      128386      10.840813   15ef1a95749a885aa0a054d2412b64ac370ca52de5c5c9e80656c4bff572840a
+effect-alarm-siren.mp3 (3)  Min 128  128000      128482       9.430188   f5164fb046f2afcf327e55cae8237852c48362673ba6831a510b0167dd5c39bf
+effect-alarmclock.mp3 (4)   Min 128  128000      128525       8.071813   c01423a23d3ea98a0fa74a82167ac7c8c98e8a0c4fd1e2d911b102d32c8e5123
+
+Common-player playback: the ignored existing Python ctypes helper opened
+the six final files with portable VLC 3.0.24/libVLC and required state 3
+(playing) plus position beyond 2000 ms. Exact invocation from the repository
+root, with all six paths resolved to absolute paths:
+  $run='work/engine/cli/mp3-playlist/20261019-173743'; $paths=@(); foreach($quality in @('max','min')){foreach($index in 2..4){$paths += (Resolve-Path -LiteralPath (Join-Path $run "$quality/$index.mp3")).Path}}; & py work/engine/cli/play_vlc.py @paths
+The helper exited 0; reported positions in that order were 2195, 2192, 2193,
+2194, 2196 and 2197 ms. This is automated player playback, not a human
+listening claim. Full CLI stdout/stderr, ffprobe JSON and media remain ignored
+under work/engine/cli/mp3-playlist/20261019-173743/.
+
+The verifier rejected the three Max outputs because each stream was 128000
+bps rather than 320000 bps. The Max/Min files have identical hashes for each
+entry. Playlist processing and Min succeeded, but the Max acceptance criterion
+did not. Separate per-entry yt-dlp invocations were not tested; their viability
+is unproven. Do not infer that splitting the CLI call would change the preset
+result. Gate 0B stops pending an owner decision on a separate rights-documented
+non-MP3 playlist fixture task. The owner previously declined forced re-encoding
+of already-MP3 sources for the analogous single-output finding.
