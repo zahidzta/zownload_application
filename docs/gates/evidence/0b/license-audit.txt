@@ -1,0 +1,95 @@
+Gate 0B-12 redistribution license audit — 2026-10-19
+Host: Windows 11 x64. Exact command from repository root:
+  powershell -NoProfile -File scripts/gate-0b/verify-licenses.ps1
+Result: exit 0 after the corrections documented below. The verifier is
+offline and checks all 15 pinned downloads and both detached signatures.
+
+Official yt-dlp 2026.08.19 PyInstaller executables, signed manifest hashes:
+  yt-dlp.exe    66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  yt-dlp_linux  58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a
+  yt-dlp_macos  0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202
+The actual embedded THIRD_PARTY_LICENSES.txt is 248,243 bytes/CRLF on
+Windows, SHA-256 5b7bc105c562b81b90d1a2cd5a8cc8b336ee107ae0ae81ce58450cd8b1bc2ad4.
+It is 243,550 bytes/LF on both Unix targets, SHA-256
+472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7.
+All three normalize to identical text and contain 45 embedded license entries.
+Each entry includes the component's effective license and verbatim notice.
+The inventory covers more than the Python project metadata:
+  Python PSF-2.0; bzip2 bzip2-1.0.6; libffi MIT; OpenSSL 1.x OpenSSL;
+  OpenSSL 3.0+ Apache-2.0; SQLite Public Domain; liblzma 0BSD;
+  mpdecimal BSD-2-Clause; zlib Zlib; Expat MIT;
+  ncurses X11-distribute-modifications-variant; GNU Readline GPL-3.0-or-later;
+  libstdc++ GPL-3.0-with-GCC-exception; libgcc GPL-3.0-with-GCC-exception;
+  libuuid BSD-3-Clause; libintl LGPL-2.1-or-later;
+  libidn2 LGPL-3.0-or-later; libidn2 Unicode data Unicode-TOU AND
+  Unicode-DFS-2016; libunistring LGPL-3.0-or-later;
+  curl-impersonate MIT; curl curl; BoringSSL Apache-2.0;
+  nghttp2 MIT; ngtcp2 MIT; nghttp3 MIT; zstd BSD-3-Clause; brotli MIT;
+  curl_cffi MIT; Tornado Apache-2.0; httpx BSD-3-Clause; cffi MIT-0;
+  pycparser BSD-3-Clause; mutagen GPL-2.0-or-later;
+  PyCryptodome Public Domain and BSD-2-Clause; certifi MPL-2.0;
+  requests Apache-2.0; charset-normalizer MIT; idna BSD-3-Clause;
+  urllib3 MIT; SecretStorage BSD-3-Clause; cryptography Apache-2.0;
+  Jeepney MIT; websockets BSD-3-Clause; Meriyah ISC; Astring MIT.
+These are the upstream inventory headings; a heading does not prove that a
+component is loaded on every platform. Preserve the full inventory anyway.
+
+All three executables embed EJS 0.8.0 solver files byte-for-byte matching
+the pinned wheel, itself SHA-256
+79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4:
+  core.min.js 18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00
+  lib.min.js  c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577
+yt-dlp's own source archive 072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1
+contains the Unlicense. The EJS source archive
+d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e
+is locked separately. The official PyInstaller executable is GPL-3.0-or-later
+as a combined work; the Unlicense alone is not its effective license.
+The appended PyInstaller bootloader has a GPL-2.0-or-later distribution
+exception; its source revision and COPYING.txt/exception text must be
+included and checksummed in the release source bundle.
+
+QuickJS 2026-06-04 source archive
+b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+contains the MIT LICENSE. Binary SHA-256 values and exact configuration:
+  Windows x64   bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+  Linux x64     50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c
+  macOS x64     554102a8a9c0d0c5e24cd138ad7a790f330fd926310c01009265589a446ef90a
+  macOS arm64   fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43
+  Android arm64 4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185
+These target hashes are supported by quickjs-{windows,linux,macos-x64,
+macos-arm64,android}.txt. The local verifier rehashes only the Windows build;
+the other four outputs were built and inspected in CI, not downloaded here.
+Windows QuickJS imports KERNEL32.dll and msvcrt.dll. Its statically linked
+MinGW-w64 runtime notice is present in pinned w64devkit, SHA-256
+ecff91ddb5799c8b79a4bdb576921b9c3e2989783fd1944527e8eb9b41a5ff5f.
+
+Windows FFmpeg 8.1.3 executable hashes from 0B-11:
+  ffmpeg.exe  fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe.exe bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+Both actual executables report LGPL 2.1 or later and enable libmp3lame and
+zlib. The generated config has CONFIG_GPL=0, CONFIG_NONFREE=0,
+CONFIG_VERSION3=0; -buildconf omits --enable-gpl and --enable-nonfree.
+No GPL decoder object occurs in LAME's encoder archive. Source hashes:
+  FFmpeg 7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3
+  LAME   ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+  zlib   bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+The source archives contain FFmpeg LGPL 2.1, LAME Library GPL 2-or-later
+encoder, and zlib license texts. The 0B-11 evidence records exact flags,
+static archive hashes, imported DLLs and smoke encodes.
+
+Release packaging plan: ship the verbatim notices and matched source bundle,
+including all actual yt-dlp bundled dependency sources and versions, patches,
+build configurations, source/binary checksums, and LGPL relinking materials.
+The owner selected the current lock plus this per-release source plan; no
+claim is made that every transitive source archive is already locked.
+Official Windows yt-dlp also embeds Microsoft VCRUNTIME140.dll, ucrtbase.dll
+and api-ms-win-* forwarders. Their redistribution follows Microsoft runtime
+terms outside the open-source inventory. Check entitlement and per-file
+hashes/versions before any release; stop if terms cannot be established.
+
+Verifier corrections before the passing run: FFmpeg writes its harmless
+version banner to stderr, which Windows PowerShell 5.1 treats as a native
+command error under Stop; the final script captures the exit status and
+normalizes wrapped -L text. LAME's encoder archive legitimately contains
+mpglib_interface.o with HAVE_MPGLIB undefined; the final script rejects the
+actual eight GPL decoder object names instead of that encoder interface.

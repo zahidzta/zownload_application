@@ -162,3 +162,35 @@ after its detached signature verified against the published release-key
 fingerprint. Later build tasks must invoke `verify-downloads.ps1` before
 extracting or executing these inputs. A changed URL or hash requires a new
 source-lock review.
+
+## 0B-12 redistribution source plan
+
+The signed official yt-dlp executables have three distinct SHA-256 values in
+the lock above. Their embedded `THIRD_PARTY_LICENSES.txt` files have 45
+entries with identical normalized text; Windows uses CRLF, Linux/macOS LF.
+The 0B-12 verifier opens each PyInstaller archive, hashes the embedded notice,
+and proves both EJS solver scripts match the locked EJS 0.8.0 wheel. The full
+inventory and embedded digests are in
+[`license-audit.txt`](gates/evidence/0b/license-audit.txt).
+
+The owner chose the existing signed artifact/source lock plus a per-release
+corresponding-source plan for this audit. A source bundle accompanying an
+actual release must identify the exact versions in each executable, obtain
+and checksum all bundled dependency sources, preserve their full license
+texts, and map each binary member to source and build configuration. The
+current yt-dlp source tarball covers its own code but excludes the bundled
+Python/native dependencies and `bundle/` build recipes. The immutable
+[`3a08beaf` release commit](https://github.com/yt-dlp/yt-dlp/tree/3a08beaf031ab68f966401ead017ac81fe8486cf/bundle)
+identifies the upstream PyInstaller recipe and platform requirements; the
+release packager must snapshot and checksum those materials too. Upstream's
+offer to provide third-party source does not replace the project's release
+source bundle. Proprietary Microsoft runtime files inside `yt-dlp.exe` have
+separate redistribution terms rather than public corresponding source;
+their entitlement and per-file hashes are release packaging checks.
+
+QuickJS's one locked source archive covers the five built targets; the exact
+build commands and five binary hashes are linked from
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). Windows FFmpeg's
+corresponding sources are the locked FFmpeg, LAME and zlib archives. Its
+static-link relinking materials and full configuration must accompany each
+release. The Gate 0B Windows hashes do not attest future platform builds.
