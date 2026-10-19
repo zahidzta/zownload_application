@@ -1,0 +1,19 @@
+# 0B-03: SHA-256 of every downloaded file in work/engine/downloads/.
+# yt-dlp artifact hashes: release SHA2-256SUMS (GPG signer AC0CBBE6848D6A873464AF4E57CF65933B5A7581).
+# yt-dlp ejs and LAME: published package/source hashes. QuickJS: computed from upstream HTTPS source.
+# FFmpeg: computed after release signature verified (GPG signer FCF986EA15E6E293A5644F10B4322F04D67658D8).
+# Signature and key hashes: computed after acquisition; key URLs and fingerprints are in docs/engine-sources.md.
+072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1  yt-dlp.tar.gz
+a63701f30755cb4d9317950d69703e9d751d490cb1b7059e1bb501a353fe7dcb  SHA2-256SUMS
+8d6f9a7c84c57222e3650c61699185878a3468308de702993ce4f20b5f9cf199  SHA2-256SUMS.sig
+66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a  yt-dlp.exe
+58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a  yt-dlp_linux
+0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202  yt-dlp_macos
+d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e  yt_dlp_ejs-0.8.0.tar.gz
+79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4  yt_dlp_ejs-0.8.0-py3-none-any.whl
+b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a  quickjs-2026-06-04.tar.xz
+7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3  ffmpeg-8.1.3.tar.xz
+5f2880c7fea01f8694d30cb9d06362f77241ee67ce5926b157a226b18f08a538  ffmpeg-8.1.3.tar.xz.asc
+ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e  lame-3.100.tar.gz
+45d6b415928b5f3e228b461fa9e6d7eb56a824931c785ece00279a06c7a6d6e5  yt-dlp-public.key
+397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5  ffmpeg-devel.asc

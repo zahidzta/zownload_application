@@ -46,6 +46,10 @@ Assert-Lock ($lock.ejs.commit -match '^[a-f0-9]{40}$') 'ejs commit is not full l
 Assert-Url $lock.ytDlp.checksumManifest.url $lock.ytDlp.version 'yt-dlp checksum manifest'
 Assert-Url $lock.ytDlp.checksumManifest.signatureUrl $lock.ytDlp.version 'yt-dlp checksum signature'
 Assert-Digest $lock.ytDlp.checksumManifest.sha256 'yt-dlp checksum manifest'
+Assert-Digest $lock.ytDlp.checksumManifest.signatureSha256 'yt-dlp checksum signature'
+Assert-Lock ($lock.ytDlp.signingKey.url -eq "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$($lock.ytDlp.commit)/public.key") 'yt-dlp key must come from the pinned commit'
+Assert-Digest $lock.ytDlp.signingKey.sha256 'yt-dlp signing key'
+Assert-Lock ($lock.ytDlp.signingKey.fingerprint -match '^[A-F0-9]{40}$') 'yt-dlp signer fingerprint is missing'
 
 foreach ($target in @('windowsX64', 'linuxX64', 'macosUniversal')) {
     $artifact = $lock.ytDlp.binaries.$target
@@ -61,7 +65,11 @@ foreach ($target in @('windowsX64', 'linuxX64', 'macosUniversal')) {
 Assert-Url $lock.ejs.wheel.url $lock.ejs.version 'ejs wheel URL'
 Assert-Digest $lock.ejs.wheel.sha256 'ejs wheel'
 Assert-Url $lock.ffmpeg.source.signatureUrl $lock.ffmpeg.version 'FFmpeg signature URL'
-Assert-Lock ($lock.ffmpeg.source.hashPlan -match 'verify-upstream-pgp-signature') 'FFmpeg needs signature verification'
+Assert-Digest $lock.ffmpeg.source.sha256 'FFmpeg source'
+Assert-Digest $lock.ffmpeg.source.signatureSha256 'FFmpeg signature'
+Assert-Lock ($lock.ffmpeg.signingKey.url -eq 'https://ffmpeg.org/ffmpeg-devel.asc') 'FFmpeg key URL must be official'
+Assert-Digest $lock.ffmpeg.signingKey.sha256 'FFmpeg signing key'
+Assert-Lock ($lock.ffmpeg.signingKey.fingerprint -eq 'FCF986EA15E6E293A5644F10B4322F04D67658D8') 'FFmpeg signer fingerprint disagrees with upstream'
 
 $requiredQuickJsTargets = @('windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64', 'android-arm64')
 foreach ($target in $requiredQuickJsTargets) {
@@ -73,4 +81,4 @@ Assert-Lock ($notice -match 'GPLv3\+') 'notices must describe official yt-dlp bi
 Assert-Lock ($notice -match 'mpglib.*GPL') 'notices must flag the LAME GPL decoder'
 Assert-Lock ($notice -match 'yt-dlp-ejs' -and $notice -match 'LAME MP3') 'notices need ejs and LAME sections'
 
-Write-Output 'Source lock: 5 components, matching yt-dlp/ejs versions, 3 desktop yt-dlp artifacts, 5 QuickJS targets, URLs, digest plans and license notices passed.'
+Write-Output 'Source lock: 5 components, matching yt-dlp/ejs versions, 3 desktop yt-dlp artifacts, 5 QuickJS targets, URLs, SHA-256 values, signing keys and license notices passed.'
