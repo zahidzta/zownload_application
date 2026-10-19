@@ -111,6 +111,12 @@ echo "Output: $output"
 echo "Output bytes: $(wc -c < "$output" | tr -d ' ')"
 echo "Output SHA-256: $(hash_file "$output")"
 echo "Format: $format"
+if [[ "$target" == macos-x64 ]]; then
+  for object in qjs repl quickjs dtoa libregexp libunicode cutils quickjs-libc; do
+    echo "Object SHA-256 ($object): $(hash_file "$source_dir/.obj/$object.o")"
+  done
+  echo "Mach-O UUID: $(xcrun dwarfdump --uuid "$output")"
+fi
 echo "Version: ${help_text%%$'\n'*}"
 echo "Smoke script: print(1 + 1) => $smoke"
 if [[ -n "${GITHUB_RUN_ID:-}" ]]; then echo "GitHub run ID: $GITHUB_RUN_ID"; fi
