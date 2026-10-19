@@ -144,12 +144,21 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Acceptance: required JSON shapes and single/playlist interpretation match the command matrix; YouTube succeeds with QuickJS/ejs; elapsed time and any timeout are recorded.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case analyze`.
 
+### 0B-14A — Non-MP3 single fixture
+
+- Goal: replace the already-MP3 input for 0B-14 with a rights-documented, short source whose audio is not MP3, without changing MP3 source behavior. This separate fixture task was approved by the owner after the 0B-14 stop.
+- Files to touch: `docs/gates/evidence/0b/fixtures.md`, `scripts/gate-0b/verify-fixtures.ps1`, `docs/gates/evidence/0b/mp3-singles.txt`, `docs/ytdlp-commands.md`, `docs/STATE.md`, this gate file.
+- Read: `PROJECT.md:388,390,710,752,809-812`.
+- Dependencies/parallelism: 0B-02 and the recorded 0B-14 failure. Finish before resuming 0B-14; do not run the four preset encodes in this fixture task.
+- Acceptance: the new source URL, author, license, file identity and non-MP3 audio codec are documented; a one-time ffprobe inspection confirms the codec; the read-only preflight checks current source metadata without downloading media and all prior fixture checks still pass.
+- Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-fixtures.ps1`.
+
 ### 0B-14 — MP3 single presets
 
 - Goal: test 320/256/192/128 kbps output from the best available source, inspect actual output bitrate and play the four files.
 - Files to touch: `scripts/gate-0b/verify-cli.ps1`, `docs/ytdlp-commands.md`, `docs/gates/evidence/0b/mp3-singles.txt`, `docs/STATE.md`.
 - Read: `PROJECT.md:388,390,710,752,809-812`.
-- Dependencies/parallelism: 0B-02, 0B-03, 0B-05 and 0B-11; independent of 0B-15/16 once shared CLI script edits are integrated.
+- Dependencies/parallelism: 0B-02, 0B-03, 0B-05, 0B-11 and 0B-14A; use the locked non-MP3 Commons original for this probe. Independent of 0B-15/16 once shared CLI script edits are integrated.
 - Acceptance: all four commands succeed, ffprobe reports MP3 outputs at the intended presets within documented encoder tolerance, and common-player playback is recorded.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-singles`.
 

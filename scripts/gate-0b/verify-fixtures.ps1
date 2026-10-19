@@ -68,6 +68,28 @@ $oembed = Read-Json "https://www.youtube.com/oembed?url=$videoUrl&format=json"
 Assert-Fixture ($oembed.title -eq $lock.youtubeShort.title -and $oembed.author_name -eq $lock.youtubeShort.author) 'YouTube short title/author changed or video disappeared'
 Write-Output "OK YouTube single: $($lock.youtubeShort.id)"
 
+$commonsLock = $lock.commonsVorbisSingle
+Assert-Fixture ($commonsLock.title -eq [uri]::UnescapeDataString('File:10%E8%99%9F%E9%A2%A8....webm')) 'Commons Vorbis file title changed'
+Assert-Fixture ($commonsLock.pageUrl -eq 'https://commons.wikimedia.org/wiki/File:10%E8%99%9F%E9%A2%A8....webm') 'Commons file page URL changed'
+Assert-Fixture ($commonsLock.mediaUrl -eq 'https://upload.wikimedia.org/wikipedia/commons/a/aa/10%E8%99%9F%E9%A2%A8....webm') 'Commons original media URL changed'
+Assert-Fixture ($commonsLock.audioCodec -eq 'vorbis') 'Commons source audio codec lock changed'
+$commonsTitle = [uri]::EscapeDataString($commonsLock.title)
+$commonsApiUrl = "https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url%7Csize%7Cmime%7Csha1%7Cextmetadata&titles=$commonsTitle"
+$commonsApi = Read-Json $commonsApiUrl
+$commonsPages = @($commonsApi.query.pages.PSObject.Properties)
+Assert-Fixture ($commonsPages.Count -eq 1) 'Commons API did not return one file page'
+$commonsPage = $commonsPages[0].Value
+Assert-Fixture ($commonsPage.title -eq $commonsLock.title -and $commonsPage.imageinfo.Count -eq 1) 'Commons original file disappeared'
+$commonsInfo = $commonsPage.imageinfo[0]
+Assert-Fixture (($commonsInfo.url -split '\?', 2)[0] -eq $commonsLock.mediaUrl) 'Commons original media URL changed'
+Assert-Fixture ([long]$commonsInfo.size -eq [long]$commonsLock.size -and $commonsInfo.mime -eq $commonsLock.mime) 'Commons original size or MIME changed'
+Assert-Fixture ($commonsInfo.sha1 -eq $commonsLock.sha1) 'Commons original SHA-1 changed'
+Assert-Fixture ($commonsInfo.extmetadata.LicenseShortName.value -eq $commonsLock.license) 'Commons license changed'
+Assert-Fixture ($commonsInfo.extmetadata.Artist.value -match [regex]::Escape($commonsLock.author)) 'Commons author changed'
+$commonsHtml = Read-Page $commonsLock.pageUrl
+Assert-Fixture ($commonsHtml.Contains('VP8/Vorbis')) 'Commons page no longer documents Vorbis audio'
+Write-Output 'OK Commons single: original WebM, Vorbis audio and reviewed CC BY 3.0; metadata only'
+
 $playlistPage = Read-Page $lock.blenderPlaylist.url
 Assert-Fixture ($playlistPage.Contains($lock.blenderPlaylist.title)) 'Blender playlist title changed or page disappeared'
 foreach ($id in $lock.blenderPlaylist.videoIds) {

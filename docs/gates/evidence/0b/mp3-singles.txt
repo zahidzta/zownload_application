@@ -1,5 +1,9 @@
 Gate 0B task 0B-14: MP3 single preset probe (BLOCKED, 2026-10-19)
 
+Finding: yt-dlp skips conversion when the source is already MP3. The 320K
+option does not force an MP3-to-MP3 re-encode. This is preserved as a CLI
+finding, not a decision about how the Phase 1/2 UI should handle MP3 sources.
+
 Fixture: the locked PureDataSoundEffects entry effect-acid.mp3. A flat playlist
 query of https://archive.org/details/PureDataSoundEffects identified its entry
 URL as https://archive.org/download/PureDataSoundEffects/effect-acid.mp3.
@@ -50,3 +54,9 @@ The gate's exact verification entrypoint, `powershell -NoProfile -File
 scripts/gate-0b/verify-cli.ps1 -Case mp3-singles`, exited 1 because the script
 still accepts only `-Case analyze`. The MP3 verifier was not implemented after
 the demonstrated preset mismatch; do not treat this as a passing task.
+
+0B-14A fixture follow-up: the owner chose a separate non-MP3 fixture task and
+explicitly declined re-encoding an already-MP3 source to make the probe pass.
+The new locked Commons original is a 14.748-second WebM with Vorbis audio.
+Its source SHA-256 is `3b8bc381e3173f032d30d37983b8662c12d32c5ab780e7dd6bf45b7cba74c36b`.
+The four MP3 outputs remain for resumed task 0B-14.
