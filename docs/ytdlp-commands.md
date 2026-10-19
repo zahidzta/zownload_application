@@ -67,3 +67,5 @@ target format and skipped conversion; ffprobe measured 128,000 bps, with the
 same output hash as a 128K request. The 256K and 192K presets and playback
 remain untested. The proposed command is not verified for MP3 sources. See
 [`mp3-singles.txt`](gates/evidence/0b/mp3-singles.txt) for the exact probe.
+Task 0B-14A locked a short Commons original with Vorbis audio for the next
+0B-14 run; no bitrate preset result is claimed from that fixture yet.
