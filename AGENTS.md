@@ -47,3 +47,26 @@ Always consult the user before:
 - Removing important features.
 - Making decisions with substantial cost implications.
 - Introducing breaking API changes.
+
+## GitHub CLI Execution Policy
+
+Environment: Windows PowerShell.
+
+The verified GitHub CLI executable is:
+C:\Program Files\GitHub CLI\gh.exe
+
+Rules:
+- Always invoke GitHub CLI using its absolute path.
+- Use PowerShell's call operator (&).
+- Do not search for gh.exe using where.exe,
+  Get-Command, or filesystem scans.
+- Do not download or install another copy
+  of GitHub CLI.
+- Do not use temporary or portable installations.
+- If GitHub API access fails, report the network
+  or sandbox error instead of searching for
+  another executable.
+- Apply these instructions to all subagents.
+
+Example:
+& 'C:\Program Files\GitHub CLI\gh.exe' pr status
