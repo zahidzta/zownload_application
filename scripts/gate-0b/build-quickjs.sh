@@ -73,7 +73,12 @@ tar -xf "$archive" -C "$build_dir"
 [[ "$(cat "$source_dir/VERSION")" == 2026-06-04 ]] || fail 'source VERSION mismatch'
 [[ -f "$source_dir/Makefile" ]] || fail 'upstream Makefile is missing'
 
-make_args=("CC=$compiler" "HOST_CC=$compiler" CONFIG_LTO= CONFIG_TEMPORAL_INTL=y qjs)
+make_args=("CC=$compiler" "HOST_CC=$compiler" CONFIG_LTO= CONFIG_TEMPORAL_INTL=y)
+if [[ "$target" == macos-x64 ]]; then
+  # Keep the upstream debug flag and ask Apple's linker for stable output.
+  make_args+=("LDFLAGS=-g -Wl,-reproducible")
+fi
+make_args+=(qjs)
 if ! make -C "$source_dir" "${make_args[@]}" >"$log" 2>&1; then
   tail -n 50 "$log" >&2
   fail "make failed; full log: $log"
