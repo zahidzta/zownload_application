@@ -60,3 +60,55 @@ explicitly declined re-encoding an already-MP3 source to make the probe pass.
 The new locked Commons original is a 14.748-second WebM with Vorbis audio.
 Its source SHA-256 is `3b8bc381e3173f032d30d37983b8662c12d32c5ab780e7dd6bf45b7cba74c36b`.
 The four MP3 outputs remain for resumed task 0B-14.
+
+Resumed 0B-14: Commons Vorbis preset probe (PASS, 2026-10-19)
+
+Exact verification command from the repository root:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-singles
+Exit status: 0. The fixture preflight passed immediately before the downloads.
+The verifier checked the pinned yt-dlp, QuickJS, ffmpeg and ffprobe hashes above,
+and each downloaded copy of the locked Commons original against SHA-256
+3b8bc381e3173f032d30d37983b8662c12d32c5ab780e7dd6bf45b7cba74c36b.
+All four commands fetched the original media URL, selected its only WebM format,
+and reported an ExtractAudio destination. The verbose logs identify yt-dlp
+stable@2026.08.19, only quickjs-2026-06-04, and bundled yt_dlp_ejs-0.8.0.
+
+The tested yt-dlp command for each B in 320, 256, 192, 128 was:
+  & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --no-playlist -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --keep-video --ffmpeg-location $ff -o "$out/$B/source.%(ext)s" -- 'https://upload.wikimedia.org/wikipedia/commons/a/aa/10%E8%99%9F%E9%A2%A8....webm'
+Here $yt, $qjs and $ff are the absolute paths named in the earlier probe;
+$out is the absolute ignored run directory
+work/engine/cli/mp3-singles/20261019-173027. Each invocation exited 0.
+`--keep-video` retains each downloaded `source.webm` for SHA-256 checking;
+all four copies matched the locked original. No pre-existing local media is
+needed for the verifier.
+The generated ffmpeg command used libmp3lame with -b:a B.0k and removed video.
+The verifier ran this pinned ffprobe command on every output (all exited 0):
+  & (Join-Path $ff 'ffprobe.exe') -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- "$out/$B/source.mp3"
+It required one MP3 audio stream, no video, duration 14-16 seconds, a stream
+bitrate within 1% of the requested preset, and four distinct output hashes.
+The measured stream rates were exact; the container rates include MP3 overhead.
+
+  Preset  Stream bps  Format bps  Duration s  Output SHA-256
+  320K    320000      321377      14.749025   0c8ed367819077cf8f2d9e5595409b4b89a24df74fc4b8a1a089a7b0c1159695
+  256K    256000      257106      14.749025   f33dcfedba0dbdf0db951ec52d5672017b20aa5db67d327e50f92a78406fb1ae
+  192K    192000      192836      14.749025   abdeebc96a842cfe2dc6d10e34138d3d28547c1278b1411234fe74532c49eb6f
+  128K    128000      128564      14.749025   d26f5c04fca7a038aa504062b2e391cdb5b44f3837daf9c0eda59a546e0eeca9
+
+Common-player playback check: portable VideoLAN VLC 3.0.24, downloaded only
+for this local test from the versioned official Windows x64 7z archive. The
+archive SHA-256 matched its official sidecar:
+1ed59c09152e78aff84663fa76efab26057716576db74332858810e5ef54ae1f.
+An ignored local Python ctypes helper called libVLC's media player API, played
+each output with the default audio output, and required the VLC player to
+enter state 3 (playing) and advance past 2000 ms within 15 seconds. Exact
+invocation from the repository root:
+  py work/engine/cli/play_vlc.py work/engine/cli/mp3-singles/20261019-173027/320/source.mp3 work/engine/cli/mp3-singles/20261019-173027/256/source.mp3 work/engine/cli/mp3-singles/20261019-173027/192/source.mp3 work/engine/cli/mp3-singles/20261019-173027/128/source.mp3
+The helper exited 0 and reported VLC player state 3 at
+2037, 2170, 2115 and 2195 ms respectively. This confirms VLC opened and
+advanced all four files; it does not claim a human listening check. The VLC
+archive, helper, full logs, JSON and media remain ignored under work/engine/.
+
+The already-MP3 Archive result above remains a separate, unresolved behavior
+for later product decisions. This pass proves the four intended preset rates
+when the best available source is Vorbis; it does not imply bitrate is a
+measure of improved fidelity over that source.

@@ -57,15 +57,43 @@ Reproduce the probe:
 powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case analyze
 ```
 
-## MP3 single preset probe — blocked (0B-14)
+## 0B-14 — MP3 single presets
 
-The proposed Appendix B command `-f "ba/b" -x --audio-format mp3
---audio-quality 320K` did not produce a 320 kbps file for the locked Archive
-audio entry `effect-acid.mp3`. The best available source is already a 128 kbps
-MP3. yt-dlp's ExtractAudio postprocessor reported that it was already in the
-target format and skipped conversion; ffprobe measured 128,000 bps, with the
-same output hash as a 128K request. The 256K and 192K presets and playback
-remain untested. The proposed command is not verified for MP3 sources. See
-[`mp3-singles.txt`](gates/evidence/0b/mp3-singles.txt) for the exact probe.
-Task 0B-14A locked a short Commons original with Vorbis audio for the next
-0B-14 run; no bitrate preset result is claimed from that fixture yet.
+The locked Commons original has Vorbis audio. For each B in 320, 256, 192 and
+128, this command downloaded its only WebM format and converted the audio to
+MP3 with the pinned LGPL-compatible ffmpeg and LAME build:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Path
+$out = (Join-Path (Get-Location) 'work/engine/cli/mp3-singles/manual')
+foreach ($B in @(320, 256, 192, 128)) {
+    New-Item -ItemType Directory -Path (Join-Path $out "$B") -Force | Out-Null
+    & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --no-playlist -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --keep-video --ffmpeg-location $ff -o "$out/$B/source.%(ext)s" -- 'https://upload.wikimedia.org/wikipedia/commons/a/aa/10%E8%99%9F%E9%A2%A8....webm'
+    & (Join-Path $ff 'ffprobe.exe') -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- "$out/$B/source.mp3"
+}
+```
+
+The exact verifier creates a fresh ignored output directory, checks executable
+hashes, runs the fixture preflight, then requires four successful conversions,
+matching SHA-256 values for each retained WebM original, and ffprobe results.
+Each output had one MP3 audio stream, no video,
+and 14.749025 seconds duration. Stream bitrates were exactly 320000, 256000,
+192000 and 128000 bps, within the verifier's 1% encoder tolerance. All output
+hashes differ. VLC 3.0.24 opened and played each for more than two seconds via
+its libVLC player API. See [`mp3-singles.txt`](gates/evidence/0b/mp3-singles.txt)
+for hashes, playback method and ignored full-log path.
+
+Reproduce the probe:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-singles
+```
+
+The same Appendix B command does **not** force re-encoding when the best source
+is already MP3. On the locked Archive `effect-acid.mp3` entry, both 320K and
+128K requests preserved its 128 kbps stream and produced identical hashes.
+That finding is preserved in the same evidence file. The Commons result proves
+the presets for a non-MP3 source only; the Phase 1/2 UI behavior for an
+already-MP3 source remains an open owner decision.
