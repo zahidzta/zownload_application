@@ -1,7 +1,7 @@
 # Gate 0B engine source lock
 
-Locked on 2026-10-18 for task 0B-01. This is the acquisition allowlist for
-0B-03, not evidence that any archive or binary has been downloaded. A changed
+Locked on 2026-10-18 for task 0B-01 and attested in 0B-03. This is the
+acquisition allowlist. A changed
 version, URL, or digest requires a new source-lock task. All URLs identify a
 versioned release or an immutable commit; no moving release channel is a pin.
 
@@ -20,7 +20,13 @@ versioned release or an immutable commit; no moving release channel is a pin.
     "checksumManifest": {
       "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/SHA2-256SUMS",
       "sha256": "a63701f30755cb4d9317950d69703e9d751d490cb1b7059e1bb501a353fe7dcb",
-      "signatureUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/SHA2-256SUMS.sig"
+      "signatureUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/SHA2-256SUMS.sig",
+      "signatureSha256": "8d6f9a7c84c57222e3650c61699185878a3468308de702993ce4f20b5f9cf199"
+    },
+    "signingKey": {
+      "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/3a08beaf031ab68f966401ead017ac81fe8486cf/public.key",
+      "sha256": "45d6b415928b5f3e228b461fa9e6d7eb56a824931c785ece00279a06c7a6d6e5",
+      "fingerprint": "AC0CBBE6848D6A873464AF4E57CF65933B5A7581"
     },
     "binaries": {
       "windowsX64": {
@@ -33,7 +39,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       },
       "macosUniversal": {
         "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos",
-        "hashPlan": "read-and-attest-from-pinned-checksum-manifest-in-0B-03"
+        "sha256": "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
       }
     }
   },
@@ -55,7 +61,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
     "license": "MIT",
     "source": {
       "url": "https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz",
-      "hashPlan": "compute-and-attest-sha256-in-0B-03"
+      "sha256": "b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a"
     },
     "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64", "android-arm64"]
   },
@@ -65,7 +71,13 @@ versioned release or an immutable commit; no moving release channel is a pin.
     "source": {
       "url": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz",
       "signatureUrl": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz.asc",
-      "hashPlan": "verify-upstream-pgp-signature-then-compute-and-attest-sha256-in-0B-03"
+      "signatureSha256": "5f2880c7fea01f8694d30cb9d06362f77241ee67ce5926b157a226b18f08a538",
+      "sha256": "7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3"
+    },
+    "signingKey": {
+      "url": "https://ffmpeg.org/ffmpeg-devel.asc",
+      "sha256": "397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5",
+      "fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8"
     },
     "targets": ["windows-x64"]
   },
@@ -87,8 +99,8 @@ versioned release or an immutable commit; no moving release channel is a pin.
 |---|---|---|
 | yt-dlp | [immutable 2026.08.19 release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19), [tagged README licensing section](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/README.md#licensing), [tagged dependency licenses](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/THIRD_PARTY_LICENSES.txt), [tagged own license](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/LICENSE) | Release page publishes the archive, binary, and checksum-file SHA-256 values above. Its README calls the official PyInstaller executables GPLv3+ combined works, despite yt-dlp's own Unlicense. Preserve the complete platform-specific notices and corresponding-source obligations. The source tarball and Unix zipimport variant also include ISC Meriyah and MIT Astring. |
 | yt-dlp-ejs | [yt-dlp 2026.08.19 dependency pin](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml), [ejs 0.8.0 release](https://github.com/yt-dlp/ejs/releases/tag/0.8.0), [PyPI artifact hashes and provenance](https://pypi.org/project/yt-dlp-ejs/0.8.0/), [tagged ejs license notes](https://github.com/yt-dlp/ejs/blob/0.8.0/README.md#licensing) | yt-dlp pins `yt-dlp-ejs==0.8.0` in both `default` and `pin` dependencies. Official standalone executables already bundle matching EJS; the separate source distribution and wheel preserve its provenance and allow later packaging inspection. The solver scripts include ISC Meriyah and MIT Astring. |
-| QuickJS | [official 2026-06-04 download and MIT statement](https://bellard.org/quickjs/) | Use only the upstream source tarball. No published SHA-256 was found on the official page; 0B-03 computes and records its hash before any build. Inspect the archive's `LICENSE` after acquisition. |
-| FFmpeg | [official 8.1.3 release and signing procedure](https://ffmpeg.org/download.html), [license guidance](https://ffmpeg.org/legal.html), [codec documentation](https://ffmpeg.org/ffmpeg-codecs.html) | Download the signed upstream source tarball and detached signature. 0B-03 verifies the signature against FFmpeg's documented release key `FCF986EA15E6E293A5644F10B4322F04D67658D8`, then records SHA-256. 0B-10 must exclude `--enable-gpl` and `--enable-nonfree`; the native AAC encoder needs no external AAC library. |
+| QuickJS | [official 2026-06-04 download and MIT statement](https://bellard.org/quickjs/) | Only the upstream source tarball was acquired. No published SHA-256 was found on the official page; 0B-03 computed its hash and inspected the archive's MIT `LICENSE`. |
+| FFmpeg | [official 8.1.3 release and signing procedure](https://ffmpeg.org/download.html), [license guidance](https://ffmpeg.org/legal.html), [codec documentation](https://ffmpeg.org/ffmpeg-codecs.html) | 0B-03 verified the source tarball and detached signature against FFmpeg's documented release key `FCF986EA15E6E293A5644F10B4322F04D67658D8`, then recorded SHA-256. 0B-10 must exclude `--enable-gpl` and `--enable-nonfree`; the native AAC encoder needs no external AAC library. |
 | LAME | [project's 3.100 source and published SHA-256](https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download), [project license notice](https://lame.sourceforge.io/license.txt) | FFmpeg documents `--enable-libmp3lame` as the external MP3 encoder requirement. LAME's encoder library is LGPL, but its old mpglib decoder is GPL. 0B-10 must prove that the decoder is absent from the linked build; otherwise stop the LGPL build. |
 
 ## Artifact and build-dependency plan
@@ -97,7 +109,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
 |---|---|---|---|
 | Windows x64 Gate 0B probe | Official pinned `yt-dlp.exe` includes EJS; use the exact binary hash above. | Build `qjs.exe` from the locked C source in 0B-04/05. | Build `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 8.1.3 with LAME 3.100 encoder in 0B-10/11. |
 | Linux x64 | Official pinned `yt-dlp_linux` includes EJS; use the exact binary hash above. | Build `qjs` from the same source in 0B-06. | Later platform build from the same locked sources and LGPL configuration. |
-| macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; read its hash from the pinned signed checksum file in 0B-03. | Build native `qjs` separately on each host in 0B-07/08. | Later platform builds from the same locked sources and LGPL configuration. |
+| macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; its hash is attested from the signed checksum file. | Build native `qjs` separately on each host in 0B-07/08. | Later platform builds from the same locked sources and LGPL configuration. |
 | Android arm64 | No official Android yt-dlp standalone executable is claimed. Keep the pinned source and EJS wheel as inputs; Python runtime packaging is a Gate 0C decision and must be locked before device execution. | Build the native Android `qjs` from the same source with NDK r30 in 0B-09; device run is Gate 0C. | Android executable and dependency configuration belongs to Gate 0C; no Android FFmpeg binary is attested by Gate 0B. |
 
 Source dependencies are the matched EJS 0.8.0 and LAME 3.100. yt-dlp's
@@ -109,9 +121,24 @@ a C toolchain, Make and libmp3lame headers/library; AAC encoding is native.
 The exact compilers, flags and packaging commands are assigned to 0B-04,
 0B-06/09 and 0B-10. They are not asserted by this source-only task.
 
-0B-03 must reject any downloaded file whose published digest disagrees. It
-must record the computed SHA-256 for all acquired files, including signed
-FFmpeg and QuickJS archives. It must verify the yt-dlp checksum-file signature
-using the [key linked by the tagged README](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/public.key),
-or record why signature verification cannot be established before using it as
-the macOS hash authority. The release's signature status was not tested here.
+## 0B-03 acquisition and verification
+
+Run `powershell -NoProfile -File scripts/gate-0b/fetch-sources.ps1` to fetch
+missing inputs into ignored `work/engine/downloads/`. The script checks each
+byte stream against the locked SHA-256 before accepting it. Run
+`powershell -NoProfile -File scripts/gate-0b/verify-downloads.ps1` before any
+later build or CLI use; it works offline and fails on missing, altered or
+unlisted files. Both scripts compare all 14 hashes with
+`docs/gates/evidence/0b/source-hashes.txt`, check the yt-dlp artifacts against
+the signed `SHA2-256SUMS`, and verify detached yt-dlp and FFmpeg signatures.
+The yt-dlp key is fetched from the release commit; the FFmpeg key fingerprint
+matches its official download page. Git for Windows supplies GnuPG 2.4.9 on
+this machine. No engine executable was run in 0B-03.
+
+The formerly unlisted macOS binary hash is from the verified yt-dlp manifest.
+QuickJS has no upstream published SHA-256, so its value is the computed archive
+hash; its archive `LICENSE` contains the MIT grant. FFmpeg's value was computed
+after its detached signature verified against the published release-key
+fingerprint. Later build tasks must invoke `verify-downloads.ps1` before
+extracting or executing these inputs. A changed URL or hash requires a new
+source-lock review.
