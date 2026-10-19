@@ -56,3 +56,14 @@ Reproduce the probe:
 ```powershell
 powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case analyze
 ```
+
+## MP3 single preset probe — blocked (0B-14)
+
+The proposed Appendix B command `-f "ba/b" -x --audio-format mp3
+--audio-quality 320K` did not produce a 320 kbps file for the locked Archive
+audio entry `effect-acid.mp3`. The best available source is already a 128 kbps
+MP3. yt-dlp's ExtractAudio postprocessor reported that it was already in the
+target format and skipped conversion; ffprobe measured 128,000 bps, with the
+same output hash as a 128K request. The 256K and 192K presets and playback
+remain untested. The proposed command is not verified for MP3 sources. See
+[`mp3-singles.txt`](gates/evidence/0b/mp3-singles.txt) for the exact probe.
