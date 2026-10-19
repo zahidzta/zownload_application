@@ -94,7 +94,8 @@ make_args=("CC=$compiler" "HOST_CC=${host_compiler:-$compiler}" CONFIG_LTO= CONF
 if [[ "$target" == android-arm64 ]]; then
   # CROSS_PREFIX makes upstream generate repl.c with a host qjsc; the actual
   # target compiler is explicitly pinned to NDK Clang and Android API 24.
-  make_args+=(CROSS_PREFIX=android- "CC=$compiler --target=aarch64-linux-android24")
+  # Android's pthread functions are in libc, so omit upstream's -lpthread.
+  make_args+=(CROSS_PREFIX=android- "CC=$compiler --target=aarch64-linux-android24" 'LIBS=-lm -ldl')
 fi
 if [[ "$target" == macos-* ]]; then
   # Keep the upstream debug flag and ask Apple's linker for stable output.

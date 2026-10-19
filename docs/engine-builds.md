@@ -189,7 +189,9 @@ and checks `source.properties` before compilation. The recipe follows
 NDK Clang targets `aarch64-linux-android24` for the app's minimum API 24.
 Upstream Make uses host GCC 13 to generate `repl.c` with `host-qjsc`, then NDK
 Clang builds `qjs`. `CONFIG_LTO=` and `CONFIG_TEMPORAL_INTL=y` match the
-desktop recipe. The script extracts the source afresh at the stable ignored
+desktop recipe. Its target link uses `LIBS=-lm -ldl` because [Android includes
+pthread functions in `libc`](https://developer.android.com/ndk/guides/stable_apis),
+without a separate `libpthread`. The script extracts the source afresh at the stable ignored
 path `work/engine/build/quickjs/android-arm64/`, checks ELF AArch64 and the
 Android linker path, and lists every linked shared library with the NDK's
 `llvm-readelf`. It does not execute the Android binary on the Linux host.
