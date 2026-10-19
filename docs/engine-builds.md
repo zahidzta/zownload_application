@@ -147,3 +147,22 @@ binary hash, and CI run are in
 Two clean `macos-15-intel` CI attempts with Xcode 16.4 produced the same
 1,241,256-byte Mach-O x86_64 binary with SHA-256
 `554102a8a9c0d0c5e24cd138ad7a790f330fd926310c01009265589a446ef90a`.
+
+## 0B-08 — macOS arm64 QuickJS binary
+
+GitHub Actions runs the exact gate command on its documented
+[`macos-15` arm64 runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The script uses the same attested upstream source and build settings as the
+macOS x64 recipe, selects Xcode 16.4 build 16F6 and its macOS 15.5 SDK, and
+requires an arm64 host with Apple Clang targeting arm64. Run on that host:
+
+```bash
+bash scripts/gate-0b/build-quickjs.sh macos-arm64 --verify
+```
+
+The source is extracted afresh at a fixed path under the ignored
+`work/engine/build/quickjs/macos-arm64/` directory. Verification checks the
+source SHA-256, Mach-O arm64 format, reported QuickJS version and
+`print(1 + 1)` result. The full log and binary stay ignored. The compiler,
+flags, output hash and CI run are recorded in
+[`gates/evidence/0b/quickjs-macos-arm64.txt`](gates/evidence/0b/quickjs-macos-arm64.txt).

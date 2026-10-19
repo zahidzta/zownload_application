@@ -2,14 +2,16 @@
 # Build the attested upstream QuickJS archive on the requested Unix host.
 set -euo pipefail
 
-if [[ $# -ne 2 || ( "$1" != linux-x64 && "$1" != macos-x64 ) || "$2" != --verify ]]; then
-  echo 'Usage: bash scripts/gate-0b/build-quickjs.sh {linux-x64|macos-x64} --verify' >&2
+if [[ $# -ne 2 || ( "$1" != linux-x64 && "$1" != macos-x64 && "$1" != macos-arm64 ) || "$2" != --verify ]]; then
+  echo 'Usage: bash scripts/gate-0b/build-quickjs.sh {linux-x64|macos-x64|macos-arm64} --verify' >&2
   exit 2
 fi
 
 target="$1"
 fail() { echo "QuickJS $target build: $*" >&2; exit 1; }
-[[ "$(uname -m)" == x86_64 ]] || fail 'requires an x86_64 host'
+expected_arch=x86_64
+if [[ "$target" == macos-arm64 ]]; then expected_arch=arm64; fi
+[[ "$(uname -m)" == "$expected_arch" ]] || fail "requires a $expected_arch host"
 for tool in curl tar make file awk; do
   command -v "$tool" >/dev/null || fail "missing build tool: $tool"
 done
@@ -26,7 +28,7 @@ if [[ "$target" == linux-x64 ]]; then
 else
   [[ "$(uname -s)" == Darwin ]] || fail 'requires a macOS host'
   for tool in shasum xcodebuild xcrun; do command -v "$tool" >/dev/null || fail "missing build tool: $tool"; done
-  # Select the Xcode version installed on the macos-15-intel CI image.
+  # Both macOS 15 CI architectures provide this Xcode and SDK.
   export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
   [[ -d "$DEVELOPER_DIR" ]] || fail 'Xcode 16.4 is missing'
   [[ "$(xcodebuild -version)" == $'Xcode 16.4\nBuild version 16F6' ]] || fail 'expected Xcode 16.4 build 16F6'
@@ -34,7 +36,7 @@ else
   export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
   [[ -f "$SDKROOT/usr/include/stdlib.h" ]] || fail 'macOS SDK headers are missing'
   compiler="$(xcrun --find clang)"
-  [[ "$($compiler -dumpmachine)" == x86_64-apple-darwin* ]] || fail 'Apple Clang does not target macOS x86_64'
+  [[ "$($compiler -dumpmachine)" == "$expected_arch"-apple-darwin* ]] || fail "Apple Clang does not target macOS $expected_arch"
   host="macOS $(sw_vers -productVersion) $(uname -m)"
 fi
 
@@ -74,7 +76,7 @@ tar -xf "$archive" -C "$build_dir"
 [[ -f "$source_dir/Makefile" ]] || fail 'upstream Makefile is missing'
 
 make_args=("CC=$compiler" "HOST_CC=$compiler" CONFIG_LTO= CONFIG_TEMPORAL_INTL=y)
-if [[ "$target" == macos-x64 ]]; then
+if [[ "$target" == macos-* ]]; then
   # Keep the upstream debug flag and ask Apple's linker for stable output.
   make_args+=("LDFLAGS=-g -Wl,-reproducible")
 fi
@@ -89,7 +91,7 @@ format="$(file -b "$output")"
 if [[ "$target" == linux-x64 ]]; then
   [[ "$format" == *'ELF 64-bit'* && "$format" == *'x86-64'* ]] || fail "unexpected output format: $format"
 else
-  [[ "$format" == *'Mach-O 64-bit executable x86_64'* ]] || fail "unexpected output format: $format"
+  [[ "$format" == *"Mach-O 64-bit executable $expected_arch"* ]] || fail "unexpected output format: $format"
 fi
 
 # Upstream qjs reports its version on --help and exits with status 1.
@@ -103,7 +105,7 @@ smoke="$("$output" -e 'print(1 + 1)')"
 
 echo "Host: $host"
 echo "Source SHA-256: $source_hash"
-if [[ "$target" == macos-x64 ]]; then
+if [[ "$target" == macos-* ]]; then
   echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
   echo "SDK: macOS $(xcrun --sdk macosx --show-sdk-version) ($SDKROOT)"
 fi
@@ -116,7 +118,7 @@ echo "Output: $output"
 echo "Output bytes: $(wc -c < "$output" | tr -d ' ')"
 echo "Output SHA-256: $(hash_file "$output")"
 echo "Format: $format"
-if [[ "$target" == macos-x64 ]]; then
+if [[ "$target" == macos-* ]]; then
   for object in qjs repl quickjs dtoa libregexp libunicode cutils quickjs-libc; do
     echo "Object SHA-256 ($object): $(hash_file "$source_dir/.obj/$object.o")"
   done
