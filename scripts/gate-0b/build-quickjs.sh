@@ -30,6 +30,9 @@ else
   export DEVELOPER_DIR=/Applications/Xcode_16.4.app/Contents/Developer
   [[ -d "$DEVELOPER_DIR" ]] || fail 'Xcode 16.4 is missing'
   [[ "$(xcodebuild -version)" == $'Xcode 16.4\nBuild version 16F6' ]] || fail 'expected Xcode 16.4 build 16F6'
+  [[ "$(xcrun --sdk macosx --show-sdk-version)" == 15.5 ]] || fail 'expected macOS 15.5 SDK'
+  export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+  [[ -f "$SDKROOT/usr/include/stdlib.h" ]] || fail 'macOS SDK headers are missing'
   compiler="$(xcrun --find clang)"
   [[ "$($compiler -dumpmachine)" == x86_64-apple-darwin* ]] || fail 'Apple Clang does not target macOS x86_64'
   host="macOS $(sw_vers -productVersion) $(uname -m)"
@@ -95,7 +98,10 @@ smoke="$("$output" -e 'print(1 + 1)')"
 
 echo "Host: $host"
 echo "Source SHA-256: $source_hash"
-if [[ "$target" == macos-x64 ]]; then echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"; fi
+if [[ "$target" == macos-x64 ]]; then
+  echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+  echo "SDK: macOS $(xcrun --sdk macosx --show-sdk-version) ($SDKROOT)"
+fi
 echo "Compiler: $($compiler --version | head -n 1) ($($compiler -dumpmachine))"
 echo "Build tool: $(make --version | head -n 1)"
 echo "Make arguments: ${make_args[*]}"

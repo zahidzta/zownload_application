@@ -125,7 +125,8 @@ Linux build. GitHub Actions runs the exact gate command on its documented
 The script selects Xcode 16.4 build 16F6 from the
 [macOS 15 image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md),
 checks the Intel host and Apple Clang target, and uses that Clang for both
-`CC` and `HOST_CC`. On a macOS x64 host with that Xcode installed, run:
+`CC` and `HOST_CC`. It selects the macOS 15.5 SDK so Clang finds the system
+headers. On a macOS x64 host with that Xcode installed, run:
 
 ```bash
 bash scripts/gate-0b/build-quickjs.sh macos-x64 --verify
