@@ -1,0 +1,67 @@
+Gate 0B-11 — Windows x64 LGPL FFmpeg build
+Date: 2026-10-19
+Host: Windows 11 Home Single Language, NT 10.0.26200.0, x64
+
+Exact verification command, from repository root:
+  powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -Verify
+Result: exit 0. The script reverified all 15 locked files, yt-dlp published
+checksums and manifest signature, and FFmpeg's source signature before a clean
+extraction and build. The complete compiler log is ignored at
+work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-build.log.
+
+Locked sources, SHA-256:
+  FFmpeg 8.1.3 ffmpeg-8.1.3.tar.xz
+    7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3
+  LAME 3.100 lame-3.100.tar.gz
+    ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+  zlib 1.3.2 zlib-1.3.2.tar.gz
+    bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16
+
+Compiler: w64devkit 2.10.1 GCC 16.2.0, target x86_64-w64-mingw32.
+Build tool: GNU Make 4.4.1. FFmpeg build target command:
+  make.exe -j2 V=1 ffmpeg.exe ffprobe.exe
+The exact dependency and FFmpeg configure commands and flags are in
+docs/engine-builds.md (0B-10/11). LAME's decoder and frontend are disabled;
+HAVE_MPGLIB is undefined, and its archive excludes GPL decoder objects.
+This run's static archive SHA-256 values:
+  libmp3lame.a 4f8170f664a4afc01a3f7bb60432543a0bb8a1238f380de415ec0fbfd735318c
+  libz.a       e480ab641a60b9d3b8e3e577290e15556572da6e08b67d255ba8a61ce4947957
+Pinned ar.exe records build-time member timestamps, so those archive hashes
+are run evidence, not a byte-for-byte reproducibility claim.
+
+Configuration audit: only libmp3lame and zlib were enabled as external
+libraries. Generated config.h has CONFIG_GPL=0, CONFIG_NONFREE=0 and
+CONFIG_VERSION3=0. FFmpeg configure reported "License: LGPL version 2.1 or
+later". Both built executables' -L output names the GNU Lesser General Public
+License, version 2.1 or later. Both -buildconf outputs include
+--enable-libmp3lame and --enable-zlib and omit --enable-gpl, --enable-nonfree
+and --enable-version3.
+
+Built executable version, size and SHA-256:
+  ffmpeg.exe:  ffmpeg version 8.1.3; 28,261,376 bytes
+    fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe.exe: ffprobe version 8.1.3; 28,056,576 bytes
+    bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+
+Pinned objdump.exe -p reported the same PE DLL imports for each binary:
+  AVICAP32.dll, bcrypt.dll, GDI32.dll, KERNEL32.dll, msvcrt.dll, ole32.dll,
+  OLEAUT32.dll, SHELL32.dll, SHLWAPI.dll, USER32.dll, WS2_32.dll.
+No LAME or zlib DLL is imported; the binaries ran on the host without adding
+the w64devkit bin directory to the parent PowerShell PATH.
+
+The built ffmpeg -encoders/-decoders/-muxers/-filters lists include
+libmp3lame, native aac and mjpeg encoders; png decoder; mp3, mov and mp4
+muxers; and scale filter. Runtime smoke commands from the extracted FFmpeg
+directory succeeded:
+  ./ffmpeg.exe -nostdin -hide_banner -loglevel error -f lavfi -i sine=frequency=440:duration=1 -c:a libmp3lame -b:a 128k -y smoke.mp3
+  ./ffmpeg.exe -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=160x90:rate=1:duration=1 -f lavfi -i sine=frequency=440:duration=1 -c:v mpeg4 -c:a aac -shortest -y smoke.mp4
+ffprobe -show_entries stream=codec_name returned mp3 for smoke.mp3 and
+mpeg4,aac for smoke.mp4. These synthetic probes establish encoder and muxer
+operation; real download, metadata, thumbnail, playback and playlist probes
+belong to later Gate 0B tasks.
+
+Two local attempts before the passing command exposed script-only issues:
+w64devkit Make passed FFmpeg's quiet "@printf" macro to sh, so the final build
+uses V=1; and the first -L assertion expected "Public License" on one line,
+while the binary wrapped it across lines. Both checks were corrected before
+the passing fresh-build run. No generated executable or media file is tracked.

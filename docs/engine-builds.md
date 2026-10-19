@@ -260,5 +260,34 @@ the LAME MP3 encoder, native AAC encoder, MP3/MOV/MP4 muxers, PNG decoder,
 MJPEG encoder, image scale filter, `swscale`, `ffmpeg` and `ffprobe`. PNG plus
 zlib decodes the locked fixture's artwork; MJPEG encodes its JPEG cover. Full
 logs, static libraries and configured source stay ignored under the recipe
-directory. 0B-11 compiles FFmpeg and inspects the Windows executables; 0B-12
-completes the redistribution license inventory and relinking plan.
+directory. 0B-12 completes the redistribution license inventory and relinking
+plan.
+
+## 0B-11 — Windows x64 FFmpeg and ffprobe build
+
+From the repository root, with the locked archives and pinned w64devkit already
+installed, run the complete fresh-extraction recipe:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -Verify
+```
+
+`-Verify` repeats the 0B-10 source, signature, toolchain and configuration
+checks, then uses `make.exe -j2 V=1 ffmpeg.exe ffprobe.exe` with the pinned w64devkit
+tools. The complete compiler output stays in the ignored
+`work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-build.log`. The two built
+executables and short smoke outputs stay in the ignored extracted FFmpeg
+directory; none is committed as a prebuilt binary.
+
+The verification checks both binaries' version, build configuration and
+reported LGPL license. It lists enabled MP3/AAC/JPEG encoders, PNG decoder,
+MP3/MOV/MP4 muxers and image scaling, then actually encodes a short MP3 with
+LAME and an MP4 with native AAC. `ffprobe` confirms the output codecs.
+Pinned `objdump.exe -p` lists each executable's PE DLL imports, including any
+runtime dependency introduced by the static LAME or zlib linkage. The binary
+hashes, version lines, import lists and smoke results are recorded in
+[`gates/evidence/0b/ffmpeg-windows.txt`](gates/evidence/0b/ffmpeg-windows.txt).
+The pinned `ar.exe` writes build-time member timestamps into the LAME and zlib
+archives, so their SHA-256 values can change between clean runs even with the
+same source and commands. The evidence identifies hashes from its own run;
+the recipe does not claim byte-identical archives across runs.

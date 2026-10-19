@@ -1,12 +1,11 @@
-# Configure the locked LGPL FFmpeg recipe on Windows x64. FFmpeg compilation
-# and binary inspection are the separate Gate 0B-11 task.
-param([switch]$CheckConfiguration)
+# Configure, build and inspect the locked LGPL FFmpeg recipe on Windows x64.
+param([switch]$CheckConfiguration, [switch]$Verify)
 
 $ErrorActionPreference = 'Stop'
-if (-not $CheckConfiguration) { throw 'Use -CheckConfiguration (the binary build belongs to 0B-11).' }
+if ($CheckConfiguration -eq $Verify) { throw 'Choose exactly one of -CheckConfiguration or -Verify.' }
 
 function Assert-Recipe([bool]$condition, [string]$message) {
-    if (-not $condition) { throw "FFmpeg configuration: $message" }
+    if (-not $condition) { throw "FFmpeg recipe: $message" }
 }
 
 function Assert-Hash([string]$path, [string]$expected) {
@@ -35,7 +34,7 @@ function Run-Logged([string]$name, [string]$command, [string[]]$arguments) {
     }
     if ($code -ne 0) {
         Get-Content -LiteralPath $log -Tail 50
-        throw "FFmpeg configuration: $name failed (exit $code); full log: $log"
+        throw "FFmpeg recipe: $name failed (exit $code); full log: $log"
     }
 }
 
@@ -170,5 +169,70 @@ Write-Output "LAME: 3.100, decoder disabled, static libmp3lame.a SHA-256 $((Get-
 Write-Output "zlib: 1.3.2, static libz.a SHA-256 $((Get-FileHash -LiteralPath $zlibLib -Algorithm SHA256).Hash.ToLowerInvariant())"
 Write-Output "FFmpeg configure: ./configure $($ffmpegOptions -join ' ') --extra-cflags=-I$depsPath/include --extra-ldflags=-L$depsPath/lib"
 Write-Output "Enabled external libraries: $(($enabledExternal | Sort-Object) -join ', ')"
-Write-Output 'License: LGPL version 2.1 or later (configured; binary proof belongs to 0B-11)'
+Write-Output 'License: LGPL version 2.1 or later (configured)'
 Write-Output "Configuration log: $(Join-Path $recipeRoot 'ffmpeg-configure.log')"
+
+if ($CheckConfiguration) { return }
+
+# Use the generated Makefile and the same pinned tools used by configure.
+# Keep complete compiler output in the ignored recipe directory.
+Run-Logged 'ffmpeg-build' 'PATH="$2"; export PATH; cd "$1" && make.exe -j2 V=1 ffmpeg.exe ffprobe.exe' @($ffmpegDir, $binPath)
+$ffmpegExe = Join-Path $recipeRoot 'ffmpeg-8.1.3\ffmpeg.exe'
+$ffprobeExe = Join-Path $recipeRoot 'ffmpeg-8.1.3\ffprobe.exe'
+foreach ($exe in @($ffmpegExe, $ffprobeExe)) {
+    Assert-Recipe (Test-Path -LiteralPath $exe -PathType Leaf) "built executable is missing: $exe"
+}
+
+$ffmpegVersion = @(& $ffmpegExe -version)
+Assert-Recipe ($LASTEXITCODE -eq 0 -and $ffmpegVersion[0] -match '^ffmpeg version 8\.1\.3(?:\s|$)') 'built ffmpeg version is wrong'
+$ffprobeVersion = @(& $ffprobeExe -version)
+Assert-Recipe ($LASTEXITCODE -eq 0 -and $ffprobeVersion[0] -match '^ffprobe version 8\.1\.3(?:\s|$)') 'built ffprobe version is wrong'
+
+foreach ($exe in @($ffmpegExe, $ffprobeExe)) {
+    $license = @(& $exe -L) -join "`n"
+    Assert-Recipe ($LASTEXITCODE -eq 0 -and $license -match 'GNU Lesser General Public\s+License' -and
+                   $license -match 'version 2\.1') "built binary did not report LGPL-2.1-or-later: $exe"
+    $buildconf = @(& $exe -buildconf) -join "`n"
+    Assert-Recipe ($LASTEXITCODE -eq 0 -and $buildconf -match '--enable-libmp3lame' -and
+                   $buildconf -match '--enable-zlib' -and
+                   $buildconf -notmatch '--enable-(?:gpl|nonfree|version3)(?:\s|$)') "built binary has unexpected configuration: $exe"
+}
+
+$encoders = @(& $ffmpegExe -hide_banner -encoders) -join "`n"
+$decoders = @(& $ffmpegExe -hide_banner -decoders) -join "`n"
+$muxers = @(& $ffmpegExe -hide_banner -muxers) -join "`n"
+$filters = @(& $ffmpegExe -hide_banner -filters) -join "`n"
+Assert-Recipe ($encoders -match '(?m)^\s*A\S*\s+libmp3lame\s' -and
+               $encoders -match '(?m)^\s*A\S*\s+aac\s' -and
+               $encoders -match '(?m)^\s*V\S*\s+mjpeg\s') 'MP3, AAC or JPEG encoder is missing'
+Assert-Recipe ($decoders -match '(?m)^\s*V\S*\s+png\s') 'PNG decoder is missing'
+foreach ($muxer in @('mp3', 'mov', 'mp4')) {
+    Assert-Recipe ($muxers -match "(?m)^\s*E\s+$muxer\s") "muxer is missing: $muxer"
+}
+Assert-Recipe ($filters -match '(?m)^\s*\.\.\S*\s+scale\s') 'scale filter is missing'
+
+# A short encode proves that the configured codecs also work at runtime.
+Run-Logged 'smoke-mp3' 'PATH="$2"; export PATH; cd "$1" && ./ffmpeg.exe -nostdin -hide_banner -loglevel error -f lavfi -i sine=frequency=440:duration=1 -c:a libmp3lame -b:a 128k -y smoke.mp3' @($ffmpegDir, $binPath)
+Run-Logged 'smoke-mp4' 'PATH="$2"; export PATH; cd "$1" && ./ffmpeg.exe -nostdin -hide_banner -loglevel error -f lavfi -i testsrc2=size=160x90:rate=1:duration=1 -f lavfi -i sine=frequency=440:duration=1 -c:v mpeg4 -c:a aac -shortest -y smoke.mp4' @($ffmpegDir, $binPath)
+$mp3Streams = @(& $ffprobeExe -v error -show_entries stream=codec_name -of csv=p=0 (Join-Path $recipeRoot 'ffmpeg-8.1.3\smoke.mp3'))
+Assert-Recipe ($LASTEXITCODE -eq 0 -and $mp3Streams -contains 'mp3') 'MP3 smoke output did not probe as MP3'
+$mp4Streams = @(& $ffprobeExe -v error -show_entries stream=codec_name -of csv=p=0 (Join-Path $recipeRoot 'ffmpeg-8.1.3\smoke.mp4'))
+Assert-Recipe ($LASTEXITCODE -eq 0 -and $mp4Streams -contains 'aac' -and $mp4Streams -contains 'mpeg4') 'MP4 smoke output lacks MPEG-4 video or AAC audio'
+
+# PE imports reveal runtime DLL dependencies. The static LAME/zlib libraries
+# must not turn into untracked DLL requirements.
+$objdump = Join-Path $toolBin 'objdump.exe'
+Assert-Recipe (Test-Path -LiteralPath $objdump -PathType Leaf) 'objdump.exe is missing'
+foreach ($exe in @($ffmpegExe, $ffprobeExe)) {
+    $imports = @(& $objdump -p $exe | Select-String -Pattern '^\s*DLL Name:\s*(\S+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique)
+    Assert-Recipe ($LASTEXITCODE -eq 0 -and $imports.Count -gt 0) "cannot inspect PE imports: $exe"
+    Assert-Recipe (-not ($imports -match '(?i)^(?:libmp3lame|zlib|libz).*\.dll$')) "unexpected LAME/zlib DLL import: $exe"
+    Write-Output "$(Split-Path -Leaf $exe) SHA-256 $((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()); bytes $((Get-Item -LiteralPath $exe).Length)"
+    Write-Output "$(Split-Path -Leaf $exe) PE imports: $(($imports) -join ', ')"
+}
+Write-Output $ffmpegVersion[0]
+Write-Output $ffprobeVersion[0]
+Write-Output 'Binary license: LGPL version 2.1 or later; GPL/nonfree/version3 options absent'
+Write-Output 'Capabilities: libmp3lame MP3, native AAC, MJPEG encode; PNG decode; MP3/MOV/MP4 mux; scale filter'
+Write-Output "Smoke probes: MP3=$($mp3Streams -join ','); MP4=$($mp4Streams -join ',')"
+Write-Output "Build log: $(Join-Path $recipeRoot 'ffmpeg-build.log')"
