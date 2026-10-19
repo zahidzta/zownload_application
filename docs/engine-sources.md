@@ -1,6 +1,7 @@
 # Gate 0B engine source lock
 
-Locked on 2026-10-18 for task 0B-01 and attested in 0B-03. This is the
+Locked on 2026-10-18 for task 0B-01 and attested in 0B-03; zlib was added in
+the owner-approved 0B-10A source-lock repair on 2026-10-19. This is the
 acquisition allowlist. A changed
 version, URL, or digest requires a new source-lock task. All URLs identify a
 versioned release or an immutable commit; no moving release channel is a pin.
@@ -81,6 +82,15 @@ versioned release or an immutable commit; no moving release channel is a pin.
     },
     "targets": ["windows-x64"]
   },
+  "zlib": {
+    "version": "1.3.2",
+    "license": "Zlib (root library only; exclude contrib programs)",
+    "source": {
+      "url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
+      "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
+    },
+    "targets": ["windows-x64"]
+  },
   "lame": {
     "version": "3.100",
     "license": "LGPL for encoder library; GPL-only mpglib decoder must be excluded",
@@ -101,25 +111,29 @@ versioned release or an immutable commit; no moving release channel is a pin.
 | yt-dlp-ejs | [yt-dlp 2026.08.19 dependency pin](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml), [ejs 0.8.0 release](https://github.com/yt-dlp/ejs/releases/tag/0.8.0), [PyPI artifact hashes and provenance](https://pypi.org/project/yt-dlp-ejs/0.8.0/), [tagged ejs license notes](https://github.com/yt-dlp/ejs/blob/0.8.0/README.md#licensing) | yt-dlp pins `yt-dlp-ejs==0.8.0` in both `default` and `pin` dependencies. Official standalone executables already bundle matching EJS; the separate source distribution and wheel preserve its provenance and allow later packaging inspection. The solver scripts include ISC Meriyah and MIT Astring. |
 | QuickJS | [official 2026-06-04 download and MIT statement](https://bellard.org/quickjs/) | Only the upstream source tarball was acquired. No published SHA-256 was found on the official page; 0B-03 computed its hash and inspected the archive's MIT `LICENSE`. |
 | FFmpeg | [official 8.1.3 release and signing procedure](https://ffmpeg.org/download.html), [license guidance](https://ffmpeg.org/legal.html), [codec documentation](https://ffmpeg.org/ffmpeg-codecs.html) | 0B-03 verified the source tarball and detached signature against FFmpeg's documented release key `FCF986EA15E6E293A5644F10B4322F04D67658D8`, then recorded SHA-256. 0B-10 must exclude `--enable-gpl` and `--enable-nonfree`; the native AAC encoder needs no external AAC library. |
+| zlib | [official 1.3.2 release and published SHA-256](https://zlib.net/), [versioned archive directory](https://zlib.net/fossils/), [upstream license](https://zlib.net/zlib_license.html) | 0B-10A acquired the versioned fossil archive and matched its SHA-256 to the value published by zlib. The archive's `zlib.h` declares `ZLIB_VERSION "1.3.2"`, and its root `LICENSE` contains the Zlib license. Only the root compression library is planned; `contrib/` programs are excluded. |
 | LAME | [project's 3.100 source and published SHA-256](https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download), [project license notice](https://lame.sourceforge.io/license.txt) | FFmpeg documents `--enable-libmp3lame` as the external MP3 encoder requirement. LAME's encoder library is LGPL, but its old mpglib decoder is GPL. 0B-10 must prove that the decoder is absent from the linked build; otherwise stop the LGPL build. |
 
 ## Artifact and build-dependency plan
 
 | Target | yt-dlp/ejs | QuickJS | FFmpeg/MP3 encoder |
 |---|---|---|---|
-| Windows x64 Gate 0B probe | Official pinned `yt-dlp.exe` includes EJS; use the exact binary hash above. | Build `qjs.exe` from the locked C source in 0B-04/05. | Build `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 8.1.3 with LAME 3.100 encoder in 0B-10/11. |
+| Windows x64 Gate 0B probe | Official pinned `yt-dlp.exe` includes EJS; use the exact binary hash above. | Build `qjs.exe` from the locked C source in 0B-04/05. | Build `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 8.1.3 with LAME 3.100 encoder and zlib 1.3.2 in 0B-10/11. |
 | Linux x64 | Official pinned `yt-dlp_linux` includes EJS; use the exact binary hash above. | Build `qjs` from the same source in 0B-06. | Later platform build from the same locked sources and LGPL configuration. |
 | macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; its hash is attested from the signed checksum file. | Build native `qjs` separately on each host in 0B-07/08. | Later platform builds from the same locked sources and LGPL configuration. |
 | Android arm64 | No official Android yt-dlp standalone executable is claimed. Keep the pinned source and EJS wheel as inputs; Python runtime packaging is a Gate 0C decision and must be locked before device execution. | Build the native Android `qjs` from the same source with NDK r30 in 0B-09; device run is Gate 0C. | Android executable and dependency configuration belongs to Gate 0C; no Android FFmpeg binary is attested by Gate 0B. |
 
-Source dependencies are the matched EJS 0.8.0 and LAME 3.100. yt-dlp's
+Source dependencies are the matched EJS 0.8.0, LAME 3.100 and zlib 1.3.2. yt-dlp's
 versioned [`pyproject.toml`](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml)
 lists its pinned Python package set and PyInstaller 6.22.0 for official
 bundles; 0B-12 must inspect the actual bundled inventory, not infer it from
 that file. QuickJS needs a C compiler, Make and target C runtime. FFmpeg needs
-a C toolchain, Make and libmp3lame headers/library; AAC encoding is native.
-The exact compilers, flags and packaging commands are assigned to 0B-04,
-0B-06/09 and 0B-10. They are not asserted by this source-only task.
+a C toolchain, Make, libmp3lame headers/library and zlib headers/library for PNG
+artwork decoding; AAC encoding is native. For Windows, 0B-10 must use the pinned
+w64devkit GCC/Make toolchain to build only zlib's static `libz.a` with its
+`win32/Makefile.gcc`, then provide that archive and the root `zlib.h`/`zconf.h`
+to FFmpeg's configure probe. The exact commands, flags and static-link check
+belong to 0B-10/11; no zlib object or FFmpeg binary was built in 0B-10A.
 
 ## 0B-03 acquisition and verification
 
@@ -128,12 +142,18 @@ missing inputs into ignored `work/engine/downloads/`. The script checks each
 byte stream against the locked SHA-256 before accepting it. Run
 `powershell -NoProfile -File scripts/gate-0b/verify-downloads.ps1` before any
 later build or CLI use; it works offline and fails on missing, altered or
-unlisted files. Both scripts compare all 14 hashes with
+unlisted files. Both scripts compare all 15 hashes with
 `docs/gates/evidence/0b/source-hashes.txt`, check the yt-dlp artifacts against
 the signed `SHA2-256SUMS`, and verify detached yt-dlp and FFmpeg signatures.
 The yt-dlp key is fetched from the release commit; the FFmpeg key fingerprint
 matches its official download page. Git for Windows supplies GnuPG 2.4.9 on
 this machine. No engine executable was run in 0B-03.
+
+0B-10A added the upstream zlib 1.3.2 fossil archive. Its SHA-256 matches the
+hash published on the official release page; the offline verifier additionally
+checks the archive's declared version and root license. This source is not
+covered by the yt-dlp or FFmpeg signatures. No build or engine command was run
+in 0B-10A.
 
 The formerly unlisted macOS binary hash is from the verified yt-dlp manifest.
 QuickJS has no upstream published SHA-256, so its value is the computed archive
