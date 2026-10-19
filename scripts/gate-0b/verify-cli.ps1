@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze')]
+    [ValidateSet('analyze', 'mp3-singles')]
     [string]$Case
 )
 
@@ -9,9 +9,15 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = Join-Path $root 'work\engine\cli\analyze'
+$runDir = if ($Case -eq 'mp3-singles') {
+    Join-Path $root ('work\engine\cli\mp3-singles\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+} else {
+    Join-Path $root 'work\engine\cli\analyze'
+}
 $ytDlp = Join-Path $downloadDir 'yt-dlp.exe'
 $quickJs = Join-Path $root 'work\engine\build\quickjs\windows-x64\qjs.exe'
+$ffmpegDir = Join-Path $root 'work\engine\build\ffmpeg\windows-x64\recipe\ffmpeg-8.1.3'
+$ffprobe = Join-Path $ffmpegDir 'ffprobe.exe'
 
 function Read-Lock([string]$path, [string]$label) {
     $markdown = Get-Content -LiteralPath $path -Raw -Encoding UTF8
@@ -28,7 +34,7 @@ function Assert-Hash([string]$path, [string]$expected) {
 }
 
 function Assert-Shape([bool]$condition, [string]$message) {
-    if (-not $condition) { throw "Analysis shape failed: $message" }
+    if (-not $condition) { throw "CLI verification failed: $message" }
 }
 
 function Assert-Runtime($result, [string]$name) {
@@ -76,7 +82,7 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
     finally { $process.Dispose() }
 }
 
-if ($Case -ne 'analyze') { throw 'Specify -Case analyze' }
+if (-not $Case) { throw 'Specify -Case analyze or -Case mp3-singles' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -88,6 +94,44 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 & (Join-Path $PSScriptRoot 'verify-fixtures.ps1')
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
+
+if ($Case -eq 'mp3-singles') {
+    Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
+    Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+    $hashes = @{}
+    foreach ($bitrate in @(320, 256, 192, 128)) {
+        $outputDir = Join-Path $runDir "$bitrate"
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        $arguments = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs",
+            '--no-playlist', '-f', 'ba/b', '-x', '--audio-format', 'mp3', '--audio-quality', "${bitrate}K", '--keep-video',
+            '--ffmpeg-location', $ffmpegDir, '-o', (Join-Path $outputDir 'source.%(ext)s'),
+            '--', $fixtures.commonsVorbisSingle.mediaUrl)
+        $result = Invoke-Engine "mp3-$bitrate" $arguments 180
+        Assert-Runtime $result "mp3-$bitrate"
+        Assert-Hash (Join-Path $outputDir 'source.webm') $fixtures.commonsVorbisSingle.sha256
+        $output = Join-Path $outputDir 'source.mp3'
+        Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "${bitrate}K output is missing"
+        Assert-Shape ($result.Stdout -match '(?m)^\[ExtractAudio\] Destination:') "${bitrate}K did not convert the Vorbis source"
+        $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- $output | Out-String)
+        Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for ${bitrate}K"
+        [IO.File]::WriteAllText((Join-Path $runDir "mp3-$bitrate.ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+        $probe = $probeText | ConvertFrom-Json
+        $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+        Assert-Shape ($audio.Count -eq 1 -and $probe.streams.Count -eq 1) "${bitrate}K must contain one audio stream and no video"
+        Assert-Shape ($audio[0].codec_name -eq 'mp3') "${bitrate}K output codec is not MP3"
+        $actual = [int]$audio[0].bit_rate
+        $target = $bitrate * 1000
+        # LAME is expected to emit CBR here; allow 1% for encoder/container reporting.
+        Assert-Shape ([math]::Abs($actual - $target) -le ($target * 0.01)) "${bitrate}K stream bitrate is $actual bps"
+        Assert-Shape ([double]$probe.format.duration -ge 14 -and [double]$probe.format.duration -le 16) "${bitrate}K duration is unexpected"
+        $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+        $hashes[$bitrate] = $hash
+        Write-Output "${bitrate}K: stream=$actual bps format=$($probe.format.bit_rate) bps duration=$($probe.format.duration)s sha256=$hash"
+    }
+    Assert-Shape (@($hashes.Values | Select-Object -Unique).Count -eq 4) 'MP3 outputs are not distinct'
+    Write-Output "Full stdout/stderr, ffprobe JSON and MP3 outputs: $runDir (ignored)"
+    return
+}
 
 $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs", '--skip-download')
 $single = Invoke-Engine 'single' ($common + @('--dump-single-json', '--no-playlist', '--', $fixtures.youtubeShort.url)) 180
