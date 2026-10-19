@@ -291,3 +291,35 @@ The pinned `ar.exe` writes build-time member timestamps into the LAME and zlib
 archives, so their SHA-256 values can change between clean runs even with the
 same source and commands. The evidence identifies hashes from its own run;
 the recipe does not claim byte-identical archives across runs.
+
+## 0B-12 — Redistribution license audit
+
+From the repository root, after 0B-03 downloads, 0B-05 QuickJS and 0B-11
+FFmpeg outputs have been prepared, run the exact gate command:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-licenses.ps1
+```
+
+The verifier is offline. It needs Windows PowerShell 5.1, `tar.exe`, Python
+3 with its standard library, the pinned w64devkit tools, and the ignored
+Gate 0B build outputs. Python only inspects the appended PyInstaller CArchive;
+no Python package is installed by the verifier or included in Zownload. The
+script repeats the 15-file source/signature verifier, checks source license
+texts, reads each official yt-dlp executable's actual embedded notice,
+compares both embedded EJS scripts against the locked wheel, checks Windows
+QuickJS/FFmpeg binary hashes and FFmpeg license/configuration, rejects GPL
+LAME decoder objects, and requires the MinGW-w64 runtime notice. It also
+checks the release plan and audit evidence. The full embedded notice texts
+remain in the signed, ignored executables; short results are committed.
+
+The 0B-11 recipe statically links FFmpeg, the LAME encoder and zlib. For an
+actual release, preserve its intermediate object files and link commands or
+choose another LGPL-compliant relinking method. Rebuild and check the exact
+shipped hashes before publishing matching source/notices. The official
+yt-dlp executables use upstream PyInstaller packaging; the yt-dlp tarball is
+not their complete corresponding-source bundle. Collect and checksum their
+embedded dependency sources and upstream platform build recipe at release
+packaging. Microsoft's runtime DLLs inside `yt-dlp.exe` require separate
+redistribution terms and entitlement review. These future packaging checks
+are not asserted as complete by the Gate 0B script.
