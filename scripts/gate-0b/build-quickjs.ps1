@@ -103,6 +103,10 @@ Assert-QuickJS (Test-Path -LiteralPath $built -PathType Leaf) 'make did not prod
 Copy-Item -LiteralPath $built -Destination $output -Force
 Write-Output "Built SHA-256: $((Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant())"
 if ($Verify) {
+    # Upstream qjs prints its built-in version on the help screen and exits 1.
+    $helpText = @(& $output --help 2>&1)
+    Assert-QuickJS ($LASTEXITCODE -eq 1 -and $helpText.Count -gt 0 -and [string]$helpText[0] -eq 'QuickJS version 2026-06-04') "qjs version check failed: $($helpText -join ' ')"
+    Write-Output "qjs version: $($helpText[0])"
     $smoke = @(& $output -e 'print(1 + 1)' 2>&1)
     Assert-QuickJS ($LASTEXITCODE -eq 0 -and $smoke.Count -eq 1 -and [string]$smoke[0] -eq '2') "qjs smoke test failed: $($smoke -join ' ')"
     Write-Output 'qjs smoke test: 2'
