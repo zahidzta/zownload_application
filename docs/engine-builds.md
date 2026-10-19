@@ -63,7 +63,25 @@ builds solely the `qjs.exe` target from a fresh source extraction.
 
 The deterministic output path is
 `work/engine/build/quickjs/windows-x64/qjs.exe`; source extraction and the
-full build log stay under the same ignored directory. 0B-05 will run
-`powershell -NoProfile -File scripts/gate-0b/build-quickjs.ps1 -Target windows-x64 -Verify`
-to compile and execute the trivial JavaScript check, then record the binary
-hash and evidence. 0B-04 verifies the environment only.
+full build log stay under the same ignored directory. 0B-04 verified the
+environment only.
+
+## 0B-05 — Windows x64 QuickJS binary
+
+Run the exact gate verification command from the repository root:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/build-quickjs.ps1 -Target windows-x64 -Verify
+```
+
+This extracts the attested source afresh, builds `qjs.exe` with the pinned
+toolchain and flags above, checks the executable's reported version, and
+executes `print(1 + 1)`. The local Windows run exited `0`, reported
+`QuickJS version 2026-06-04`, and printed `2`. Its 5,575,257-byte binary had
+SHA-256 `bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83`;
+a second fresh extraction and build at the same path produced the same hash.
+Pinned-toolchain `objdump -f` identified `pei-x86-64` and `i386:x86-64`.
+The exact commands, build-log flags, and output are recorded in
+[`gates/evidence/0b/quickjs-windows.txt`](gates/evidence/0b/quickjs-windows.txt).
+The binary and full build log remain ignored local artifacts; run the command
+above to regenerate them.

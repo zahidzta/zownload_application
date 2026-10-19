@@ -1,0 +1,31 @@
+Gate 0B task 0B-05: Windows x64 QuickJS build evidence
+Date: 2026-10-18 (America/Mexico_City)
+
+Input source: upstream quickjs-2026-06-04.tar.xz
+Source SHA-256: b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+Toolchain: w64devkit x64 2.10.1, archive SHA-256 add1edf984ce4d473cfeb7c52e0ab38db73a855bba6c7f564d5e16648eb2896a
+Compiler: GCC 16.2.0 (x86_64-w64-mingw32)
+Build tool: GNU Make 4.4.1
+Command: powershell -NoProfile -File scripts/gate-0b/build-quickjs.ps1 -Target windows-x64 -Verify
+Exit status: 0
+Make arguments: CONFIG_WIN32=y CROSS_PREFIX= CONFIG_LTO= CONFIG_TEMPORAL_INTL=y qjs.exe
+Build-log compile flags: -g -Wall -MMD -fwrapv -D_GNU_SOURCE -DCONFIG_VERSION=\"2026-06-04\" -D__USE_MINGW_ANSI_STDIO -O2
+Build-log link command: gcc -g -o qjs.exe .obj/qjs.o .obj/repl.o .obj/quickjs.o .obj/dtoa.o .obj/libregexp.o .obj/libunicode.o .obj/cutils.o .obj/quickjs-libc.o -lm -lpthread
+Build log: work/engine/build/quickjs/windows-x64/build.log (ignored)
+Output: work/engine/build/quickjs/windows-x64/qjs.exe (ignored)
+Output size: 5,575,257 bytes
+Output SHA-256: bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+Second fresh extraction/build SHA-256: bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+Version output: QuickJS version 2026-06-04
+Smoke script: print(1 + 1)
+Smoke output: 2
+
+Architecture inspection:
+Command: & 'work\engine\toolchains\w64devkit\bin\objdump.exe' -f 'work\engine\build\quickjs\windows-x64\qjs.exe'
+Exit status: 0
+Relevant output:
+  file format pei-x86-64
+  architecture: i386:x86-64
+
+No prebuilt QuickJS executable was used. The output was compiled from the
+attested upstream source with the verified w64devkit compiler and Make.
