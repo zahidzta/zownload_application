@@ -26,7 +26,7 @@ Assert-Lock ($matches.Count -eq 1) 'expected exactly one json source-lock block'
 $lock = $matches[0].Groups[1].Value | ConvertFrom-Json
 Assert-Lock ($lock.schema -eq 1) 'unexpected schema version'
 
-$components = @('ytDlp', 'ejs', 'quickjs', 'ffmpeg', 'lame')
+$components = @('ytDlp', 'ejs', 'quickjs', 'ffmpeg', 'lame', 'zlib')
 foreach ($name in $components) {
     $item = $lock.$name
     Assert-Lock ($null -ne $item) "missing $name"
@@ -70,6 +70,9 @@ Assert-Digest $lock.ffmpeg.source.signatureSha256 'FFmpeg signature'
 Assert-Lock ($lock.ffmpeg.signingKey.url -eq 'https://ffmpeg.org/ffmpeg-devel.asc') 'FFmpeg key URL must be official'
 Assert-Digest $lock.ffmpeg.signingKey.sha256 'FFmpeg signing key'
 Assert-Lock ($lock.ffmpeg.signingKey.fingerprint -eq 'FCF986EA15E6E293A5644F10B4322F04D67658D8') 'FFmpeg signer fingerprint disagrees with upstream'
+Assert-Lock ($lock.zlib.source.url -eq "https://zlib.net/fossils/zlib-$($lock.zlib.version).tar.gz") 'zlib must use the official versioned fossil archive'
+Assert-Lock ($lock.zlib.license -match '^Zlib') 'zlib license must be recorded'
+Assert-Lock ($lock.zlib.targets -contains 'windows-x64') 'zlib Windows target is missing'
 
 $requiredQuickJsTargets = @('windows-x64', 'linux-x64', 'macos-x64', 'macos-arm64', 'android-arm64')
 foreach ($target in $requiredQuickJsTargets) {
@@ -80,5 +83,6 @@ $notice = Get-Content -LiteralPath $noticePath -Raw
 Assert-Lock ($notice -match 'GPLv3\+') 'notices must describe official yt-dlp binary license'
 Assert-Lock ($notice -match 'mpglib.*GPL') 'notices must flag the LAME GPL decoder'
 Assert-Lock ($notice -match 'yt-dlp-ejs' -and $notice -match 'LAME MP3') 'notices need ejs and LAME sections'
+Assert-Lock ($notice -match 'zlib compression library') 'notices need the zlib section'
 
-Write-Output 'Source lock: 5 components, matching yt-dlp/ejs versions, 3 desktop yt-dlp artifacts, 5 QuickJS targets, URLs, SHA-256 values, signing keys and license notices passed.'
+Write-Output 'Source lock: 6 components, matching yt-dlp/ejs versions, 3 desktop yt-dlp artifacts, 5 QuickJS targets, URLs, SHA-256 values, signing keys and license notices passed.'

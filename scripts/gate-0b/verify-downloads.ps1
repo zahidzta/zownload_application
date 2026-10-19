@@ -33,6 +33,7 @@ $items = @(
     [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz'; Url = $lock.ffmpeg.source.url; Hash = $lock.ffmpeg.source.sha256 },
     [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz.asc'; Url = $lock.ffmpeg.source.signatureUrl; Hash = $lock.ffmpeg.source.signatureSha256 },
     [pscustomobject]@{ Name = 'lame-3.100.tar.gz'; Url = $lock.lame.source.url; Hash = $lock.lame.source.sha256 },
+    [pscustomobject]@{ Name = 'zlib-1.3.2.tar.gz'; Url = $lock.zlib.source.url; Hash = $lock.zlib.source.sha256 },
     [pscustomobject]@{ Name = 'yt-dlp-public.key'; Url = $lock.ytDlp.signingKey.url; Hash = $lock.ytDlp.signingKey.sha256 },
     [pscustomobject]@{ Name = 'ffmpeg-devel.asc'; Url = $lock.ffmpeg.signingKey.url; Hash = $lock.ffmpeg.signingKey.sha256 }
 )
@@ -74,6 +75,19 @@ foreach ($item in $items) {
 
 $extra = @(Get-ChildItem -LiteralPath $downloadDir -File | Where-Object { $attested.ContainsKey($_.Name) -eq $false })
 Assert-Download ($extra.Count -eq 0) "unlisted files in downloads directory: $($extra.Name -join ', ')"
+
+# Match the inspected upstream version and root license inside the hash-locked
+# zlib archive. contrib/ programs are not inputs to the planned FFmpeg build.
+$zlibPath = Join-Path $downloadDir 'zlib-1.3.2.tar.gz'
+$zlibHeader = (& tar.exe -xOzf $zlibPath 'zlib-1.3.2/zlib.h') -join "`n"
+Assert-Download ($LASTEXITCODE -eq 0) 'could not read zlib.h from zlib archive'
+$zlibVersion = [regex]::Escape([string]$lock.zlib.version)
+Assert-Download ($zlibHeader -match "(?m)^#define ZLIB_VERSION `"$zlibVersion`"\s*$") 'zlib.h version disagrees with lock'
+$zlibLicense = (& tar.exe -xOzf $zlibPath 'zlib-1.3.2/LICENSE') -join "`n"
+Assert-Download ($LASTEXITCODE -eq 0) 'could not read root LICENSE from zlib archive'
+Assert-Download ($zlibLicense -match 'Copyright notice:' -and
+    $zlibLicense -match 'Permission is granted to anyone to use this software for any purpose' -and
+    $zlibLicense -match 'This notice may not be removed or altered from any source distribution') 'zlib root license text is missing'
 
 # The signed, hash-locked yt-dlp manifest must agree with the selected binaries.
 $manifest = Get-Content -LiteralPath (Join-Path $downloadDir 'SHA2-256SUMS') -Raw

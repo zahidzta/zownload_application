@@ -23,9 +23,9 @@ hashes are in [`engine-sources.md`](engine-sources.md).
 - Build configuration: TODO (record the full `./configure` command, enabled
   libraries/codecs, patches, compiler/toolchain and build commands)
 - Published corresponding source, patches and configuration URL: TODO
-- Additional bundled libraries and their notices: LAME 3.100 encoder is the
-  only selected external codec source; verify all actually linked libraries
-  and their licenses in 0B-10/12
+- Additional bundled libraries and their notices: LAME 3.100 encoder and
+  zlib 1.3.2 for PNG artwork decoding are selected external sources; verify
+  all actually linked libraries and their licenses in 0B-10/12
 
 FFmpeg must be built without `--enable-gpl` and `--enable-nonfree` under the
 project's LGPL-compatible distribution plan. Verify the effective license of
@@ -103,6 +103,22 @@ the complete build, including enabled external libraries, before release.
   LGPL, but old mpglib decoding functions are GPL. Exclude the GPL decoder
   from the linked FFmpeg build and verify this in 0B-10/12.
 - Bundled library SHA-256 and build configuration: TODO after build
+- Published corresponding source, patches and configuration URL: TODO for release
+
+## zlib compression library
+
+- Redistributed artifact and target platform: planned static library linked
+  into the Gate 0B Windows FFmpeg build; actual linkage requires 0B-10/11 proof
+- Exact version: 1.3.2
+- Upstream versioned source: https://zlib.net/fossils/zlib-1.3.2.tar.gz
+- Published source archive SHA-256: `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16`
+- License: Zlib; https://zlib.net/zlib_license.html and the archive's root
+  `LICENSE`. Preserve its copyright and conditions in redistributed source.
+- Build dependency plan: use pinned w64devkit GCC/Make and the archive's
+  `win32/Makefile.gcc` to build root-library `libz.a`; expose `zlib.h`,
+  `zconf.h` and `libz.a` to FFmpeg's PNG decoder probe. Exclude `contrib/`
+  programs and examples; confirm the exact flags and linkage in 0B-10/11.
+- Bundled library SHA-256 and effective build configuration: TODO after build
 - Published corresponding source, patches and configuration URL: TODO for release
 
 For each release, replace every remaining TODO with verified artifact-specific
