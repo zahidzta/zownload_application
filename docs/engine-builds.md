@@ -112,3 +112,7 @@ build log remain ignored. The GitHub Actions job in
 `.github/workflows/gate-0b-engines.yml` runs the exact command on
 `ubuntu-24.04` after checkout. The run output and resulting hash are recorded
 in [`gates/evidence/0b/quickjs-linux.txt`](gates/evidence/0b/quickjs-linux.txt).
+GitHub Actions run `39194291600` passed twice from clean runners using GCC
+`13.3.0` and GNU Make `4.3`. Both attempts produced a 5,079,320-byte ELF
+x86-64 binary with SHA-256
+`50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c`.
