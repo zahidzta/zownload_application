@@ -21,3 +21,29 @@ Before anything else, read docs/STATE.md and the current gate file.
 - No app build/test scripts exist yet. Once Gate 0A creates them, use the current gate task's exact commands and record setup commands in `docs/toolchain.md`.
 - Work on one `task-<id>` branch per task. After verification, commit and open a PR with `gh pr create`. Never merge, force-push, or create releases; the owner does that.
 - For CI failures use `gh run list --limit 5` and `gh run view <id> --log-failed | tail -50`. Never print full logs.
+
+### Execute Without Asking
+
+You may autonomously:
+- Read and analyze project files.
+- Create and modify files within the approved scope.
+- Run terminal commands.
+- Install project dependencies.
+- Execute builds, linters and tests.
+- Fix implementation errors.
+- Delegate tasks to specialized subagents.
+- Perform routine Git operations.
+
+Do not ask for permission for routine development actions.
+
+### Ask for User Decisions
+
+Always consult the user before:
+- Choosing or replacing major frameworks.
+- Making significant architectural changes.
+- Adding major dependencies or external services.
+- Changing the database architecture.
+- Modifying approved project requirements.
+- Removing important features.
+- Making decisions with substantial cost implications.
+- Introducing breaking API changes.
