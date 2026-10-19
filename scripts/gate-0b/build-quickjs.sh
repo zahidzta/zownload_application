@@ -24,9 +24,12 @@ archive="$repo_root/work/engine/downloads/quickjs-2026-06-04.tar.xz"
 source_url='https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz'
 source_hash='b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a'
 build_dir="$repo_root/work/engine/build/quickjs/linux-x64"
+mkdir -p "$(dirname "$archive")" "$build_dir"
+build_dir="$(cd "$build_dir" && pwd -P)"
+[[ "$build_dir" == "$repo_root/work/engine/build/quickjs/linux-x64" ]] || fail 'build directory resolves outside the workspace'
+source_dir="$build_dir/quickjs-2026-06-04"
 output="$build_dir/qjs"
 log="$build_dir/build.log"
-mkdir -p "$(dirname "$archive")" "$build_dir"
 if [[ ! -f "$archive" ]]; then
   partial="$archive.partial.$$"
   trap 'rm -f -- "$partial"' EXIT
@@ -38,12 +41,11 @@ if [[ ! -f "$archive" ]]; then
 fi
 echo "$source_hash  $archive" | sha256sum --check --status || fail 'source SHA-256 mismatch'
 
-# Always build from a new extraction. Only this script's temporary directory is removed.
-extract_root="$(mktemp -d "$build_dir/source.XXXXXXXX")"
-[[ "$extract_root" == "$build_dir"/source.* ]] || fail 'unsafe temporary source path'
-trap 'rm -rf -- "$extract_root"' EXIT
-tar -xf "$archive" -C "$extract_root"
-source_dir="$extract_root/quickjs-2026-06-04"
+# A stable source path keeps GCC debug paths and the resulting binary hash
+# identical across fresh runs. The resolved parent was checked above.
+[[ "$source_dir" == "$build_dir/quickjs-2026-06-04" ]] || fail 'unsafe source path'
+rm -rf -- "$source_dir"
+tar -xf "$archive" -C "$build_dir"
 [[ "$(cat "$source_dir/VERSION")" == 2026-06-04 ]] || fail 'source VERSION mismatch'
 [[ -f "$source_dir/Makefile" ]] || fail 'upstream Makefile is missing'
 

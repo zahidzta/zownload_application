@@ -100,7 +100,8 @@ bash scripts/gate-0b/build-quickjs.sh linux-x64 --verify
 ```
 
 The script downloads the exact locked URL only when its local archive is
-absent, rejects a different source hash, and builds from a new extraction.
+absent, rejects a different source hash, and builds from a new extraction at
+a fixed path so GCC debug paths do not change between CI runs.
 It invokes upstream Make with `CC=gcc-13 HOST_CC=gcc-13 CONFIG_LTO=
 CONFIG_TEMPORAL_INTL=y qjs`. This selects GCC 13 and keeps the upstream x64
 Temporal/Intl configuration while disabling LTO. The Makefile supplies the
