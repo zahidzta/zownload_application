@@ -1,0 +1,30 @@
+Gate 0B task 0B-06: Linux x64 QuickJS build evidence
+Date: 2026-10-18 (America/Mexico_City); CI timestamps: 2026-10-19 UTC
+
+Input source: https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz
+Source SHA-256: b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a
+Host: GitHub Actions ubuntu-24.04 (Ubuntu 24.04.5 LTS, x86_64)
+Compiler: gcc-13 (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, target x86_64-linux-gnu
+Build tool: GNU Make 4.3
+Command: bash scripts/gate-0b/build-quickjs.sh linux-x64 --verify
+Exit status: 0 in both clean CI attempts
+Make arguments: CC=gcc-13 HOST_CC=gcc-13 CONFIG_LTO= CONFIG_TEMPORAL_INTL=y qjs
+Compile command: gcc-13 -g -Wall -MMD -MF .obj/qjs.o.d -Wno-array-bounds -Wno-format-truncation -Wno-infinite-recursion -fwrapv -D_GNU_SOURCE -DCONFIG_VERSION=\"2026-06-04\" -O2 -c -o .obj/qjs.o qjs.c
+Link command: gcc-13 -g -rdynamic -o qjs .obj/qjs.o .obj/repl.o .obj/quickjs.o .obj/dtoa.o .obj/libregexp.o .obj/libunicode.o .obj/cutils.o .obj/quickjs-libc.o -lm -lpthread -ldl
+Build log: work/engine/build/quickjs/linux-x64/build.log (ignored)
+Output: work/engine/build/quickjs/linux-x64/qjs (ignored)
+Output size: 5,079,320 bytes
+Output SHA-256, attempt 1: 50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c
+Output SHA-256, attempt 2: 50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c
+Format: ELF 64-bit LSB pie executable, x86-64; dynamically linked, with debug info
+Version output: QuickJS version 2026-06-04
+Smoke script: print(1 + 1)
+Smoke output: 2
+CI run ID: 39194291600 (attempts 1 and 2; job quickjs-linux-x64)
+CI run URL: https://github.com/zahidzta/zownload_application/actions/runs/39194291600
+
+The first script revision extracted into a random temporary path. Its two
+successful smoke tests produced different hashes because GCC embedded those
+paths in debug data. The final script builds at a stable, workspace-checked
+path; the two clean CI attempts above match exactly. No prebuilt QuickJS
+binary was used or committed.
