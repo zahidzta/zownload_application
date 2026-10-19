@@ -116,7 +116,7 @@ elif [[ "$target" == android-arm64 ]]; then
   elf_header="$("$readelf" --file-header "$output")"
   elf_program="$("$readelf" --program-headers "$output")"
   elf_dynamic="$("$readelf" --dynamic "$output")"
-  [[ "$elf_header" == *'Machine: AArch64'* ]] || fail 'ELF machine is not AArch64'
+  printf '%s\n' "$elf_header" | grep -Eq 'Machine:[[:space:]]*(AArch64|EM_AARCH64)' || fail "ELF machine is not AArch64: $(printf '%s\n' "$elf_header" | grep 'Machine:')"
   [[ "$elf_program" == *'/system/bin/linker64'* ]] || fail 'Android linker64 interpreter is missing'
   dependencies="$(printf '%s\n' "$elf_dynamic" | sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p')"
   [[ -n "$dependencies" ]] || fail 'ELF has no linked shared libraries'
