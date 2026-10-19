@@ -116,3 +116,34 @@ GitHub Actions run `39194291600` passed twice from clean runners using GCC
 `13.3.0` and GNU Make `4.3`. Both attempts produced a 5,079,320-byte ELF
 x86-64 binary with SHA-256
 `50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c`.
+
+## 0B-07 — macOS x64 QuickJS binary
+
+The macOS build uses the same attested QuickJS source archive and hash as the
+Linux build. GitHub Actions runs the exact gate command on its documented
+[`macos-15-intel` runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The script selects Xcode 16.4 build 16F6 from the
+[macOS 15 image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md),
+checks the Intel host and Apple Clang target, and uses that Clang for both
+`CC` and `HOST_CC`. It selects the macOS 15.5 SDK so Clang finds the system
+headers. On a macOS x64 host with that Xcode installed, run:
+
+```bash
+bash scripts/gate-0b/build-quickjs.sh macos-x64 --verify
+```
+
+The script fetches the locked archive only if absent, checks its SHA-256,
+extracts it afresh at a fixed path, and builds the upstream `qjs` target with
+`CONFIG_LTO=` and `CONFIG_TEMPORAL_INTL=y`. The Makefile selects its Darwin
+Clang settings and supplies the optimization flags. The macOS link keeps `-g`
+and passes `-Wl,-reproducible`, as documented by
+[Apple's linker](https://keith.github.io/xcode-man-pages/ld.1.html#reproducible).
+Verification
+checks the Mach-O x86_64 format, reported QuickJS version, and
+`print(1 + 1)` result. The output and full log remain ignored at
+`work/engine/build/quickjs/macos-x64/`; the observed commands, tool versions,
+binary hash, and CI run are in
+[`gates/evidence/0b/quickjs-macos-x64.txt`](gates/evidence/0b/quickjs-macos-x64.txt).
+Two clean `macos-15-intel` CI attempts with Xcode 16.4 produced the same
+1,241,256-byte Mach-O x86_64 binary with SHA-256
+`554102a8a9c0d0c5e24cd138ad7a790f330fd926310c01009265589a446ef90a`.

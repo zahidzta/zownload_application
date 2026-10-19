@@ -16,3 +16,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build and verify QuickJS Linux x64
         run: bash scripts/gate-0b/build-quickjs.sh linux-x64 --verify
+  quickjs-macos-x64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and verify QuickJS macOS x64
+        run: bash scripts/gate-0b/build-quickjs.sh macos-x64 --verify
