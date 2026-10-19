@@ -14,18 +14,19 @@ hashes are in [`engine-sources.md`](engine-sources.md).
 - Upstream source: https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
 - Upstream license guidance: https://ffmpeg.org/legal.html
 - Exact corresponding source archive URL: https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz
-- Source archive SHA-256: compute and attest in 0B-03 after verifying the
-  official detached PGP signature
+- Source archive SHA-256: `7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`;
+  detached PGP signature verified in 0B-03
 - Bundled binary SHA-256: TODO
-- Effective license for this build and license text location: intended
-  LGPL-2.1-or-later; verify source license and compiled configuration in
-  0B-10/12, then ship the matching source license text
-- Build configuration: TODO (record the full `./configure` command, enabled
-  libraries/codecs, patches, compiler/toolchain and build commands)
+- Effective license for the 0B-10 configuration: FFmpeg reports LGPL-2.1-or-later;
+  `CONFIG_GPL=0`, `CONFIG_NONFREE=0`, `CONFIG_VERSION3=0`. Source text is
+  `COPYING.LGPLv2.1`; 0B-11/12 must verify the built binary and release notices.
+- Build configuration: [`engine-builds.md`](engine-builds.md#0b-10--windows-x64-lgpl-ffmpeg-configuration)
+  records the exact source recipe, pinned Windows toolchain, compiler flags and
+  enabled features. No source patches were applied in 0B-10.
 - Published corresponding source, patches and configuration URL: TODO
-- Additional bundled libraries and their notices: LAME 3.100 encoder and
-  zlib 1.3.2 for PNG artwork decoding are selected external sources; verify
-  all actually linked libraries and their licenses in 0B-10/12
+- External libraries selected by configuration: only LAME 3.100 encoder and
+  zlib 1.3.2 for PNG artwork decoding. The actual executable linkage and
+  relinking materials remain for 0B-11/12.
 
 FFmpeg must be built without `--enable-gpl` and `--enable-nonfree` under the
 project's LGPL-compatible distribution plan. Verify the effective license of
@@ -94,31 +95,36 @@ the complete build, including enabled external libraries, before release.
 
 ## LAME MP3 encoder library
 
-- Redistributed artifact and target platform: planned `libmp3lame` with the
-  Gate 0B Windows FFmpeg build; actual linkage requires 0B-10/11 proof
+- Redistributed artifact and target platform: static `libmp3lame.a` configured
+  for the Gate 0B Windows FFmpeg build; executable linkage requires 0B-11 proof
 - Exact version: 3.100
 - Upstream source: https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download
 - Source archive SHA-256: `ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e`
 - License text: https://lame.sourceforge.io/license.txt; encoder library is
   LGPL, but old mpglib decoding functions are GPL. Exclude the GPL decoder
   from the linked FFmpeg build and verify this in 0B-10/12.
-- Bundled library SHA-256 and build configuration: TODO after build
+- Configured static library SHA-256:
+  `fa25a11fa88fd2cada753ccc8e8d59be1be69e2730fa872697958afeec8f7a30`;
+  build configuration is in
+  [`engine-builds.md`](engine-builds.md#0b-10--windows-x64-lgpl-ffmpeg-configuration).
+  `HAVE_MPGLIB` is undefined; the GPL decoder directory is not built.
 - Published corresponding source, patches and configuration URL: TODO for release
 
 ## zlib compression library
 
-- Redistributed artifact and target platform: planned static library linked
-  into the Gate 0B Windows FFmpeg build; actual linkage requires 0B-10/11 proof
+- Redistributed artifact and target platform: static `libz.a` configured for
+  the Gate 0B Windows FFmpeg build; executable linkage requires 0B-11 proof
 - Exact version: 1.3.2
 - Upstream versioned source: https://zlib.net/fossils/zlib-1.3.2.tar.gz
 - Published source archive SHA-256: `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16`
 - License: Zlib; https://zlib.net/zlib_license.html and the archive's root
   `LICENSE`. Preserve its copyright and conditions in redistributed source.
-- Build dependency plan: use pinned w64devkit GCC/Make and the archive's
-  `win32/Makefile.gcc` to build root-library `libz.a`; expose `zlib.h`,
-  `zconf.h` and `libz.a` to FFmpeg's PNG decoder probe. Exclude `contrib/`
-  programs and examples; confirm the exact flags and linkage in 0B-10/11.
-- Bundled library SHA-256 and effective build configuration: TODO after build
+- Build configuration: pinned w64devkit GCC/Make runs
+  `make.exe -f win32/Makefile.gcc libz.a`. The root `zlib.h`, `zconf.h` and
+  `libz.a` pass FFmpeg's PNG decoder probe. `contrib/` programs and examples
+  are excluded; 0B-11 verifies executable linkage.
+- Configured static library SHA-256:
+  `ed44fb031978eacc1a6baac366f53f8d0ad6ea16fb6635992659ec0e1f854e7f`
 - Published corresponding source, patches and configuration URL: TODO for release
 
 For each release, replace every remaining TODO with verified artifact-specific

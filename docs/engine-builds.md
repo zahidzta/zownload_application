@@ -198,3 +198,67 @@ Android linker path, and lists every linked shared library with the NDK's
 Device execution and Android packaging are Gate 0C work. The exact compiler,
 flags, ELF inspection, artifact hash and CI run are recorded in
 [`gates/evidence/0b/quickjs-android.txt`](gates/evidence/0b/quickjs-android.txt).
+
+## 0B-10 — Windows x64 LGPL FFmpeg configuration
+
+From the repository root, after the 0B-03/10A source acquisition and 0B-04
+w64devkit setup, run:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -CheckConfiguration
+```
+
+The script runs the offline source/signature verifier and checks the exact
+FFmpeg 8.1.3, LAME 3.100, zlib 1.3.2 and w64devkit 2.10.1 archive hashes. It
+checks pinned GCC 16.2.0 targeting `x86_64-w64-mingw32` and GNU Make 4.4.1.
+It extracts all three sources afresh under the ignored
+`work/engine/build/ffmpeg/windows-x64/recipe/` directory.
+The attested source SHA-256 values are FFmpeg
+`7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`,
+LAME `ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e`
+and zlib `bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16`.
+
+The LAME 3.100 encoder-only configuration is:
+
+```text
+./configure --build=x86_64-w64-mingw32 --disable-decoder --disable-frontend --disable-shared --enable-static --disable-mp3x --disable-mp3rtp CC=gcc.exe CFLAGS=-O2 AR=ar.exe RANLIB=ranlib.exe AWK=awk.exe SED=sed.exe GREP=grep.exe EGREP=egrep.exe FGREP=fgrep.exe NM=nm.exe LD=ld.exe OBJDUMP=objdump.exe
+make.exe -C libmp3lame -j2
+```
+
+The explicit `.exe` names let LAME's older Autoconf script locate the pinned
+Windows tools. LAME compiles with `-O2`. `--disable-decoder` leaves `HAVE_MPGLIB` undefined; the script
+inspects the static archive and rejects GPL decoder objects. Only LAME's
+`libmp3lame` target is built. zlib's root static library is built with
+`make.exe -f win32/Makefile.gcc libz.a` (upstream `-O3 -Wall` flags);
+`contrib/` programs and examples are
+excluded. Their headers and static archives are copied to the recipe's
+`deps/include` and `deps/lib` directories.
+
+With `D` equal to the shell path of the recipe's `deps` directory, the FFmpeg
+configuration is exactly:
+
+```text
+./configure --target-os=mingw32 --arch=x86_64 --cc=gcc.exe --cxx=g++.exe --ar=ar.exe --ranlib=ranlib.exe --nm=nm.exe --strip=strip.exe --pkg-config=false --disable-autodetect --disable-x86asm --disable-ffplay --disable-doc --disable-debug --enable-static --disable-shared --enable-libmp3lame --enable-zlib --extra-cflags="-I$D/include" --extra-ldflags="-L$D/lib"
+```
+
+The script sets `PATH` to the pinned w64devkit `bin` for each configure/build
+step. `--disable-x86asm` removes an unpinned NASM requirement;
+`--pkg-config=false` and `--disable-autodetect` prevent ambient package
+detection. The explicit `--enable-libmp3lame` and `--enable-zlib` probes link
+against the built static libraries. Generated `ffbuild/config.mak` records
+fully expanded paths and flags. The script checks that only LAME and zlib
+appear among FFmpeg's enabled external libraries, and that `config.h` has
+`CONFIG_GPL=0`, `CONFIG_NONFREE=0` and `CONFIG_VERSION3=0`.
+FFmpeg's generated C flags include `-std=c17`, `-O3`, `-fomit-frame-pointer`,
+`-Wall` and the warnings/errors in `ffbuild/config.mak`; its MinGW linker
+flags include `--nxcompat`, `--dynamicbase` and `--high-entropy-va`.
+`--pkg-config=false` prints a warning that the named executable is absent;
+the explicit LAME and zlib header/link probes still must pass.
+
+The configure probe must report `License: LGPL version 2.1 or later` and enable
+the LAME MP3 encoder, native AAC encoder, MP3/MOV/MP4 muxers, PNG decoder,
+MJPEG encoder, image scale filter, `swscale`, `ffmpeg` and `ffprobe`. PNG plus
+zlib decodes the locked fixture's artwork; MJPEG encodes its JPEG cover. Full
+logs, static libraries and configured source stay ignored under the recipe
+directory. 0B-11 compiles FFmpeg and inspects the Windows executables; 0B-12
+completes the redistribution license inventory and relinking plan.
