@@ -97,12 +97,21 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Acceptance: NDK r30 build yields an Android arm64 native artifact, with source/output hash, compiler, flags and ELF dependency inspection recorded; the artifact is not claimed to run on a device yet.
 - Exact verification command: `bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify` (run on the NDK-equipped Linux host/CI job).
 
+### 0B-10A — zlib source lock and attestation
+
+- Goal: pin and acquire upstream zlib source required by FFmpeg's PNG thumbnail decoder; verify its version, source hash and license before any FFmpeg configuration or build. This repair was approved by the owner after 0B-10 found the missing dependency.
+- Files to touch: `docs/engine-sources.md`, `docs/THIRD-PARTY-NOTICES.md`, `docs/gates/evidence/0b/source-hashes.txt`, `scripts/gate-0b/fetch-sources.ps1`, `scripts/gate-0b/verify-downloads.ps1`, `scripts/gate-0b/verify-source-lock.ps1`, `docs/STATE.md`.
+- Read: `PROJECT.md:388,627,708-712,752,812`.
+- Dependencies/parallelism: 0B-03; finish before resuming 0B-10. Use an official immutable source artifact and published hash or document the same source-attestation method used for the other locked sources. No compilation in this task.
+- Acceptance: the new source URL, exact version, SHA-256, license and Windows build dependency plan are documented; the acquisition and offline verifier reject missing or altered zlib source; the existing 14 source checks still pass.
+- Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-downloads.ps1`.
+
 ### 0B-10 — LGPL ffmpeg configuration
 
 - Goal: freeze a reproducible ffmpeg recipe, compiler and required external codec sources; audit enabled libraries before compilation. Validate that MP3 encoding, AAC encoding/compatibility, MP4 muxing and thumbnail conversion are possible under the effective license.
 - Files to touch: `scripts/gate-0b/build-ffmpeg.ps1`, `docs/engine-builds.md`, `docs/THIRD-PARTY-NOTICES.md`, `docs/STATE.md`.
 - Read: `PROJECT.md:368,388,390,627,708-712,752,806-812`.
-- Dependencies/parallelism: 0B-03; independent of QuickJS builds. Use only sources locked by 0B-01/03.
+- Dependencies/parallelism: 0B-03 and 0B-10A; independent of QuickJS builds. Use only sources locked and attested before this task.
 - Acceptance: exact configure command, dependency versions/licenses, compiler and flags are recorded; `--enable-gpl` and `--enable-nonfree` are absent; no required codec depends on an incompatible library.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -CheckConfiguration`.
 
