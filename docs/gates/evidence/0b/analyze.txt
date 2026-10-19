@@ -1,0 +1,33 @@
+Gate 0B task 0B-13: YouTube analysis and QuickJS/EJS evidence
+Date: 2026-10-19 (America/Mexico_City)
+Host: Windows x64; Windows PowerShell 5.1
+
+Command: powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case analyze
+Exit status: 0
+Fixture preflight: exit 0; YouTube short, Blender pure playlist and mixed URL available; the full fixture preflight also passed.
+yt-dlp: official stable@2026.08.19 yt-dlp.exe, SHA-256 66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+QuickJS: locally built upstream 2026-06-04 qjs.exe, SHA-256 bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+EJS: yt_dlp_ejs-0.8.0 listed in the official executable's verbose optional-library inventory; this matches the signed release source lock.
+Runtime debug: "JS runtimes: quickjs-2026-06-04" for all three commands. The single and mixed videos registered QuickJS as a JS challenge provider; Deno, Node and Bun were unavailable as providers.
+
+Probe                    Exit  Seconds  _type     ID                         Result
+single YouTube video      0      7.90     video     uW13KuRrg1g                14 formats
+pure Blender playlist    0      6.80     playlist  PL6B3937A5D230E335       17 flat entries; u9lj-c29dxI and UXqq0ZvbOnk present
+mixed watch/list URL      0      9.23     video     u9lj-c29dxI                48 formats; "Downloading just the video ... because of --no-playlist"
+
+The 6.80-second playlist value is one wall-clock measurement, including CLI
+startup and network time. The three commands had 180-second timeouts and none
+timed out. stdout JSON and full verbose stderr remain under ignored
+work/engine/cli/analyze/{single,playlist,mixed}.{stdout,stderr}.txt.
+No media was downloaded. The playlist used --flat-playlist, so its entries are
+URL records and the timing does not measure per-entry video extraction.
+
+Runtime limitation: the YouTube responses did not require an EJS JS challenge.
+The logs prove the bundled EJS version and exclusive QuickJS configuration,
+plus successful extraction, but do not prove that EJS executed a solver script
+or isolate QuickJS's execution time. D-08 fallback remains undecided. An
+additional optional forced web-client probe on the same single URL exited 1:
+YouTube returned only image formats under SABR/PO-token restrictions, ending
+"Requested format is not available". That probe is not the default-client
+analysis command and is not treated as a missing fixture or a passing solver
+test. Its logs remain ignored as single-web.stdout/stderr.txt.
