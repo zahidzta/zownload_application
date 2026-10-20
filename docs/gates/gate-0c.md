@@ -2,17 +2,18 @@
 
 ## Scope, time box, and checkpoint
 
-- **Time box: 1–2 days total.** Sixteen roughly 30-minute task sessions are the target (about eight hours of hands-on work, plus device/build waits). If the two-day limit is reached without the exit evidence, record the result and ask the owner whether to extend the spike; do not call the gate passed.
+- **Time box: 1–2 days total.** Sixteen roughly 30-minute task sessions were the original target (about eight hours of hands-on work, plus device/build waits). The owner-selected Option A adds an estimated 8–16 sessions for GPL inventory, pinned substitution, custom update/rollback, and release evidence; this estimate does not extend the two-day stop point. If that limit is reached without exit evidence, record the result and ask the owner whether to extend the spike; do not call the gate passed.
 - Source: `PROJECT.md:31-45,180-195,309-314,341-393,687-692,734-753,814-821`; current status and accepted Gate 0B evidence: `docs/STATE.md`. Gate 0B was accepted on 2026-10-20.
-- Strict deliverable: a minimal Tauri Android app and Kotlin plugin use local youtubedl-android with pinned upstream QuickJS 2026-06-04 and a matching yt-dlp/ejs pair to download a real YouTube MP3 into MediaStore Downloads on a physical `arm64-v8a` device. Prototype the foreground service, Home continuation, recents cancellation, interrupted queue recovery, WebView recreation, Android 15 timeout, and direct pending MediaStore ZIP output. No production UI, server, or production Android release.
-- Exit evidence: AC-30..35 on real hardware, command/log excerpts and media inspection, notification and process observations, SQLite-restored `paused` state, direct ZIP inspection, and a documented youtubedl-android update/rollback result. Preserve Gate 0B's already-MP3 bitrate, unmeasured YouTube JS challenge, and FFmpeg HTTPS-input limits as limits; do not turn them into Android success claims.
+- Strict deliverable: a minimal Tauri Android app and Kotlin plugin use local youtubedl-android with pinned upstream QuickJS 2026-06-04 and a matching yt-dlp/ejs pair to download a real YouTube MP3 into MediaStore Downloads on a physical `arm64-v8a` device. Prototype the foreground service, Home continuation, recents cancellation, interrupted queue recovery, WebView recreation, Android 15 timeout, direct pending MediaStore ZIP output, and a custom verified update/rollback path outside the tagged updater. Record GPL package/source and release evidence. No production UI, server, or production Android release.
+- Exit evidence: AC-30..35 on real hardware, command/log excerpts and media inspection, notification and process observations, SQLite-restored `paused` state, direct ZIP inspection, a custom verified update/rollback result, and GPL package/source evidence. Preserve Gate 0B's already-MP3 bitrate, unmeasured YouTube JS challenge, and FFmpeg HTTPS-input limits as limits; do not turn them into Android success claims.
 - Ownership: Rust owns the one-item spike queue and its SQLite state; Kotlin contains the engine adapter, MediaStore bridge, and foreground service without a second queue or business rules (`PROJECT.md:381,383,386,392`). `shared/contract.ts` and `src-tauri/src/contract.rs` govern exchanged fields and types. The UI is disposable and reconstructs from `get_queue` plus events. Keep Rust small and comment Android-specific transitions.
-- The foreground-service type is still marked **pending** in `PROJECT.md:193`. Task 0C-01 must document current Android requirements and a proposed type; obtain the owner's explicit decision before 0C-08 rather than silently choosing one.
+- The owner selected **Option A: youtubedl-android and a repo-wide GPL-3.0-or-later licence** (SPDX `GPL-3.0-or-later`) on 2026-10-20 and states they are the sole copyright holder. This is a planning decision only: task **0C-01B** must bring the pending repo-wide licence change and `PROJECT.md:372,388,627,753,820` edits to the owner for review before Android integration. Legal review before the first public release remains **OPEN**. See the [decision memo](evidence/0c/architecture-decision.md).
+- The foreground-service type is still marked **pending** in `PROJECT.md:193`. The 0C-01 `dataSync` proposal remains **OPEN**; obtain the owner's explicit decision before 0C-08.
 - Each task uses `task-<id>`, one session, its own verification, work commit, `docs/STATE.md` commit, and PR. Before writing library/framework code, consult its current documentation through context7. The named verification commands below are entrypoints **to implement in those tasks**, not commands run by this setup plan. `scripts/gate-0c/verify.ps1` must print at most a concise 50-line result or failure tail; keep full logs and media ignored under `work/android/`, and commit concise evidence under `docs/gates/evidence/0c/`.
 
 ## Stop rule
 
-**Any failed hard requirement stops Android implementation and requires an explicit architecture decision from the owner.** Record the exact command, pinned inputs, device/API/ABI, exit status, relevant log lines, and output inspection in `docs/STATE.md` and `docs/gates/evidence/0c/`; then stop. Do not switch runtime, engine, storage API, service ownership, ffmpeg license posture, or acceptance criteria as a workaround. A missing/broken test URL is recorded as fixture evidence and replaced only in a separate fixture task after establishing that it is a fixture failure. The two-day time box is also a stop point for owner review.
+**Any failed hard requirement stops Android implementation and requires an explicit architecture decision from the owner.** If Option A's device proof fails, record the exact command, pinned inputs, device/API/ABI, exit status, relevant log lines, and output inspection in `docs/STATE.md` and `docs/gates/evidence/0c/`; then stop and re-open the options in the [decision memo](evidence/0c/architecture-decision.md). Do not switch runtime, engine, storage API, service ownership, FFmpeg licence posture, or acceptance criteria as a workaround. A missing/broken test URL is recorded as fixture evidence and replaced only in a separate fixture task after establishing that it is a fixture failure. The two-day time box is also a stop point for owner review.
 
 ## Device and test preparation for the owner
 
@@ -26,7 +27,7 @@ Task 0C-01 checks the **current primary documentation and versioned source**; Ap
 
 1. **JS runtime:** whether youtubedl-android can pass yt-dlp's `--js-runtimes quickjs:<path>` and matching yt-dlp-ejs through its API, provide a writable script/cache directory, and execute the pinned QuickJS binary from an Android-allowed packaged location. Do not infer this from desktop yt-dlp support.
 2. **yt-dlp update and rollback:** whether its documented updater can select and verify a pinned yt-dlp/ejs version, preserve the bundled baseline, prevent swaps during active work, and restore that baseline after a bad update. A documented update method alone does not prove rollback.
-3. **Bundled ffmpeg:** exact bundled artifact/version/architectures, native dependencies, build configuration, redistribution license and source obligations, and whether required MP3 encoding works on arm64. A bundled ffmpeg claim alone does not prove the LGPL-compatible requirement in `PROJECT.md:388`.
+3. **Bundled ffmpeg:** exact bundled artifact/version/architectures, native dependencies, build configuration, GPL redistribution and corresponding-source obligations, and whether required MP3 encoding works on arm64. The tagged GPL build conflicts with the current LGPL-compatible requirement in `PROJECT.md:388`; 0C-01B must resolve that document before integration.
 
 If documentation/source cannot support a hard prerequisite, record the gap and invoke the stop rule before integrating an unverified replacement.
 
@@ -41,6 +42,16 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 - Dependencies/parallelism: none; independent of 0C-02. This audit gates 0C-04, 0C-05, and 0C-14.
 - Acceptance: versioned primary links and source evidence answer each assumption or name the missing proof; selected artifacts have a hash/provenance plan; no unsupported claim of update, rollback, JS, or LGPL ffmpeg.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case library-audit`.
+
+### 0C-01B — Repo-wide licence and requirement revision (pending owner review)
+
+- Goal: propose the owner-selected GPL-3.0-or-later (SPDX `GPL-3.0-or-later`) repo-wide licence and the Option A `PROJECT.md` revisions at lines 372, 388, 627, 753, and 820 for explicit owner review. Preserve accurate third-party notices and record legal review before the first public release as open.
+- Files: `LICENSE`, applicable licence headers/notices, `PROJECT.md`, `docs/gates/evidence/0c/architecture-decision.md`, `docs/STATE.md`.
+- Read: `PROJECT.md:372,388,627,753,820`.
+- Device: **no**.
+- Dependencies/parallelism: owner decision recorded on 2026-10-20; prerequisite for 0C-04 and Android engine integration. This documentation session does not perform 0C-01B.
+- Acceptance: the proposed repo-wide licence and requirement text match Option A, the owner has reviewed the change, and the current MIT/LGPL conflict is resolved before engine integration. No library is integrated in this task.
+- Exact verification command: `git diff --check` plus owner review of the 0C-01B PR.
 
 ### 0C-02 — Minimal Tauri Android spike app
 
@@ -64,22 +75,22 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-04 — Pinned youtubedl-android adapter
 
-- Goal: add the 0C-01 pinned youtubedl-android dependency and a minimal Kotlin analyze/download-one/cancel adapter with progress/error callbacks. Inspect the resolved native package and ffmpeg configuration/license before claiming suitability.
+- Goal: after 0C-01B review, add the 0C-01 pinned youtubedl-android dependency and a minimal Kotlin analyze/download-one/cancel adapter with progress/error callbacks. Inventory the resolved AAR, transitive packages, native binaries, FFmpeg build flags, exact versions/hashes, licences, corresponding sources, build configuration, and notices needed for GPL distribution.
 - Files: `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `src-tauri/src/android_spike.rs`, `docs/gates/evidence/0c/engine-package.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:348-349,368,372-374,386,388,753`.
 - Device: **no** for compile/package audit; runtime is 0C-05/06.
-- Dependencies/parallelism: 0C-01 and 0C-03; independent of the later queue prototype.
-- Acceptance: pinned dependency resolves, arm64 packaging and adapter compile, actual packaged yt-dlp/ffmpeg inventory is recorded, and the LGPL-compatible ffmpeg obligation is supported or the stop rule fires. No successful download is claimed here.
+- Dependencies/parallelism: 0C-01, owner-reviewed 0C-01B, and 0C-03; independent of the later queue prototype.
+- Acceptance: pinned dependency resolves; arm64 packaging and adapter compile; actual GPL package/source inventory records the packaged yt-dlp, FFmpeg, native and transitive inputs plus source/build/notices gaps. Any missing hard redistribution input invokes the stop rule. No successful download is claimed here.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-package`.
 
 ### 0C-05 — Pinned QuickJS and matching ejs on device
 
-- Goal: package the Gate 0B attested upstream QuickJS 2026-06-04 arm64 build as an Android-executable native artifact, pair it with the selected yt-dlp/ejs versions, pass the explicit runtime option, and run a device smoke probe with writable temporary files.
+- Goal: package the Gate 0B attested upstream QuickJS 2026-06-04 arm64 build as an Android-executable native artifact; replace the library's bundled older yt-dlp/ejs/QuickJS versions with the pinned, matching pair, pass the explicit runtime option, and run a device smoke probe with writable temporary files.
 - Files: `scripts/gate-0c/package-quickjs.ps1`, `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `.gitignore`, `docs/gates/evidence/0c/quickjs.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`; generated native output under ignored `work/android/` or the Android build tree.
 - Read: `PROJECT.md:348,354,370,373,753,814-821`.
 - Device: **physical arm64 required**.
 - Dependencies/parallelism: 0C-01 and 0C-04; independent of 0C-07 after adapter API stabilizes.
-- Acceptance: packaged QuickJS hash/version matches the pinned build, device process can execute it, yt-dlp reports the selected runtime and matching ejs, and writable temp/cache use is demonstrated. A normal YouTube result alone is insufficient proof of JS execution.
+- Acceptance: packaged QuickJS hash/version matches the pinned Android build, device process can execute it, the selected yt-dlp/ejs pair replaces the bundled versions without an active-job swap, yt-dlp reports the selected runtime and matching ejs, and writable temp/cache use is demonstrated. A normal YouTube result alone is insufficient proof of JS execution.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case quickjs-device`.
 
 ### 0C-06 — Real YouTube MP3 in MediaStore Downloads (AC-30)
@@ -164,12 +175,12 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-14 — yt-dlp update and rollback proof
 
-- Goal: test the 0C-01 documented youtubedl-android updater on a device, including pinned/checksummed candidate, no swap during a job, failed-candidate preservation, and restoration of the bundled baseline after a safely injected post-acceptance failure. Preserve exact version/ejs identity.
+- Goal: implement and test a custom verified update/rollback path **outside the tagged youtubedl-android updater**. Pin and checksum the yt-dlp/ejs candidate, prohibit swaps during active work, retain a known-good baseline, and restore it after a safely injected post-acceptance failure. Preserve exact version/ejs identity.
 - Files: `src-tauri/gen/android/app/src/main/java/**`, `docs/gates/evidence/0c/update-rollback.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:185,187,356,376,386,753,820`.
 - Device: **physical arm64 required** for runtime proof.
 - Dependencies/parallelism: 0C-01 and 0C-04; independent of 0C-07..13 after shared adapter edits are integrated.
-- Acceptance: document whether update **and** rollback work, with baseline/candidate hashes, observed version, active-job exclusion and recovery logs. If a required safe rollback is unsupported, invoke the stop rule instead of claiming the updater works.
+- Acceptance: device evidence proves verified update **and** rollback through the custom path, with baseline/candidate hashes, observed version, active-job exclusion, failed-candidate preservation, and recovery logs. The tagged updater is not credited as proof. If safe rollback fails, invoke the stop rule.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case update-rollback`.
 
 ### 0C-15 — Android 15 foreground-service timeout (AC-35)
@@ -184,12 +195,12 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-16 — Gate evidence and owner checkpoint
 
-- Goal: review AC-30..35 and all Gate 0C hard requirements against exact logs, device details, media hashes/playback, ZIP contents, orphan-process check and updater/rollback findings; list any limit without claiming a pass.
+- Goal: review AC-30..35 and all Gate 0C hard requirements against exact logs, device details, media hashes/playback, ZIP contents, orphan-process check, and custom update/rollback findings. Add GPL release evidence: resolved package/source inventory, corresponding source and build inputs, third-party notices, and a legal-review-before-first-public-release open item; list any limit without claiming a pass.
 - Files: `docs/gates/gate-0c.md`, `docs/gates/evidence/0c/checkpoint.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:687-692,734-753,814-821`.
 - Device: **no new device run**; requires the recorded physical-device evidence.
-- Dependencies/parallelism: 0C-01..15; final and not parallel.
-- Acceptance: every hard requirement has linked passing evidence, or the gate is stopped with the owner's required architecture decision pending. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
+- Dependencies/parallelism: 0C-01B and 0C-02..15; final and not parallel.
+- Acceptance: every hard requirement has linked passing evidence, GPL release evidence and remaining legal-review status are explicit, or the gate is stopped and the memo options are re-opened for the owner. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case gate`.
 
 ## Thirty-minute risks and planned splits
@@ -198,7 +209,7 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 - **0C-06:** real YouTube extraction/conversion and MediaStore publish may exceed one session. Split into private-output engine proof and pending-row publish (`0C-06A/B`); AC-30 requires the combined result.
 - **0C-11:** interruption and actual `.part` resume may require two stable network runs. Split kill/restore and explicit resume (`0C-11A/B`) while keeping AC-33 open.
 - **0C-13:** split MediaStore write-handle/`IS_PENDING` proof from ZIP streaming/inspection (`0C-13A/B`) if the Rust-to-Kotlin handle needs extra work.
-- **0C-14/15:** split updater API/negative cases from device rollback (`0C-14A/B`), or timeout configuration from callback recovery (`0C-15A/B`), if either takes longer than 30 minutes.
+- **0C-14/15:** split custom update verification/negative cases from device rollback (`0C-14A/B`), or timeout configuration from callback recovery (`0C-15A/B`), if either takes longer than 30 minutes.
 - Any split is recorded in this gate file and `docs/STATE.md` before further implementation. A split does not extend the **1–2 day** spike by itself. CI/device/network waits can be recorded with an ID and reviewed in a new session; never mark a pending run passed.
 
 ## Delivery
