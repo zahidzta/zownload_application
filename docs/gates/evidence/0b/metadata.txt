@@ -1,0 +1,66 @@
+0B-18 metadata and JPEG cover probe — 2026-10-19
+
+Exact entrypoint:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case metadata
+Exit 0. Fixture preflight, pinned executable SHA-256 checks, four yt-dlp
+invocations, one PNG fetch, local FFmpeg conversion and both ffprobe assertions
+passed. Full stdout/stderr, media, artwork and ffprobe JSON are ignored under:
+  work/engine/cli/metadata/20261019-201837/
+The command matrix is in docs/ytdlp-commands.md, section 0B-18.
+
+Pinned executable SHA-256:
+  yt-dlp.exe 66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  qjs.exe bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+  ffmpeg.exe fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe.exe bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+
+Archive playlist position 2, https://archive.org/details/PureDataSoundEffects:
+  Pinned extraction: ID PureDataSoundEffects/effect-acid.mp3;
+    title acid; artist absent; creator Andy Farnell;
+    playlist title Pure Data sound effects by Andy Farnell;
+    thumbnail field absent. The Archive embed playlist and public file catalog
+    contain effect-acid.png. No missing field was counted as an extractor pass.
+  Metadata mapping: %(artist,creator,uploader|)s -> meta_artist;
+    %(playlist_title|)s -> meta_album, then --embed-metadata.
+  yt-dlp HTTP fetched the MP3. Its FFmpeg metadata postprocessor read only
+    the local source.mp3. Since yt-dlp exposed no thumbnail field, a separate
+    HTTPS fetch obtained effect-acid.png (11,586 bytes, SHA-256
+    8739b28683cb9d71921bf0665dcc8823a9113a6b025da702f3da1f77e8164e24).
+    Pinned ffprobe confirmed PNG. Pinned FFmpeg read only local source.mp3 and
+    cover.png, copied audio and encoded the image to MJPEG/ID3v2.3 APIC.
+  Final archive/archive-cover.mp3: MP3 audio plus one attached MJPEG 800x200
+    picture; title acid; artist Andy Farnell; album Pure Data sound effects
+    by Andy Farnell; duration 10.840816 s; 200,381 bytes; SHA-256
+    f0958fc479726a7095dafc9006a1b050e527ca9f25984cea9e0e2f9edcff2c4f.
+
+NatureClip single, https://www.youtube.com/watch?v=YC0kTqKbeFs:
+  Pinned extraction: title FREE Time-Lapse stock footage: Full Moon CC-BY
+    NatureClip; artist/creator absent; uploader NatureClip: Free Stock Footage;
+    playlist title absent; YouTube thumbnails present.
+  Metadata mapping: uploader -> meta_artist; empty playlist_title -> no album.
+  yt-dlp HTTP fetched H.264/Opus media and the thumbnail. Its FFmpeg merge
+    copied H.264, encoded AAC, and used only two local file: inputs; the
+    metadata FFmpeg pass read a local MP4. yt-dlp reported thumbnail 44 absent,
+    then selected available thumbnail 43; it was already JPEG, so the jpg
+    conversion option was a no-op. The EmbedThumbnail postprocessor used
+    mutagen. No FFmpeg input was HTTPS.
+  Final video/single.mp4: H.264 video, AAC audio, one attached MJPEG 1280x720
+    picture; title FREE Time-Lapse stock footage: Full Moon CC-BY NatureClip;
+    artist NatureClip: Free Stock Footage; album tag absent (empty for a single);
+    duration 15.998000 s; 107,410 bytes; SHA-256
+    73eece08e45ac944fc71a0d7bac4c68eaee9241b860f80871a1b3a5e91755ab3.
+
+Common-player inspection with portable VLC 3.0.24/libVLC:
+  py work/engine/cli/read_vlc_metadata.py <archive-cover.mp3> <single.mp4>
+  py work/engine/cli/play_vlc.py <archive-cover.mp3>
+  py work/engine/cli/play_vlc_video.py <single.mp4>
+  VLC returned title acid, artist Andy Farnell and album Pure Data sound
+    effects by Andy Farnell for the MP3; title FREE Time-Lapse stock footage:
+    Full Moon CC-BY NatureClip, artist NatureClip: Free Stock Footage and an
+    empty album for the MP4. It returned an empty ArtworkURL for both. That
+    does not establish a visible cover in VLC; attached JPEGs are proved by
+    ffprobe. Playback entered state 3 and advanced to 2,193 ms (MP3) and
+    2,158 ms (MP4); D3D11VA video decoding was reported for the MP4.
+  The player helper and its local VLC binary remain ignored under
+    work/engine/cli/. This was automated playback/metadata inspection, not
+    a human listening or visual assessment.
