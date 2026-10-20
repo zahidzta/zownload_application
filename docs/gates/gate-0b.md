@@ -167,9 +167,18 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Goal: test a real playlist with Max 320/Min 128 kbps output; capture per-entry results and whether separate CLI invocations are viable, without implementing the application queue.
 - Files to touch: `scripts/gate-0b/verify-cli.ps1`, `docs/ytdlp-commands.md`, `docs/gates/evidence/0b/mp3-playlist.txt`, `docs/STATE.md`.
 - Read: `PROJECT.md:370,710,752,805,809-812`.
-- Dependencies/parallelism: 0B-02, 0B-03, 0B-05 and 0B-11; independent of 0B-14/16 after shared script edits are integrated.
+- Dependencies/parallelism: 0B-02, 0B-03, 0B-05, 0B-11 and 0B-15A for the resumed run. Use the locked non-MP3 playlist from 0B-15A; preserve the earlier Archive MP3-source failure as evidence. Independent of 0B-14/16 after shared script edits are integrated.
 - Acceptance: every fixture entry is processed, Max/Min output bitrates are inspected, and produced MP3s play; the per-entry invocation option is documented as tested or untested, not assumed.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-playlist`.
+
+### 0B-15A — Non-MP3 playlist fixture
+
+- Goal: after the 0B-15 stop, confirm all three original Archive entries are 128 kbps MP3 sources, then lock a rights-documented real playlist with at least three non-MP3 sources for a later 0B-15 rerun. The owner approved this separate fixture task on 2026-10-19 and prohibited forced conversion of the original MP3s.
+- Files to touch: `docs/gates/evidence/0b/fixtures.md`, `scripts/gate-0b/verify-fixtures.ps1`, `docs/gates/evidence/0b/mp3-playlist.txt`, `docs/STATE.md`, this gate file.
+- Read: `PROJECT.md:370,388,710,752,805,809-812`.
+- Dependencies/parallelism: the recorded 0B-15 failure. Finish before resuming 0B-15; do not run Max/Min encodes or alter the stopped result in this fixture task.
+- Acceptance: all original entries are independently confirmed as 128 kbps MP3 sources; the replacement has at least three selected original non-MP3 entries with source hashes, codecs and rights recorded. The read-only preflight checks each current entry's metadata fingerprint, selected format and codec lock without downloading media, and rejects MP3. It also verifies at least two distinct video resolutions for the upcoming 0B-16 fixture.
+- Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-fixtures.ps1`.
 
 ### 0B-16 — MP4 Max/Min and height selection
 

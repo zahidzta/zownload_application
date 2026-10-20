@@ -1,5 +1,5 @@
-# Read-only availability check for the 0B-02 real-media fixtures.
-# This checks catalog/oEmbed/playlist-page data, never media bytes or yt-dlp behavior.
+# Read-only availability and format check for the Gate 0B real-media fixtures.
+# HTTP catalog pages and simulated yt-dlp extraction are allowed; no media is downloaded.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -9,6 +9,8 @@ $markdown = Get-Content -LiteralPath $fixturePath -Raw -Encoding UTF8
 $blocks = [regex]::Matches($markdown, '(?s)```json fixture-lock\r?\n(.*?)\r?\n```')
 if ($blocks.Count -ne 1) { throw 'Fixture lock invalid: expected one json fixture-lock block' }
 $lock = $blocks[0].Groups[1].Value | ConvertFrom-Json
+$ytDlp = Join-Path $root 'work\engine\downloads\yt-dlp.exe'
+$quickJs = Join-Path $root 'work\engine\build\quickjs\windows-x64\qjs.exe'
 
 function Assert-Fixture([bool]$condition, [string]$message) {
     if (-not $condition) { throw "Fixture unavailable or lock invalid: $message" }
@@ -55,13 +57,26 @@ function Assert-PublicFile($metadata, [string]$name, [string]$id) {
     Assert-Fixture ([long]$files[0].size -gt 0) "$id file $name has no size"
 }
 
+function Invoke-YtDlpMetadata([string[]]$arguments, [string]$label) {
+    # --skip-download (or --dump-single-json, which simulates) extracts page
+    # metadata only. All arguments below are locked URLs and controlled options.
+    $output = & $ytDlp @arguments 2>$null
+    Assert-Fixture ($LASTEXITCODE -eq 0) "yt-dlp metadata extraction failed for $label"
+    return $output
+}
+
 Assert-Fixture ($lock.schema -eq 1) 'unexpected schema version'
 Assert-Fixture ($lock.checkedOn -match '^\d{4}-\d{2}-\d{2}$') 'missing access date'
 Assert-Fixture ($lock.youtubeShort.url -eq "https://www.youtube.com/watch?v=$($lock.youtubeShort.id)") 'YouTube single URL changed'
 Assert-Fixture ($lock.blenderPlaylist.url -eq "https://www.youtube.com/playlist?list=$($lock.blenderPlaylist.id)") 'YouTube playlist URL changed'
 Assert-Fixture ($lock.blenderPlaylist.mixedUrl -eq "https://www.youtube.com/watch?v=$($lock.blenderPlaylist.videoIds[0])&list=$($lock.blenderPlaylist.id)") 'mixed URL changed'
 Assert-Fixture ($lock.blenderPlaylist.videoIds.Count -eq 2) 'expected two locked Blender entries'
+Assert-Fixture ($lock.blenderPlaylist.minDistinctVideoHeights -eq 2) 'Blender resolution minimum changed'
 Assert-Fixture ($lock.invalidInput -eq 'not-a-url') 'invalid-input fixture changed'
+Assert-Fixture (Test-Path -LiteralPath $ytDlp -PathType Leaf) 'pinned yt-dlp is missing'
+Assert-Fixture (Test-Path -LiteralPath $quickJs -PathType Leaf) 'pinned QuickJS is missing'
+Assert-Fixture ((Get-FileHash -LiteralPath $ytDlp -Algorithm SHA256).Hash.ToLowerInvariant() -eq '66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a') 'yt-dlp hash changed'
+Assert-Fixture ((Get-FileHash -LiteralPath $quickJs -Algorithm SHA256).Hash.ToLowerInvariant() -eq 'bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83') 'QuickJS hash changed'
 
 $videoUrl = [uri]::EscapeDataString($lock.youtubeShort.url)
 $oembed = Read-Json "https://www.youtube.com/oembed?url=$videoUrl&format=json"
@@ -97,6 +112,12 @@ foreach ($id in $lock.blenderPlaylist.videoIds) {
     Assert-Fixture ($playlistPage -match $member) "Blender playlist page no longer lists $id as a member"
     $videoOembed = Read-Json "https://www.youtube.com/oembed?url=$([uri]::EscapeDataString("https://www.youtube.com/watch?v=$id"))&format=json"
     Assert-Fixture (-not [string]::IsNullOrWhiteSpace($videoOembed.title)) "Blender video $id is unavailable"
+    $videoJsonText = Invoke-YtDlpMetadata @('--ignore-config', '--quiet', '--no-warnings', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs", '--no-playlist', '--skip-download', '--dump-single-json', '--', "https://www.youtube.com/watch?v=$id") "Blender video $id"
+    $videoJson = ($videoJsonText | Out-String) | ConvertFrom-Json
+    Assert-Fixture ($videoJson.id -eq $id) "Blender video $id metadata identity changed"
+    $heights = @($videoJson.formats | Where-Object { $_.vcodec -ne 'none' -and [int]$_.height -gt 0 } | ForEach-Object { [int]$_.height } | Sort-Object -Unique)
+    Assert-Fixture ($heights.Count -ge $lock.blenderPlaylist.minDistinctVideoHeights) "Blender video $id offers fewer than two distinct heights"
+    Write-Output "OK Blender video $id`: available heights $($heights -join ',')"
 }
 Write-Output "OK YouTube playlist and mixed URL: $($lock.blenderPlaylist.id), 2 locked entries"
 
@@ -116,13 +137,53 @@ for ($i = 0; $i -lt $lock.archiveAudio.entries.Count; $i++) {
 }
 Write-Output 'OK Archive audio: 3 short, public, bounded playlist entries with PNG artwork'
 
+$pcmLock = $lock.archivePcmPlaylist
+$pcm = Read-Archive $pcmLock
+Assert-License $pcm $pcmLock.license $pcmLock.id
+Assert-Fixture ($pcm.metadata.title -eq $pcmLock.title) 'PCM playlist title changed'
+Assert-Fixture ($pcmLock.entries.Count -eq 3) 'PCM playlist must lock exactly three entries'
+$pcmEntries = @(Read-ArchivePlaylist $pcmLock.id)
+$selectedIndices = @($pcmLock.entries | ForEach-Object { [int]$_.playlistIndex })
+Assert-Fixture (@($selectedIndices | Select-Object -Unique).Count -eq 3) 'PCM playlist positions are duplicated'
+foreach ($entry in $pcmLock.entries) {
+    $index = [int]$entry.playlistIndex
+    Assert-Fixture ($index -ge 1 -and $index -le $pcmEntries.Count) "PCM entry $($entry.name) is outside the embed playlist"
+    Assert-Fixture ($pcmEntries[$index - 1].orig -eq $entry.name) "PCM entry $($entry.name) moved from position $index"
+    Assert-Fixture ($entry.name -match '\.wav$' -and $entry.sourceCodec -eq 'pcm_s16le' -and $entry.format -eq 'WAVE') "PCM entry $($entry.name) is not locked as non-MP3 PCM/WAV"
+    $files = @($pcm.files | Where-Object { $_.name -eq $entry.name })
+    Assert-Fixture ($files.Count -eq 1 -and -not $files[0].private) "PCM entry $($entry.name) is missing or private"
+    $file = $files[0]
+    Assert-Fixture ($file.source -eq 'original' -and $file.format -eq $entry.format) "PCM entry $($entry.name) source format changed or became MP3"
+    Assert-Fixture ([long]$file.size -eq [long]$entry.size -and $file.md5 -eq $entry.md5 -and $file.sha1 -eq $entry.sha1) "PCM entry $($entry.name) fingerprint changed; inspected codec cannot be trusted"
+    Assert-Fixture ([math]::Abs([double]$file.length - [double]$entry.duration) -lt 0.1) "PCM entry $($entry.name) duration changed"
+    Write-Output "OK PCM entry $index $($entry.name): source codec $($entry.sourceCodec), $($entry.duration)s; Archive size/MD5/SHA-1 match inspected bytes"
+}
+$selected = @(Invoke-YtDlpMetadata @('--ignore-config', '--quiet', '--no-warnings', '--playlist-items', ($selectedIndices -join ','), '-f', 'ba/b', '--skip-download', '--print', '%(playlist_index)s|%(id)s|%(ext)s|%(url)s', '--', $pcmLock.url) 'PCM playlist selection')
+Assert-Fixture ($selected.Count -eq 3) 'yt-dlp did not select all three PCM entries'
+for ($i = 0; $i -lt 3; $i++) {
+    $entry = $pcmLock.entries[$i]
+    $parts = $selected[$i] -split '\|', 4
+    $expectedUrl = "https://archive.org/download/$($pcmLock.id)/$($entry.name)"
+    Assert-Fixture ($parts.Count -eq 4 -and [int]$parts[0] -eq [int]$entry.playlistIndex -and $parts[1] -eq "$($pcmLock.id)/$($entry.name)" -and $parts[2] -eq 'wav' -and $parts[3] -eq $expectedUrl) "yt-dlp selected an unexpected or MP3 source for $($entry.name)"
+}
+Write-Output 'OK PCM playlist: all three selected sources are the locked WAV originals; no MP3 selected'
+
 $video = Read-Archive $lock.archiveVideo
 Assert-License $video $lock.archiveVideo.license $lock.archiveVideo.id
 Assert-Fixture ($video.metadata.creator -eq $lock.archiveVideo.creator) 'Archive video creator changed'
 foreach ($name in $lock.archiveVideo.files) { Assert-PublicFile $video $name $lock.archiveVideo.id }
+$videoResolutions = @()
+Assert-Fixture ($lock.archiveVideo.resolutions.Count -ge 2) 'Archive video lacks two locked resolutions'
+foreach ($resolution in $lock.archiveVideo.resolutions) {
+    Assert-Fixture ($lock.archiveVideo.files -contains $resolution.name) "Archive video resolution file $($resolution.name) is not locked"
+    $variant = @($video.files | Where-Object { $_.name -eq $resolution.name })
+    Assert-Fixture ($variant.Count -eq 1 -and [int]$variant[0].width -eq [int]$resolution.width -and [int]$variant[0].height -eq [int]$resolution.height) "Archive video resolution changed for $($resolution.name)"
+    $videoResolutions += "$($resolution.width)x$($resolution.height)"
+}
+Assert-Fixture (@($videoResolutions | Select-Object -Unique).Count -ge 2) 'Archive video offers fewer than two distinct resolutions'
 $videoEntries = @(Read-ArchivePlaylist $lock.archiveVideo.id)
 Assert-Fixture ($videoEntries.Count -eq 1 -and [double]$videoEntries[0].duration -ge 110 -and $videoEntries[0].image -match '\.jpg') 'Archive video duration or thumbnail changed'
-Write-Output 'OK Archive video: 120-second item, Ogg/MP4 choices and JPEG artwork'
+Write-Output "OK Archive video: 120-second item, two resolutions $($videoResolutions -join ', '), Ogg/MP4 choices and JPEG artwork"
 
 $short = Read-Archive $lock.archiveShortVideo
 Assert-License $short $lock.archiveShortVideo.license $lock.archiveShortVideo.id
@@ -137,4 +198,4 @@ $restricted = Read-Archive $lock.restrictedArchive
 $private = @($restricted.files | Where-Object { $_.name -eq $lock.restrictedArchive.privateFile })
 Assert-Fixture ($private.Count -eq 1 -and $private[0].private) 'restricted Archive file is no longer marked private'
 Write-Output 'OK errors: absent Archive item, private Archive file and malformed local URL'
-Write-Output 'Fixture preflight passed; no media or engine command was run.'
+Write-Output 'Fixture preflight passed; yt-dlp simulated format selection, and no media was downloaded.'
