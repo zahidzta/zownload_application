@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac')]
     [string]$Case
 )
 
@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4')) {
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac')) {
     Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
@@ -115,7 +115,7 @@ function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [do
     Write-Output "$name`: video=$($video[0].codec_name) $($video[0].width)x$($video[0].height) audio=$($audio[0].codec_name) duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
 }
 
-if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist or mp4' }
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4 or aac' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -128,9 +128,72 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4')) {
+if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'aac') {
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
+    $entry = @($fixtures.natureclipVideoPlaylist.entries | Where-Object { $_.playlistIndex -eq 7 })
+    Assert-Shape ($entry.Count -eq 1 -and $entry[0].id -eq 'YC0kTqKbeFs') 'AAC fixture identity changed'
+    $id = $entry[0].id
+    $url = "https://www.youtube.com/watch?v=$id"
+    $selector = 'bv*+ba/b'
+    $selection = Invoke-Engine 'source-selection' ($common + @('--no-playlist', '--skip-download',
+        '-f', $selector, '--dump-single-json', '--', $url)) 180
+    Assert-Runtime $selection 'source-selection'
+    $info = $selection.Stdout | ConvertFrom-Json
+    $formats = @($info.requested_formats)
+    Assert-Shape ($info.id -eq $id -and $formats.Count -eq 2) 'AAC source did not select separate video and audio'
+    $videoFormat = @($formats | Where-Object { $_.vcodec -ne 'none' -and $_.acodec -eq 'none' })
+    $audioFormat = @($formats | Where-Object { $_.acodec -ne 'none' -and $_.vcodec -eq 'none' })
+    Assert-Shape ($videoFormat.Count -eq 1 -and $audioFormat.Count -eq 1) 'AAC source stream layout changed'
+    Assert-Shape ($videoFormat[0].vcodec -match '^avc1\.' -and $audioFormat[0].acodec -eq 'opus') 'AAC source no longer has H.264 video and non-AAC Opus audio'
+    Assert-Shape ([int]$videoFormat[0].width -gt 0 -and [int]$videoFormat[0].height -gt 0 -and [double]$info.duration -gt 0) 'AAC source dimensions or duration are missing'
+    Write-Output "source selection: id=$id video=$($videoFormat[0].format_id)/$($videoFormat[0].vcodec) $($videoFormat[0].width)x$($videoFormat[0].height) audio=$($audioFormat[0].format_id)/$($audioFormat[0].acodec) duration=$($info.duration)s"
+
+    $outputDir = Join-Path $runDir 'converted'
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+    $download = Invoke-Engine 'aac-download' ($common + @('--no-playlist', '-f', $selector,
+        '--merge-output-format', 'mp4', '--postprocessor-args', 'Merger+ffmpeg_o:-c:a aac',
+        '--keep-video', '--ffmpeg-location', $ffmpegDir,
+        '-o', (Join-Path $outputDir '%(id)s.%(ext)s'), '--', $url)) 300
+    Assert-Runtime $download 'aac-download'
+    Assert-Shape ($download.Stdout.Contains("[info] ${id}: Downloading 1 format(s): $($videoFormat[0].format_id)+$($audioFormat[0].format_id)")) 'AAC download selected different formats'
+    $ffmpegLines = @($download.Stderr -split '\r?\n' | Where-Object { $_ -match '^\[debug\] ffmpeg command line:' })
+    Assert-Shape ($ffmpegLines.Count -eq 1 -and $ffmpegLines[0] -match '-c copy' -and $ffmpegLines[0] -match '-c:a aac' -and $ffmpegLines[0] -match '-i file:.*-i file:' -and $ffmpegLines[0] -notmatch '-i https?:') 'AAC merge did not use local inputs and audio-only encoding'
+
+    $videoPath = Join-Path $outputDir "$id.f$($videoFormat[0].format_id).$($videoFormat[0].ext)"
+    $audioPath = Join-Path $outputDir "$id.f$($audioFormat[0].format_id).$($audioFormat[0].ext)"
+    $outputPath = Join-Path $outputDir "$id.mp4"
+    foreach ($item in @(@{ Name = 'source-video'; Path = $videoPath },
+            @{ Name = 'source-audio'; Path = $audioPath },
+            @{ Name = 'aac-output'; Path = $outputPath })) {
+        Assert-Shape (Test-Path -LiteralPath $item.Path -PathType Leaf) "$($item.Name) file is missing"
+        $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,width,height,bit_rate:format=format_name,duration,size' -of json -- $item.Path | Out-String)
+        Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for $($item.Name)"
+        [IO.File]::WriteAllText((Join-Path $runDir "$($item.Name).ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+        $probe = $probeText | ConvertFrom-Json
+        $video = @($probe.streams | Where-Object { $_.codec_type -eq 'video' })
+        $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+        if ($item.Name -eq 'source-video') {
+            Assert-Shape ($video.Count -eq 1 -and $audio.Count -eq 0 -and $video[0].codec_name -eq 'h264') 'source video is not H.264-only'
+            Assert-Shape ($video[0].width -eq $videoFormat[0].width -and $video[0].height -eq $videoFormat[0].height) 'source video dimensions changed'
+        } elseif ($item.Name -eq 'source-audio') {
+            Assert-Shape ($video.Count -eq 0 -and $audio.Count -eq 1 -and $audio[0].codec_name -eq 'opus') 'source audio is not Opus-only'
+        } else {
+            Assert-Shape ($probe.format.format_name -match '(^|,)mp4(,|$)' -and $video.Count -eq 1 -and $audio.Count -eq 1 -and $probe.streams.Count -eq 2) 'AAC output is not a two-stream MP4'
+            Assert-Shape ($video[0].codec_name -eq 'h264' -and $audio[0].codec_name -eq 'aac') 'AAC output codecs are wrong'
+            Assert-Shape ($video[0].width -eq $videoFormat[0].width -and $video[0].height -eq $videoFormat[0].height) 'AAC output video dimensions changed'
+            Assert-Shape ([math]::Abs([double]$probe.format.duration - [double]$info.duration) -lt 2) 'AAC output duration changed'
+        }
+        $hash = (Get-FileHash -LiteralPath $item.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "$($item.Name): video=$(($video | ForEach-Object { $_.codec_name }) -join ',') audio=$(($audio | ForEach-Object { $_.codec_name }) -join ',') duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
+    }
+    Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -File).Count -eq 3) 'AAC conversion produced unexpected media files'
+    Write-Output "Full stdout/stderr, ffprobe JSON and media: $runDir (ignored)"
+    return
 }
 
 if ($Case -eq 'mp4') {
