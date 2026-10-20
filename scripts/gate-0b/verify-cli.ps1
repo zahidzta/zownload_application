@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')]
     [string]$Case
 )
 
@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac')) {
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')) {
     Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
@@ -115,7 +115,7 @@ function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [do
     Write-Output "$name`: video=$($video[0].codec_name) $($video[0].width)x$($video[0].height) audio=$($audio[0].codec_name) duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
 }
 
-if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4 or aac' }
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4, aac or metadata' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -128,9 +128,105 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac')) {
+if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'metadata') {
+    $ffmpeg = Join-Path $ffmpegDir 'ffmpeg.exe'
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
+    $albumRule = '%(playlist_title|)s:%(meta_album)s'
+    $artistRule = '%(artist,creator,uploader|)s:%(meta_artist)s'
+
+    # Archive's playlist exposes a PNG per track, but its yt-dlp entry has no
+    # thumbnail field. Verify the field is absent before using the locked image.
+    $archive = $fixtures.archiveAudio
+    $archiveInfoResult = Invoke-Engine 'archive-info' ($common + @('--playlist-items', '2', '--skip-download',
+        '--dump-json', '--', $archive.url)) 180
+    Assert-Runtime $archiveInfoResult 'archive-info'
+    $archiveInfo = $archiveInfoResult.Stdout | ConvertFrom-Json
+    Assert-Shape ($archiveInfo.id -eq "$($archive.id)/$($archive.entries[0])" -and
+        $archiveInfo.creator -eq $archive.creator -and -not $archiveInfo.artist -and
+        $archiveInfo.playlist_title -eq 'Pure Data sound effects by Andy Farnell' -and
+        -not $archiveInfo.thumbnail) 'Archive metadata/thumbnail fixture changed'
+    $archiveDir = Join-Path $runDir 'archive'
+    New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
+    $archiveDownload = Invoke-Engine 'archive-download' ($common + @('--playlist-items', '2', '-f', 'ba/b',
+        '-x', '--audio-format', 'mp3', '--embed-metadata', '--parse-metadata', $artistRule,
+        '--parse-metadata', $albumRule, '--ffmpeg-location', $ffmpegDir,
+        '-o', (Join-Path $archiveDir 'source.%(ext)s'), '--', $archive.url)) 180
+    Assert-Runtime $archiveDownload 'archive-download'
+    Assert-Shape ($archiveDownload.Stderr -match 'Invoking http downloader on "https://archive.org/download/') 'Archive media was not fetched by yt-dlp HTTP'
+    Assert-Shape ($archiveDownload.Stderr -match 'ffmpeg command line:.*-i file:' -and
+        $archiveDownload.Stderr -notmatch 'ffmpeg command line:.*-i https?:') 'Archive metadata postprocessor used a network input'
+    $archiveSource = Join-Path $archiveDir 'source.mp3'
+    Assert-Shape (Test-Path -LiteralPath $archiveSource -PathType Leaf) 'Archive MP3 is missing'
+
+    $pngUrl = "https://archive.org/download/$($archive.id)/$($archive.entries[0] -replace '\.mp3$', '.png')"
+    $pngPath = Join-Path $archiveDir 'cover.png'
+    Invoke-WebRequest -Uri $pngUrl -OutFile $pngPath -UseBasicParsing -TimeoutSec 90 | Out-Null
+    $pngProbe = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type' -of json -- $pngPath | Out-String) | ConvertFrom-Json
+    Assert-Shape ($LASTEXITCODE -eq 0 -and @($pngProbe.streams | Where-Object { $_.codec_name -eq 'png' }).Count -eq 1) 'Archive artwork is not PNG'
+    $archiveOutput = Join-Path $archiveDir 'archive-cover.mp3'
+    $coverLog = Join-Path $runDir 'archive-cover.ffmpeg.txt'
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        # PowerShell 5.1 promotes a native process's informational stderr to
+        # an exception when ErrorActionPreference is Stop.
+        $ErrorActionPreference = 'Continue'
+        & $ffmpeg -hide_banner -loglevel info -y -i $archiveSource -i $pngPath -map '0:a:0' -map '1:v:0' -c:a copy -c:v mjpeg -q:v 2 -id3v2_version 3 -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)' $archiveOutput 2>&1 | Out-File -LiteralPath $coverLog -Encoding utf8
+        $coverStatus = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousErrorAction }
+    Assert-Shape ($coverStatus -eq 0) 'FFmpeg PNG-to-JPEG cover embedding failed'
+
+    $clip = @($fixtures.natureclipVideoPlaylist.entries | Where-Object { $_.playlistIndex -eq 7 })
+    Assert-Shape ($clip.Count -eq 1 -and $clip[0].id -eq 'YC0kTqKbeFs') 'NatureClip metadata fixture changed'
+    $videoUrl = "https://www.youtube.com/watch?v=$($clip[0].id)"
+    $videoInfoResult = Invoke-Engine 'video-info' ($common + @('--no-playlist', '--skip-download',
+        '--dump-single-json', '--', $videoUrl)) 180
+    Assert-Runtime $videoInfoResult 'video-info'
+    $videoInfo = $videoInfoResult.Stdout | ConvertFrom-Json
+    Assert-Shape ($videoInfo.id -eq $clip[0].id -and $videoInfo.title -eq $clip[0].title -and
+        -not $videoInfo.artist -and -not $videoInfo.creator -and
+        $videoInfo.uploader -eq $fixtures.natureclipVideoPlaylist.uploader -and
+        -not $videoInfo.playlist_title -and $videoInfo.thumbnail) 'NatureClip metadata fixture changed'
+    $videoDir = Join-Path $runDir 'video'
+    New-Item -ItemType Directory -Path $videoDir -Force | Out-Null
+    $videoDownload = Invoke-Engine 'video-download' ($common + @('--no-playlist', '-f', 'bv*+ba/b',
+        '--merge-output-format', 'mp4', '--postprocessor-args', 'Merger+ffmpeg_o:-c:a aac',
+        '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg',
+        '--parse-metadata', $artistRule, '--parse-metadata', $albumRule,
+        '--ffmpeg-location', $ffmpegDir, '-o', (Join-Path $videoDir 'single.%(ext)s'), '--', $videoUrl)) 300
+    Assert-Runtime $videoDownload 'video-download'
+    Assert-Shape (@([regex]::Matches($videoDownload.Stderr, 'Invoking http downloader on "https://')).Count -eq 2) 'NatureClip streams were not fetched by yt-dlp HTTP'
+    $videoFfmpegLines = @($videoDownload.Stderr -split '\r?\n' | Where-Object { $_ -match '^\[debug\] ffmpeg command line:.*[/\\]ffmpeg(?:\.exe)? ' })
+    Assert-Shape ($videoFfmpegLines.Count -ge 2 -and
+        @($videoFfmpegLines | Where-Object { $_ -notmatch '-i file:' -or $_ -match '-i https?:' }).Count -eq 0) 'NatureClip FFmpeg used a network input'
+    $videoOutput = Join-Path $videoDir 'single.mp4'
+    Assert-Shape (Test-Path -LiteralPath $videoOutput -PathType Leaf) 'NatureClip MP4 is missing'
+
+    foreach ($file in @(@{ Name = 'archive'; Path = $archiveOutput; Title = $archiveInfo.title; Artist = $archive.creator; Album = $archiveInfo.playlist_title; Audio = 'mp3' },
+            @{ Name = 'video'; Path = $videoOutput; Title = $videoInfo.title; Artist = $videoInfo.uploader; Album = ''; Audio = 'aac' })) {
+        $probeText = (& $ffprobe -v error -show_streams -show_format -of json -- $file.Path | Out-String)
+        Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for $($file.Name)"
+        [IO.File]::WriteAllText((Join-Path $runDir "$($file.Name).ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+        $probe = $probeText | ConvertFrom-Json
+        $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+        $covers = @($probe.streams | Where-Object { $_.disposition.attached_pic -eq 1 })
+        Assert-Shape ($audio.Count -eq 1 -and $audio[0].codec_name -eq $file.Audio) "$($file.Name) audio changed"
+        Assert-Shape ($covers.Count -eq 1 -and $covers[0].codec_name -eq 'mjpeg') "$($file.Name) has no embedded JPEG cover"
+        Assert-Shape ($probe.format.tags.title -eq $file.Title -and $probe.format.tags.artist -eq $file.Artist) "$($file.Name) title/artist mapping failed"
+        # MP4 omits an empty album tag; that is the intended single-item value.
+        $actualAlbum = if ($probe.format.tags.album) { [string]$probe.format.tags.album } else { '' }
+        Assert-Shape ($actualAlbum -eq $file.Album) "$($file.Name) album mapping failed"
+        $hash = (Get-FileHash -LiteralPath $file.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "$($file.Name): title=$($probe.format.tags.title) artist=$($probe.format.tags.artist) album=$($probe.format.tags.album) cover=$($covers[0].codec_name) bytes=$($probe.format.size) sha256=$hash"
+    }
+    Write-Output "Archive PNG sha256=$((Get-FileHash -LiteralPath $pngPath -Algorithm SHA256).Hash.ToLowerInvariant())"
+    Write-Output "Full stdout/stderr, ffprobe JSON and media: $runDir (ignored)"
+    return
 }
 
 if ($Case -eq 'aac') {

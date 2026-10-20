@@ -274,6 +274,62 @@ defines the `Merger+ffmpeg_o` placement; the [FFmpeg stream-codec reference](htt
 defines `-c:a` as an audio-only codec choice. The passing pinned CLI trace
 above is the version-specific proof for this command.
 
+## 0B-18 — Metadata and JPEG covers
+
+The verifier runs the pinned executables with fresh ignored output paths and
+checks source fields before downloading. The Archive playlist's position 2
+reports `title=acid`, `creator=Andy Farnell`, no `artist`, and playlist title
+`Pure Data sound effects by Andy Farnell`. Its per-track PNG is present in the
+Archive catalog and embed playlist, but yt-dlp does **not** expose a
+`thumbnail` field for this entry. The command therefore downloads the MP3 with
+mapped metadata, then fetches that locked track's PNG and uses local FFmpeg to
+convert it to an embedded JPEG cover. This is an explicit source-specific
+fallback; `--embed-thumbnail` alone is not a passing Archive command.
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Path
+$common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$qjs")
+$artistRule = '%(artist,creator,uploader|)s:%(meta_artist)s'
+$albumRule = '%(playlist_title|)s:%(meta_album)s'
+$base = Join-Path (Get-Location) 'work/engine/cli/metadata/manual'
+$archiveOut = Join-Path $base 'archive'
+$videoOut = Join-Path $base 'video'
+New-Item -ItemType Directory -Path $archiveOut,$videoOut -Force | Out-Null
+& $yt @common --playlist-items 2 --skip-download --dump-json -- 'https://archive.org/details/PureDataSoundEffects'
+& $yt @common --playlist-items 2 -f 'ba/b' -x --audio-format mp3 --embed-metadata --parse-metadata $artistRule --parse-metadata $albumRule --ffmpeg-location $ff -o "$archiveOut/source.%(ext)s" -- 'https://archive.org/details/PureDataSoundEffects'
+Invoke-WebRequest -Uri 'https://archive.org/download/PureDataSoundEffects/effect-acid.png' -OutFile "$archiveOut/cover.png" -UseBasicParsing -TimeoutSec 90
+& (Join-Path $ff 'ffmpeg.exe') -hide_banner -loglevel info -y -i "$archiveOut/source.mp3" -i "$archiveOut/cover.png" -map '0:a:0' -map '1:v:0' -c:a copy -c:v mjpeg -q:v 2 -id3v2_version 3 -metadata:s:v title='Album cover' -metadata:s:v comment='Cover (front)' "$archiveOut/archive-cover.mp3"
+```
+
+The short NatureClip single reports `title=FREE Time-Lapse stock footage: Full
+Moon CC-BY NatureClip`, no artist/creator, uploader `NatureClip: Free Stock
+Footage`, no playlist title, and YouTube thumbnails. The selected video/audio
+are the same H.264/Opus pair as 0B-17, so the AAC merge override is required.
+yt-dlp tried thumbnail 44, found it unavailable, and embedded available
+thumbnail 43 as JPEG. `--convert-thumbnails jpg` was accepted but did not
+transcode that already-JPEG image; the Archive PNG path above proves conversion.
+
+```powershell
+& $yt @common --no-playlist --skip-download --dump-single-json -- 'https://www.youtube.com/watch?v=YC0kTqKbeFs'
+& $yt @common --no-playlist -f 'bv*+ba/b' --merge-output-format mp4 --postprocessor-args 'Merger+ffmpeg_o:-c:a aac' --embed-metadata --embed-thumbnail --convert-thumbnails jpg --parse-metadata $artistRule --parse-metadata $albumRule --ffmpeg-location $ff -o "$videoOut/single.%(ext)s" -- 'https://www.youtube.com/watch?v=YC0kTqKbeFs'
+```
+
+The exact verifier is `powershell -NoProfile -File
+scripts/gate-0b/verify-cli.ps1 -Case metadata`. Pinned ffprobe found the mapped
+tags and one `mjpeg` attached-picture stream in each output; the MP3 cover is
+800×200 and the MP4 cover is 1280×720. VLC 3.0.24/libVLC reported the title,
+artist and album fields and played both files beyond two seconds. Its
+`ArtworkURL` metadata field was empty for both, so the probe does not claim
+that VLC displayed the image visually. Exact hashes, durations and player
+output are in [`metadata.txt`](gates/evidence/0b/metadata.txt).
+
+The [yt-dlp metadata and thumbnail options](https://github.com/yt-dlp/yt-dlp/blob/master/README.md#post-processing-options)
+and [FFmpeg MP3 attached-picture documentation](https://ffmpeg.org/ffmpeg-all.html)
+describe the CLI behavior; the pinned runs above establish the outcome for
+these fixtures.
+
 ## Gate 0B transport review for the command matrix
 
 The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
@@ -297,4 +353,5 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-16 MP4 playlist rerun | yt-dlp HTTP fetched all six Max streams; its HLS native downloader fetched three Min video streams, and HTTP fetched three Min audio streams. FFmpeg merged local files only, with twelve `file:` inputs. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-16 bounded-height single | yt-dlp HTTP fetched the selected MP4; no FFmpeg merge was needed. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-17 AAC | yt-dlp HTTP fetched H.264 and Opus components; FFmpeg read two local `file:` inputs, copied video and encoded AAC audio. | No FFmpeg HTTPS dependency in passing probe |
-| 0B-18 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
+| 0B-18 metadata/cover | yt-dlp HTTP fetched Archive MP3 and NatureClip media/thumbnail; PowerShell fetched Archive PNG. FFmpeg read local MP3, PNG and MP4 components; MP4 image embedding used mutagen. | No FFmpeg HTTPS dependency in passing probe |
+| 0B-19 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
