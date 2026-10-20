@@ -243,6 +243,22 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Acceptance: all required capabilities, target QuickJS builds, SHA-256 values, licensing checks and manual player results have linked evidence; the command matrix contains exact verified commands, marks any Appendix B proposal corrected by testing, and has no unsupported success claim. For every required test, the matrix review records which component fetches media and verifies that FFmpeg never has to fetch an HTTPS input (including HLS/DASH paths); local FFmpeg post-processing is allowed. Any required test that depends on FFmpeg HTTPS input fails review until the owner resolves the licensing/build question. A failed requirement triggers the stop rule.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-gate.ps1`.
 
+## 0B-21 checkpoint evidence for owner review
+
+The [checkpoint record](evidence/0b/checkpoint.md) links the frozen
+[command matrix](../ytdlp-commands.md), source and SHA-256 attestation, all
+five QuickJS target builds, LGPL FFmpeg/license audit, each required CLI probe,
+output inspections and automated VLC playback. It records the already-MP3
+quality behavior, unmeasured YouTube JS challenge speed, failed FFmpeg HTTPS
+diagnostic and absence of a human listening/viewing check without turning
+those observations into passing claims. The tested HLS paths used yt-dlp's
+native downloader and FFmpeg only read local files.
+
+Run `powershell -NoProfile -File scripts/gate-0b/verify-gate.ps1` to verify the
+local artifacts, locks, links and checkpoint coverage. This verification does
+not accept the gate. The owner reviews the recorded limits and playback before
+an explicit Gate 0B acceptance or rejection; Gate 0C remains closed.
+
 ## Time risks and planned splits
 
 - Windows QuickJS toolchain discovery plus compilation could exceed 30 minutes; it is already split into 0B-04 and 0B-05. Unix/Android target builds are one target per session (0B-06 through 0B-09).
