@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Read-only availability and format check for the Gate 0B real-media fixtures.
 # HTTP catalog pages and simulated yt-dlp extraction are allowed; no media is downloaded.
 $ErrorActionPreference = 'Stop'

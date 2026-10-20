@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Checks the locked bytes and detached release signatures without fetching data.
 # -FetchMissing is used only by fetch-sources.ps1; the default is offline.
 param([switch]$FetchMissing)

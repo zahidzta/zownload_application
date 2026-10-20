@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Download only missing files, including the locked zlib source, then verify
 # every archive against its attested bytes and the available signatures.
 $ErrorActionPreference = 'Stop'

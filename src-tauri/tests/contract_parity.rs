@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 zahidzta
 use serde_json::{json, Value};
 use zownload_lib::contract::{DownloadRequest, Format, Progress, Quality};
 

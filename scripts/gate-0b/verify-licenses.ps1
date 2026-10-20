@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Offline Gate 0B redistribution audit. The locked inputs and local Windows
 # builds are checked again; no engine binary or source is added to Git.
 $ErrorActionPreference = 'Stop'

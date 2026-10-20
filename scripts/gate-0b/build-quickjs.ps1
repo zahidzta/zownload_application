@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Builds the locked upstream QuickJS source with the pinned Windows toolchain.
 # -CheckEnvironment checks inputs and tools only; compilation belongs to 0B-05.
 param(

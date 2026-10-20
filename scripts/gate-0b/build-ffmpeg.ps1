@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Configure, build and inspect the locked LGPL FFmpeg recipe on Windows x64.
 param([switch]$CheckConfiguration, [switch]$Verify)
 
