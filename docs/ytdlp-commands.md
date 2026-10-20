@@ -98,12 +98,14 @@ That finding is preserved in the same evidence file. The Commons result proves
 the presets for a non-MP3 source only; the Phase 1/2 UI behavior for an
 already-MP3 source remains an open owner decision.
 
-## 0B-15 — MP3 playlist Max/Min (stopped)
+## 0B-15 — MP3 playlist Max/Min
 
-The verifier first confirms the locked Archive playlist's 39 flat entries and
-the three bounded IDs at positions 2–4, then runs one playlist CLI invocation
-for Max and one for Min. The tested media command, repeated for B=320 and
-B=128, is:
+The first probe used the Archive `PureDataSoundEffects` playlist, whose three
+selected originals were already 128 kbps MP3s. The exact earlier command and
+failure are preserved below. The resumed probe uses the locked CC0
+`vvalkabout` playlist and its non-MP3 WAV originals at positions 11, 12 and
+18. It runs one playlist CLI invocation for Max and one for Min. The resumed
+media command, repeated for B=320 and B=128, is:
 
 ```powershell
 $yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
@@ -112,9 +114,26 @@ $ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Pa
 foreach ($B in @(320, 128)) {
     $out = Join-Path (Get-Location) "work/engine/cli/mp3-playlist/manual/$B"
     New-Item -ItemType Directory -Path $out -Force | Out-Null
-    & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '2:4' -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --ffmpeg-location $ff -o "$out/%(playlist_index)s.%(ext)s" -- 'https://archive.org/details/PureDataSoundEffects'
+    & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '11,12,18' -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --ffmpeg-location $ff -o "$out/%(playlist_index)s.%(ext)s" -- 'https://archive.org/details/vvalkabout'
 }
 ```
+
+Three separate Max CLI invocations also succeeded, one per locked direct
+original URL. The verifier uses this command shape for each entry:
+
+```powershell
+& $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --no-playlist -f 'ba/b' -x --audio-format mp3 --audio-quality 320K --ffmpeg-location $ff -o "$out/11.%(ext)s" -- 'https://archive.org/download/vvalkabout/glitch1.wav'
+```
+
+The other two use `12`/`glitch2.wav` and `18`/`hunter.wav`. Pinned ffprobe
+measured one audio-only MP3 stream in every output: 320000 bps for all three
+Max outputs and three per-entry outputs, and 128000 bps for all three Min
+outputs. The per-entry Max files matched their playlist Max counterparts by
+SHA-256. VLC 3.0.24/libVLC advanced through all nine files beyond two seconds.
+The exact commands, durations, hashes and player positions are in
+[`mp3-playlist.txt`](gates/evidence/0b/mp3-playlist.txt). This proves separate
+CLI invocations work for these direct Archive originals; it does not implement
+or test the application queue.
 
 The reproducible verifier command is:
 
@@ -127,7 +146,9 @@ entries. yt-dlp skipped conversion for all six downloaded MP3s. Pinned ffprobe
 reported 128000 bps on every file: Min met 128 kbps; Max missed 320 kbps for
 all three. For each entry the Max and Min hashes were identical. VLC 3.0.24
 opened and advanced all six files beyond two seconds. The verifier exited 1
-on the Max mismatch, so 0B-15 is not accepted. Per-entry CLI invocations remain
-untested. See [`mp3-playlist.txt`](gates/evidence/0b/mp3-playlist.txt) for the
-exact input lock, hashes, durations, logs and playback result. Gate 0B stops
-pending an owner decision about a separate non-MP3 playlist fixture task.
+on the Max mismatch, so that original probe stopped. Per-entry CLI invocations
+were not tested on those already-MP3 sources. See
+[`mp3-playlist.txt`](gates/evidence/0b/mp3-playlist.txt) for the original
+input lock, hashes, durations, logs and playback result. The owner approved
+the separate non-MP3 fixture task 0B-15A, and the resumed 0B-15 probe above
+passed on that fixture.
