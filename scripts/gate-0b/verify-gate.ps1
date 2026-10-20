@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Offline Gate 0B checkpoint review. Earlier case verifiers retain the full
 # network/media probes; this command checks their committed evidence and the
 # pinned local artifacts without redownloading media.

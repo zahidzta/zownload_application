@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
     [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress', 'errors')]

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 zahidzta
 // Keep the shared contract in the Rust build before commands are implemented.
 pub mod contract;
 

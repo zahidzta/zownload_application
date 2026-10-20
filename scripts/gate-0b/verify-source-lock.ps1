@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
 # Checks the offline structure of the 0B-01 research lock. Source-page review
 # and downloaded-byte verification are separate manual/0B-03 steps.
 $ErrorActionPreference = 'Stop'
