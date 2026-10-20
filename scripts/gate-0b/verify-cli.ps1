@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress', 'errors')]
     [string]$Case
 )
 
@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')) {
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress', 'errors')) {
     Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
@@ -102,6 +102,53 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
     finally { $process.Dispose() }
 }
 
+function Invoke-StartupProbe([string]$name, [string]$fileName, [string[]]$arguments, [string]$workingDirectory = '', [int]$timeoutSeconds = 10) {
+    $start = New-EngineStartInfo $name $arguments
+    $start.FileName = $fileName
+    if ($workingDirectory) { $start.WorkingDirectory = $workingDirectory }
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $start
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        try {
+            if (-not $process.Start()) { throw "Could not start $fileName" }
+        } catch [System.ComponentModel.Win32Exception] {
+            $clock.Stop()
+            $message = $_.Exception.Message
+            $code = $_.Exception.NativeErrorCode
+            [IO.File]::WriteAllText((Join-Path $runDir "$name.start-error.txt"), "Win32 error ${code}: $message")
+            Write-Host "$name`: start-error=$code elapsed=$([math]::Round($clock.Elapsed.TotalSeconds, 2))s"
+            return [pscustomobject]@{ ExitCode = $null; StartError = $message; NativeErrorCode = $code; Stdout = ''; Stderr = ''; Seconds = $clock.Elapsed.TotalSeconds }
+        }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $finished = $process.WaitForExit($timeoutSeconds * 1000)
+        if (-not $finished) {
+            Stop-EngineChildren $process.Id
+            if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit(5000) | Out-Null }
+        }
+        $readsFinished = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), 5000)
+        $clock.Stop()
+        Assert-Shape $readsFinished "$name output pipe remained open"
+        $stdout = $stdoutTask.Result
+        $stderr = $stderrTask.Result
+        [IO.File]::WriteAllText((Join-Path $runDir "$name.stdout.txt"), $stdout, (New-Object System.Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText((Join-Path $runDir "$name.stderr.txt"), $stderr, (New-Object System.Text.UTF8Encoding($false)))
+        $status = if ($finished) { $process.ExitCode } else { 'timeout' }
+        Write-Host "$name`: exit=$status elapsed=$([math]::Round($clock.Elapsed.TotalSeconds, 2))s"
+        return [pscustomobject]@{ ExitCode = $status; StartError = $null; NativeErrorCode = $null; Stdout = $stdout; Stderr = $stderr; Seconds = $clock.Elapsed.TotalSeconds }
+    } finally { $process.Dispose() }
+}
+
+function Assert-CliError($result, [string]$name, [string]$pattern) {
+    Assert-Runtime $result $name
+    Assert-Shape ($result.ExitCode -eq 1) "$name did not exit 1"
+    Assert-Shape ($result.Stdout.Trim() -eq 'null') "$name did not write the expected null JSON sentinel"
+    $lines = [regex]::Matches($result.Stderr, '(?m)^ERROR: .+\r?$')
+    Assert-Shape ($lines.Count -eq 1 -and $lines[0].Value -match $pattern) "$name has an unexpected ERROR line"
+    Write-Output "$name`: exit=$($result.ExitCode) stderr=$($lines[0].Value.Trim())"
+}
+
 function Invoke-InterruptedEngine([string]$name, [string[]]$arguments, [string]$partPath, [int]$minimumBytes, [int]$timeoutSeconds) {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = New-EngineStartInfo $name $arguments
@@ -165,7 +212,7 @@ function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [do
     Write-Output "$name`: video=$($video[0].codec_name) $($video[0].width)x$($video[0].height) audio=$($audio[0].codec_name) duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
 }
 
-if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4, aac, metadata or resume-progress' }
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4, aac, metadata, resume-progress or errors' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -181,6 +228,48 @@ New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'errors') {
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs",
+        '--skip-download', '--dump-single-json', '--no-playlist', '--socket-timeout', '15',
+        '--retries', '0', '--extractor-retries', '0')
+    $invalid = Invoke-Engine 'invalid-url' ($common + @('--', $fixtures.invalidInput)) 60 $true
+    Assert-CliError $invalid 'invalid-url' ([regex]::Escape("'$($fixtures.invalidInput)' is not a valid URL"))
+
+    $missingUrl = "https://archive.org/details/$($fixtures.missingArchiveId)"
+    $missing = Invoke-Engine 'unavailable-item' ($common + @('--', $missingUrl)) 60 $true
+    Assert-CliError $missing 'unavailable-item' 'HTTP Error 404: Not Found'
+
+    $privatePath = (($fixtures.restrictedArchive.privateFile -split '/') |
+        ForEach-Object { [uri]::EscapeDataString($_) }) -join '/'
+    $privateUrl = "https://archive.org/download/$($fixtures.restrictedArchive.id)/$privatePath"
+    $restricted = Invoke-Engine 'private-file' ($common + @('--', $privateUrl)) 60 $true
+    Assert-CliError $restricted 'private-file' 'HTTP Error (401: Unauthorized|403: Forbidden)'
+
+    $ytStartup = Invoke-StartupProbe 'yt-dlp-startup' $ytDlp @('--version')
+    Assert-Shape ($ytStartup.ExitCode -eq 0 -and $ytStartup.Stdout.Trim() -eq '2026.08.19' -and
+        $ytStartup.Seconds -lt 10) 'pinned yt-dlp did not start within 10 seconds'
+    $qjsStartup = Invoke-StartupProbe 'quickjs-startup' $quickJs @('-e', "print('quickjs-ready')")
+    Assert-Shape ($qjsStartup.ExitCode -eq 0 -and $qjsStartup.Stdout.Trim() -eq 'quickjs-ready' -and
+        $qjsStartup.Seconds -lt 10) 'pinned QuickJS did not start within 10 seconds'
+
+    # An absent working directory forces Windows to reject Process.Start before
+    # either verified executable can emit stderr or return a process exit code.
+    $badDirectory = Join-Path $runDir 'intentionally-absent-working-directory'
+    Assert-Shape (-not (Test-Path -LiteralPath $badDirectory)) 'startup-failure directory unexpectedly exists'
+    foreach ($probe in @(@('yt-dlp', $ytDlp, @('--version')), @('quickjs', $quickJs, @('-e', '1')))) {
+        $failed = Invoke-StartupProbe "$($probe[0])-start-failure" $probe[1] $probe[2] $badDirectory
+        Assert-Shape ($null -eq $failed.ExitCode -and $failed.NativeErrorCode -eq 267 -and
+            -not $failed.Stderr -and -not $failed.Stdout) "$($probe[0]) startup failure did not report Win32 error 267 without CLI output"
+        Write-Output "$($probe[0]) simulated startup failure: Win32=$($failed.NativeErrorCode), no exit code or stderr"
+    }
+    $stalled = Invoke-StartupProbe 'quickjs-watchdog' $quickJs @('-e', 'for (;;) {}') '' 2
+    Assert-Shape ($stalled.ExitCode -eq 'timeout' -and -not $stalled.Stdout -and -not $stalled.Stderr) 'nonresponsive QuickJS was not stopped at the probe deadline'
+    Write-Output "QuickJS simulated no-response timeout: status=$($stalled.ExitCode), stopped after $([math]::Round($stalled.Seconds, 2))s"
+    Write-Output "Startup success: yt-dlp=$([math]::Round($ytStartup.Seconds, 2))s QuickJS=$([math]::Round($qjsStartup.Seconds, 2))s (10s bound)"
+    Write-Output "Full stdout/stderr and startup error details: $runDir (ignored)"
+    return
 }
 
 if ($Case -eq 'resume-progress') {
