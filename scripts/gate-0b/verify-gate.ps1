@@ -49,7 +49,14 @@ foreach ($term in @('hlsnative', 'local `file:`', 'already-MP3',
     Assert-Gate ($matrix.Contains($term) -or $checkpoint.Contains($term)) "checkpoint omits limit $term"
 }
 Assert-Gate ($gate.Contains('(evidence/0b/checkpoint.md)')) 'gate file does not link checkpoint'
-Assert-Gate ($state -match 'Next task explicitly:.*Gate 0B') 'STATE.md must name the next task explicitly'
+Assert-Gate ($state -match 'Next task explicitly:') 'STATE.md must name the next task explicitly'
+$accepted = $state -match 'Gate 0B accepted by the owner'
+if ($accepted) {
+    Assert-Gate ($gate -match 'Gate 0B checkpoint accepted by the owner') 'gate file omits owner acceptance'
+    Assert-Gate ($state -match 'Next task explicitly:.*0C-00') 'accepted checkpoint must name the Gate 0C planning task'
+} else {
+    Assert-Gate ($state -match 'Next task explicitly:.*Gate 0B') 'pending checkpoint must name owner review'
+}
 
 $targetEvidence = @{
     'quickjs-windows.txt' = 'bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83'
@@ -76,4 +83,5 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Gate 0B checkpoint: redistribution audit failed'
 }
 $audit | Select-Object -Last 3
-Write-Output "Gate 0B checkpoint evidence passed: $($links.Count) links, $($cases.Count) CLI cases, five QuickJS targets, locked Windows binaries and redistribution audit. Owner acceptance remains separate."
+$status = if ($accepted) { 'recorded' } else { 'pending' }
+Write-Output "Gate 0B checkpoint evidence passed: $($links.Count) links, $($cases.Count) CLI cases, five QuickJS targets, locked Windows binaries and redistribution audit. Owner acceptance: $status."

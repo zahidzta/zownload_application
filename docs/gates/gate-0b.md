@@ -245,6 +245,10 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 
 ## 0B-21 checkpoint evidence for owner review
 
+Gate 0B checkpoint accepted by the owner on 2026-10-20, after [PR #45](https://github.com/zahidzta/zownload_application/pull/45)
+merged. The decision and next task are recorded in `docs/STATE.md`. The
+documented playback and source-format limits remain visible in the record.
+
 The [checkpoint record](evidence/0b/checkpoint.md) links the frozen
 [command matrix](../ytdlp-commands.md), source and SHA-256 attestation, all
 five QuickJS target builds, LGPL FFmpeg/license audit, each required CLI probe,
