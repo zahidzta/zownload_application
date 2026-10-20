@@ -101,28 +101,33 @@ if ($Case -in @('mp3-singles', 'mp3-playlist')) {
 }
 
 if ($Case -eq 'mp3-playlist') {
+    $fixture = $fixtures.archivePcmPlaylist
+    $indices = @($fixture.entries | ForEach-Object { [int]$_.playlistIndex })
     $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
-    $playlist = Invoke-Engine 'playlist-flat' ($common + @('--flat-playlist', '--dump-single-json', '--', $fixtures.archiveAudio.url)) 180
+    $playlist = Invoke-Engine 'playlist-flat' ($common + @('--flat-playlist', '--dump-single-json', '--', $fixture.url)) 180
     Assert-Runtime $playlist 'playlist-flat'
     $playlistJson = $playlist.Stdout | ConvertFrom-Json
-    Assert-Shape ($playlistJson._type -eq 'playlist' -and $playlistJson.id -eq $fixtures.archiveAudio.id) 'Archive playlist identity changed'
-    Assert-Shape ($fixtures.archiveAudio.entries.Count -eq 3 -and $playlistJson.entries.Count -ge 4) 'Archive bounded playlist shape changed'
-    for ($i = 0; $i -lt 3; $i++) {
-        $expectedId = "$($fixtures.archiveAudio.id)/$($fixtures.archiveAudio.entries[$i])"
-        Assert-Shape ($playlistJson.entries[$i + 1].id -eq $expectedId) "Archive entry $($i + 2) changed"
+    Assert-Shape ($playlistJson._type -eq 'playlist' -and $playlistJson.id -eq $fixture.id) 'PCM playlist identity changed'
+    Assert-Shape ($fixture.entries.Count -eq 3 -and $playlistJson.entries.Count -ge ($indices | Measure-Object -Maximum).Maximum) 'PCM bounded playlist shape changed'
+    foreach ($entry in $fixture.entries) {
+        $expectedId = "$($fixture.id)/$($entry.name)"
+        Assert-Shape ($playlistJson.entries[[int]$entry.playlistIndex - 1].id -eq $expectedId) "PCM entry $($entry.playlistIndex) changed"
     }
     $mismatches = @()
+    $playlistHashes = @{}
     foreach ($preset in @(@{ Name = 'max'; Bitrate = 320 }, @{ Name = 'min'; Bitrate = 128 })) {
         $outputDir = Join-Path $runDir $preset.Name
         New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-        $arguments = $common + @('--playlist-items', '2:4', '-f', 'ba/b', '-x', '--audio-format', 'mp3',
+        $arguments = $common + @('--playlist-items', ($indices -join ','), '-f', 'ba/b', '-x', '--audio-format', 'mp3',
             '--audio-quality', "$($preset.Bitrate)K", '--ffmpeg-location', $ffmpegDir,
-            '-o', (Join-Path $outputDir '%(playlist_index)s.%(ext)s'), '--', $fixtures.archiveAudio.url)
+            '-o', (Join-Path $outputDir '%(playlist_index)s.%(ext)s'), '--', $fixture.url)
         $result = Invoke-Engine $preset.Name $arguments 180
         Assert-Runtime $result $preset.Name
-        for ($index = 2; $index -le 4; $index++) {
+        foreach ($entry in $fixture.entries) {
+            $index = [int]$entry.playlistIndex
             $output = Join-Path $outputDir "$index.mp3"
             Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "$($preset.Name) entry $index output is missing"
+            Assert-Shape ($result.Stdout -match "(?m)^\[ExtractAudio\] Destination: .*[/\\]$index\.mp3\r?$") "$($preset.Name) entry $index did not convert its WAV source"
             $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- $output | Out-String)
             Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for $($preset.Name) entry $index"
             [IO.File]::WriteAllText((Join-Path $runDir "$($preset.Name)-$index.ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
@@ -133,13 +138,43 @@ if ($Case -eq 'mp3-playlist') {
             $actual = [int]$audio[0].bit_rate
             $target = $preset.Bitrate * 1000
             if ([math]::Abs($actual - $target) -gt ($target * 0.01)) {
-                $mismatches += "$($preset.Name) entry $index ($($fixtures.archiveAudio.entries[$index - 2])): $actual bps, expected $target bps"
+                $mismatches += "$($preset.Name) entry $index ($($entry.name)): $actual bps, expected $target bps"
             }
             $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+            $playlistHashes["$($preset.Name)-$index"] = $hash
             Write-Output "$($preset.Name) entry $index`: stream=$actual bps format=$($probe.format.bit_rate) bps duration=$($probe.format.duration)s sha256=$hash"
         }
         Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -Filter '*.mp3' -File).Count -eq 3) "$($preset.Name) did not produce exactly three MP3 files"
     }
+    foreach ($entry in $fixture.entries) {
+        $index = [int]$entry.playlistIndex
+        Assert-Shape ($playlistHashes["max-$index"] -ne $playlistHashes["min-$index"]) "entry $index Max/Min outputs are identical"
+    }
+    # A direct original URL stands in for an individual queue item's invocation.
+    # Exercise each entry independently at Max to confirm this option is viable.
+    $singleDir = Join-Path $runDir 'per-entry-max'
+    New-Item -ItemType Directory -Path $singleDir -Force | Out-Null
+    foreach ($entry in $fixture.entries) {
+        $index = [int]$entry.playlistIndex
+        $entryUrl = "https://archive.org/download/$($fixture.id)/$($entry.name)"
+        $single = Invoke-Engine "per-entry-$index" ($common + @('--no-playlist', '-f', 'ba/b', '-x', '--audio-format', 'mp3',
+            '--audio-quality', '320K', '--ffmpeg-location', $ffmpegDir, '-o', (Join-Path $singleDir "$index.%(ext)s"), '--', $entryUrl)) 180
+        Assert-Runtime $single "per-entry-$index"
+        $output = Join-Path $singleDir "$index.mp3"
+        Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "per-entry $index output is missing"
+        Assert-Shape ($single.Stdout -match "(?m)^\[ExtractAudio\] Destination: .*[/\\]$index\.mp3\r?$") "per-entry $index did not convert its WAV source"
+        $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration,bit_rate' -of json -- $output | Out-String)
+        Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for per-entry $index"
+        [IO.File]::WriteAllText((Join-Path $runDir "per-entry-$index.ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+        $probe = $probeText | ConvertFrom-Json
+        $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+        Assert-Shape ($audio.Count -eq 1 -and $probe.streams.Count -eq 1 -and $audio[0].codec_name -eq 'mp3') "per-entry $index is not audio-only MP3"
+        Assert-Shape ([math]::Abs([int]$audio[0].bit_rate - 320000) -le 3200) "per-entry $index missed 320K"
+        Assert-Shape ([math]::Abs([double]$probe.format.duration - [double]$entry.duration) -lt 0.2) "per-entry $index duration changed"
+        $hash = (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "per-entry $index`: stream=$($audio[0].bit_rate) bps duration=$($probe.format.duration)s sha256=$hash"
+    }
+    Assert-Shape (@(Get-ChildItem -LiteralPath $singleDir -Filter '*.mp3' -File).Count -eq 3) 'per-entry invocations did not produce three MP3 files'
     Write-Output "Full stdout/stderr, ffprobe JSON and MP3 outputs: $runDir (ignored)"
     Assert-Shape ($mismatches.Count -eq 0) ("playlist presets missed intended bitrates: " + ($mismatches -join '; '))
     return

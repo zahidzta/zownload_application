@@ -77,3 +77,57 @@ Source audit command shape from the repository root:
   & (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3/ffprobe.exe).Path -v error -show_entries 'stream=codec_name,codec_type,bit_rate:format=duration' -of json -- work/engine/cli/mp3-playlist/20261019-173743/max/2.mp3
 The other two used their corresponding source URLs and max/3.mp3 or max/4.mp3.
 No 0B-15 Max/Min command was rerun during 0B-15A.
+
+0B-15 resumed probe (2026-10-19; PASS on the approved PCM fixture)
+
+Exact verification command from the repository root:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp3-playlist
+Exit status: 0. The read-only fixture preflight passed immediately beforehand.
+It confirmed CC0 vvalkabout originals glitch1.wav, glitch2.wav, hunter.wav at
+playlist positions 11, 12, 18, with locked Archive size/MD5/SHA-1 and PCM
+source inspection. Pinned yt-dlp flat analysis confirmed their three IDs at
+those positions. The verifier checked the same pinned yt-dlp, QuickJS, ffmpeg
+and ffprobe SHA-256 values listed above; yt-dlp logged stable@2026.08.19,
+only quickjs-2026-06-04 and bundled yt_dlp_ejs-0.8.0 on all six invocations.
+
+Exact bounded playlist command for B=320 (Max) and B=128 (Min), with $yt,
+$qjs, $ff and $out resolved to absolute paths in the verifier:
+  & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '11,12,18' -f 'ba/b' -x --audio-format mp3 --audio-quality "${B}K" --ffmpeg-location $ff -o "$out/%(playlist_index)s.%(ext)s" -- 'https://archive.org/details/vvalkabout'
+Both playlist CLI processes exited 0, downloaded all three selected WAV
+originals and logged an [ExtractAudio] MP3 destination for each. Flat analysis
+took 5.18 s, Max 68.76 s and Min 40.77 s. The verifier found exactly three
+MP3s in each preset directory. Pinned ffprobe reported one MP3 audio stream,
+no video and the stream/format bitrate and duration below. It accepted stream
+bitrate within 1% of the requested CBR target; actual streams met it exactly.
+
+Entry (playlist index)  Preset   Stream bps  Format bps  Duration s  SHA-256
+glitch1.wav (11)         Max 320  320000      323841      5.010000    405d4178f013c7ce91dbcb2aae87184175b1828c1129c331fcc2cea2791d7fe0
+glitch2.wav (12)         Max 320  320000      325685      3.570000    8af09428de796586de4fbee49be1ab11e0a87d4eeb9213804b7a038dfb9c12dd
+hunter.wav (18)          Max 320  320000      322917      8.000000    f6a4f2f0150a1239e421403be28fd45a4db0f2c9d5d7142fed4029741771b641
+glitch1.wav (11)         Min 128  128000      129628      5.010000    98af669fc3f4a8421ce89189ff308d8039cd309483740491937e7a79dfb19f7a
+glitch2.wav (12)         Min 128  128000      130402      3.570000    6f16eee7f107c6dfae0108a93a7b206287e776c6c894463c9c83ca0e1950da59
+hunter.wav (18)          Min 128  128000      129193      8.000000    34f49431c512192938c70485a8037b649402299b7b2b0209f6e1cf2ccb13327d
+
+Each Max/Min entry pair has distinct SHA-256 values. Separate per-entry CLI
+invocations were tested at Max on the three direct original URLs. For entry
+11, with the same resolved executable and ffmpeg paths, the command was:
+  & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --no-playlist -f 'ba/b' -x --audio-format mp3 --audio-quality 320K --ffmpeg-location $ff -o "$out/11.%(ext)s" -- 'https://archive.org/download/vvalkabout/glitch1.wav'
+Entries 12 and 18 used their corresponding output index and original WAV URL.
+Each process exited 0 (20.17, 9.95, 69.08 s), logged [ExtractAudio], and
+produced one MP3 stream at 320000 bps. Durations were 5.010000, 3.570000 and
+8.000000 s; their hashes matched the respective playlist Max hashes above.
+This confirms one CLI invocation per entry is viable for these direct Archive
+originals. No application queue was implemented or tested.
+
+Common-player playback: the existing ignored Python ctypes helper opened all
+nine final MP3 files with portable VLC 3.0.24/libVLC. Exact invocation from
+the repository root, with all paths resolved to absolute paths:
+  $run = 'work/engine/cli/mp3-playlist/20261019-181437'; $paths = @(); foreach ($quality in @('max','min','per-entry-max')) { foreach ($index in @(11,12,18)) { $paths += (Resolve-Path -LiteralPath (Join-Path $run "$quality/$index.mp3")).Path } }; & py work/engine/cli/play_vlc.py @paths
+The helper exited 0. In the order above, playback state was 3 (playing) for
+all nine files, with positions 2035, 2035, 2062, 2194, 2193, 2193, 2062,
+2063 and 2063 ms. This is automated player playback, not a human listening
+claim. Full CLI stdout/stderr, ffprobe JSON, console output and media remain
+ignored under work/engine/cli/mp3-playlist/20261019-181437/ and
+work/engine/cli/mp3-playlist-rerun-console.txt. The original already-MP3
+failure above remains valid for those sources; the PCM rerun satisfies the
+0B-15 acceptance criteria.
