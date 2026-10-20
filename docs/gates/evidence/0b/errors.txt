@@ -1,0 +1,64 @@
+Gate 0B task 0B-20 — representative errors, Windows x64, 2026-10-20
+
+Exact verification:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case errors
+  exit 0
+
+Preflight: scripts/gate-0b/verify-fixtures.ps1 passed immediately before the
+CLI probes. Archive metadata still reported the missing item absent and the
+selected restricted file private. No media was downloaded.
+
+Pinned executables:
+  yt-dlp stable@2026.08.19, yt_dlp_ejs 0.8.0
+  yt-dlp.exe SHA-256 66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  QuickJS 2026-06-04 (the only enabled JS runtime for extraction)
+  qjs.exe SHA-256 bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+
+The three yt-dlp commands use --ignore-config --verbose --no-js-runtimes,
+--js-runtimes quickjs:<pinned qjs.exe>, --skip-download --dump-single-json
+--no-playlist --socket-timeout 15 --retries 0 --extractor-retries 0 -- <input>.
+The exact invocations are in docs/ytdlp-commands.md. Each failed extraction
+wrote `null` plus a newline to stdout, exactly one leading `ERROR:` line to
+stderr, and verbose traceback details after that line. The verifier checks
+the pinned yt-dlp/EJS/QuickJS identities in each stderr stream.
+
+Case                  Exit  Elapsed  Relevant stderr line
+invalid `not-a-url`   1     6.90 s   ERROR: [generic] 'not-a-url' is not a valid URL
+missing Archive item  1     7.09 s   ERROR: [archive.org] zownload-fixture-intentionally-missing-0b02: Unable to download webpage: HTTP Error 404: Not Found (caused by <HTTPError 404: Not Found>)
+private Archive file  1     7.13 s   ERROR: [generic] 01.01. Bells Of Rostov: Unable to download webpage: HTTP Error 401: Unauthorized (caused by <HTTPError 401: Unauthorized>)
+
+The initial manual private *item-page* probe also exited 1, but reported
+`ERROR: opening play-av tag not found`. That is an Archive extractor/parser
+error, not proof of an access restriction. The final probe uses the private
+file named in the locked Archive metadata and requires HTTP 401 or 403. The
+same direct-file probe returned 401 and 403 on separate runs. Both are access
+denials. A network outage or different extractor failure would fail
+the verifier's status/ERROR-line assertions rather than count as this result.
+
+Startup probes use the SHA-256-checked local executables and a 10-second
+completion bound. `yt-dlp.exe --version` exited 0, printed `2026.08.19`, and
+took 3.08 s. `qjs.exe -e "print('quickjs-ready')"` exited 0, printed the
+expected marker, and took 0.05 s. These are command completion times on this
+host, not a guarantee that cold startup stays below 10 s elsewhere.
+
+For each same pinned executable, the verifier also supplies an intentionally
+absent working directory to Process.Start. Windows rejected both launches
+with Win32 error 267 (invalid directory): yt-dlp after 0.01 s, QuickJS after
+less than 0.01 s. Neither has a process exit code, stdout or stderr. The
+caller must treat that OS exception separately from a CLI `ERROR:` line.
+This simulates launch failure; it does not claim either executable is broken.
+
+The verifier ran pinned QuickJS with `-e 'for (;;) {}'` under a separate
+two-second deadline to exercise the no-response path. It returned the probe
+status `timeout`, stopped the process after 3.69 s including cleanup, and
+captured empty stdout/stderr. This is a controlled watchdog test, not a
+measured QuickJS startup delay or a change to the 10-second startup bound.
+
+Only metadata/error requests occurred. yt-dlp's generic and Archive extractors
+made the HTTP requests; FFmpeg was not invoked and had no HTTPS input.
+These observations are evidence for Stage 2D typed-error and update heuristics.
+No error classification rule, 10-second timeout or probation length was
+changed in this task.
+
+Full stdout/stderr and startup exception details are ignored under
+work/engine/cli/errors/20261020-084129/.

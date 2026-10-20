@@ -369,6 +369,43 @@ The [yt-dlp download and progress options](https://github.com/yt-dlp/yt-dlp/blob
 document `--continue`, `.part` files, the rate limit, `--newline` and progress
 templates. The pinned executable output supplies the version-specific proof.
 
+## 0B-20 — Representative errors and process startup
+
+The verifier first checks the fixture metadata and SHA-256 of the pinned
+yt-dlp and QuickJS executables. These three metadata-only commands share:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$qjs", '--skip-download', '--dump-single-json', '--no-playlist', '--socket-timeout', '15', '--retries', '0', '--extractor-retries', '0')
+& $yt @common -- 'not-a-url'
+& $yt @common -- 'https://archive.org/details/zownload-fixture-intentionally-missing-0b02'
+& $yt @common -- 'https://archive.org/download/lp_the-music-of-russia_various-artists-a-askaryan-alexander-melik/disc1/01.01.%20Bells%20Of%20Rostov.mp3'
+& $yt --version
+& $qjs -e "print('quickjs-ready')"
+```
+
+All three extraction failures exit 1, write `null` to stdout with
+`--dump-single-json`, and retain one `ERROR:` line on stderr. Their distinct
+lines report invalid URL, HTTP 404, and HTTP 401 respectively. The private
+file path is assembled from the fixture lock and percent-encoded by the
+verifier. The Archive item page itself returned a parser error, so it is not
+used as evidence of access restriction. A previous run of the same private
+file returned HTTP 403, also an access denial. The 10-second startup probes
+exited 0 in 3.08 s for yt-dlp and 0.05 s for QuickJS. A nonexistent working
+directory supplied to `Process.Start` for each pinned executable produced
+Windows error 267, with no child exit code or stderr. This simulated OS-level
+launch failure needs a separate error path from the CLI's `ERROR:` messages.
+The verifier also executes `qjs -e 'for (;;) {}'` under a two-second probe
+deadline; it stopped that no-response process and reported `timeout` after
+3.69 s including cleanup. The configured 10-second startup bound and later
+updater heuristics were not changed.
+
+Run `powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case errors`.
+The [captured error evidence](gates/evidence/0b/errors.txt) records exact
+status, stderr, startup timing and the ignored full-log location. It does
+not change Stage 2D error or updater heuristics.
+
 ## Gate 0B transport review for the command matrix
 
 The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
@@ -394,4 +431,4 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-17 AAC | yt-dlp HTTP fetched H.264 and Opus components; FFmpeg read two local `file:` inputs, copied video and encoded AAC audio. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-18 metadata/cover | yt-dlp HTTP fetched Archive MP3 and NatureClip media/thumbnail; PowerShell fetched Archive PNG. FFmpeg read local MP3, PNG and MP4 components; MP4 image embedding used mutagen. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-19 resume/progress | yt-dlp's HTTP downloader fetched the direct Archive HTTPS MP4 on both attempts; FFmpeg inspected the final local file with ffprobe and was not a downloader. | No FFmpeg HTTPS dependency in passing probe |
-| 0B-20 errors | Check selected protocol and actual downloader when its required command runs. | Pending command-specific review |
+| 0B-20 errors | yt-dlp generic and Archive extractors made metadata/error HTTP requests; no media or FFmpeg operation. | No FFmpeg HTTPS dependency in passing probe |
