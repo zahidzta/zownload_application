@@ -1,6 +1,6 @@
 # Gate 0B yt-dlp command matrix
 
-These are the commands tested so far. Later Gate 0B CLI tasks extend this file.
+These are the exact Gate 0B commands tested with the pinned Windows CLI artifacts.
 All paths below are repository-relative Windows paths; the verifier resolves them
 to absolute paths and checks the pinned executable hashes. Full CLI stdout and
 stderr stay under ignored `work/engine/cli/`.
@@ -410,16 +410,16 @@ not change Stage 2D error or updater heuristics.
 
 The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
 `--download-sections` diagnostic exposed this because it handed a remote media
-URL to FFmpeg. This is an **OPEN** compatibility question for HLS/DASH paths
-where yt-dlp can choose FFmpeg as the downloader. The build and 600-second
-timeout remain unchanged.
+URL to FFmpeg. This remains an **OPEN** compatibility question for future
+HLS/DASH format selections where yt-dlp can choose FFmpeg as the downloader.
+The tested HLS formats below used yt-dlp's native HLS downloader. The build
+and 600-second timeout remain unchanged.
 
-At 0B-21, review **every required command** against this rule: record the
-selected media protocol and downloader from verbose output, then confirm that
-every FFmpeg input is a local file. A required row fails matrix review if
-FFmpeg must fetch HTTPS, including a selected HLS or DASH stream. This check
-also applies when adding the 0B-17 through 0B-20 commands. A TLS-enabled
-FFmpeg rebuild needs an owner licensing decision first.
+The reviewed rows below record the selected media protocol and downloader
+from verbose output and confirm that every FFmpeg input is a local file.
+A future required row fails review if FFmpeg must fetch HTTPS, including a
+selected HLS or DASH stream. A TLS-enabled FFmpeg rebuild needs an owner
+licensing decision first.
 
 | Current matrix row | Media fetcher / FFmpeg role | Review state |
 |---|---|---|
@@ -432,3 +432,51 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-18 metadata/cover | yt-dlp HTTP fetched Archive MP3 and NatureClip media/thumbnail; PowerShell fetched Archive PNG. FFmpeg read local MP3, PNG and MP4 components; MP4 image embedding used mutagen. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-19 resume/progress | yt-dlp's HTTP downloader fetched the direct Archive HTTPS MP4 on both attempts; FFmpeg inspected the final local file with ffprobe and was not a downloader. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-20 errors | yt-dlp generic and Archive extractors made metadata/error HTTP requests; no media or FFmpeg operation. | No FFmpeg HTTPS dependency in passing probe |
+
+## 0B-21 — Frozen command matrix and proposal corrections
+
+Each linked section above gives the executable PowerShell command, exact URL,
+options, expected exit status and output inspection. The [checkpoint evidence](gates/evidence/0b/checkpoint.md)
+links the source, build, license, hash and player records. The following table
+reviews each required `PROJECT.md:752` capability. The transport column names
+the component that fetched media in the passing probe.
+
+| Capability | Verified option sequence and evidence | Media fetcher; FFmpeg input |
+|---|---|---|
+| Single, pure playlist and mixed URL analysis | `--dump-single-json --no-playlist`, `--dump-single-json --flat-playlist`, and mixed URL with `--no-playlist`; [0B-13](gates/evidence/0b/analyze.txt) | No media transfer; no FFmpeg. YouTube registered only QuickJS 2026-06-04 and bundled EJS 0.8.0. |
+| MP3 single 320/256/192/128 | `-f ba/b -x --audio-format mp3 --audio-quality <B>K`; [0B-14](gates/evidence/0b/mp3-singles.txt) | yt-dlp HTTP fetch of the Vorbis WebM; FFmpeg reads the local WebM. |
+| MP3 playlist Max/Min and separate entries | `--playlist-items 11,12,18 -f ba/b -x --audio-format mp3 --audio-quality 320K/128K`, plus `--no-playlist` direct-WAV entry invocations; [0B-15](gates/evidence/0b/mp3-playlist.txt) | yt-dlp HTTP fetches WAV files; FFmpeg reads local WAV files. |
+| MP4 playlist Max/Min and bounded single | `--playlist-items 4,6,7 -f bv*+ba/b` or `wv*+ba/w --merge-output-format mp4`; bounded single uses `-f bv*[height<=240]+ba/b[height<=240]`; [0B-16](gates/evidence/0b/mp4.txt) | yt-dlp HTTP fetches six Max components and all audio; yt-dlp `hlsnative` fetches three Min video components. Twelve FFmpeg merge inputs are local `file:` paths; the bounded single needs no merge. |
+| Non-AAC MP4 source | `--merge-output-format mp4 --postprocessor-args 'Merger+ffmpeg_o:-c:a aac'`; [0B-17](gates/evidence/0b/aac.txt) | yt-dlp HTTP fetches H.264 and Opus components; FFmpeg reads two local `file:` inputs and encodes AAC. |
+| Metadata and JPEG covers | `--embed-metadata --parse-metadata` fallback rules; YouTube also uses `--embed-thumbnail --convert-thumbnails jpg`, while Archive PNG is fetched and converted separately; [0B-18](gates/evidence/0b/metadata.txt) | yt-dlp HTTP fetches media and YouTube thumbnail; PowerShell fetches Archive PNG. FFmpeg reads local media and image inputs. |
+| Partial resume and progress | `--continue --part --newline --progress-template 'download:ZP1|...'`; [0B-19](gates/evidence/0b/resume-progress.txt) | yt-dlp HTTP fetches and resumes the direct MP4; no FFmpeg download. |
+| Invalid, unavailable, restricted, startup and timeout errors | `--dump-single-json --skip-download`, zero retries and bounded startup probes; [0B-20](gates/evidence/0b/errors.txt) | Extractors make metadata/error HTTP requests; no media or FFmpeg. |
+
+No passing test requires FFmpeg to fetch HTTPS, including the selected HLS
+streams. This conclusion applies to the tested formats and fixtures only; a
+future selected HLS/DASH format must meet the same local-input rule. The
+stopped `--download-sections` diagnostic in [mp4.txt](gates/evidence/0b/mp4.txt)
+is an observed failure, not a working command.
+
+Appendix B in `PROJECT.md:802-813` was a proposal. Testing corrected these
+parts of it:
+
+- `--no-js-runtimes` must precede `--js-runtimes quickjs:<path>` to exclude an
+  installed default Deno runtime. `--ignore-config` also fixes local settings.
+- `--audio-quality` does not force conversion of an already-MP3 source. The
+  128 kbps Archive source stayed at 128 kbps for a 320K request. The passing
+  preset claims apply to the locked non-MP3 Vorbis/WAV sources. Product handling
+  of an already-MP3 source remains the recorded owner decision.
+- `--merge-output-format mp4` does not convert Opus audio to AAC; the tested
+  `Merger+ffmpeg_o:-c:a aac` override does so when the selected audio is Opus.
+- `--embed-thumbnail` alone did not find Archive's track PNG. That fixture
+  needs the explicit PNG fetch and local FFmpeg JPEG cover conversion; ffprobe
+  found the attached picture. VLC did not report a displayed artwork URL.
+- `--download-sections` made FFmpeg fetch HTTPS and failed with this pinned
+  LGPL build. It is excluded from the passing command matrix.
+
+All playback statements in the linked evidence are automated VLC 3.0.24/libVLC
+open/decode/position checks. Human listening, viewing and visual cover display
+were not observed by these probes. The 0B-13 YouTube responses registered
+QuickJS/EJS but did not require a JS challenge, so they do not measure solver
+execution speed or trigger the D-08 Deno fallback.
