@@ -180,12 +180,21 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Acceptance: all original entries are independently confirmed as 128 kbps MP3 sources; the replacement has at least three selected original non-MP3 entries with source hashes, codecs and rights recorded. The read-only preflight checks each current entry's metadata fingerprint, selected format and codec lock without downloading media, and rejects MP3. It also verifies at least two distinct video resolutions for the upcoming 0B-16 fixture.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-fixtures.ps1`.
 
+### 0B-16A — Short video playlist fixture after the 0B-16 stop
+
+- Goal: replace the timed-out Blender transfer fixture with a rights-documented real playlist of at least three short videos; retain the original stop finding in `mp4.txt`.
+- Files to touch: `docs/gates/evidence/0b/fixtures.md`, `scripts/gate-0b/verify-fixtures.ps1`, this gate file, `docs/ytdlp-commands.md`, `docs/STATE.md`. Do not alter the FFmpeg build or run the 0B-16 MP4 verifier.
+- Read: `PROJECT.md:388,752,806-808,812`.
+- Dependencies/parallelism: the recorded 0B-16 stop and owner approval. Complete this fixture task before the 0B-16 rerun.
+- Acceptance: lock at least three rights-documented playlist entries, including CC BY attribution where applicable. The read-only preflight prints each entry's available video heights and estimated Max/Min transfer bytes, and fails for fewer than two distinct heights, a changed license or membership, or an estimated size above the documented threshold. Both playlist invocations must fit comfortably inside the unchanged 600-second bound on the locked estimates. The old `mp4.txt` stop remains a finding, not a pass.
+- Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-fixtures.ps1`.
+
 ### 0B-16 — MP4 Max/Min and height selection
 
 - Goal: validate MP4 Max/Min selection for a real playlist and a bounded-height single; inspect streams and play the files.
 - Files to touch: `scripts/gate-0b/verify-cli.ps1`, `docs/ytdlp-commands.md`, `docs/gates/evidence/0b/mp4.txt`, `docs/STATE.md`.
 - Read: `PROJECT.md:388,752,806-808,812`.
-- Dependencies/parallelism: 0B-02, 0B-03, 0B-05 and 0B-11; independent of 0B-14/15 after shared script edits are integrated.
+- Dependencies/parallelism: 0B-02, 0B-03, 0B-05, 0B-11 and 0B-16A for the rerun; independent of 0B-14/15 after shared script edits are integrated.
 - Acceptance: playlist Max/Min and bounded-height single outputs match selected quality, are valid MP4 and play in common players; actual ffprobe output and player names/results are recorded.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp4`.
 
@@ -231,7 +240,7 @@ If any required CLI capability, QuickJS runtime requirement, codec/metadata/play
 - Files to touch: `docs/ytdlp-commands.md`, `docs/gates/gate-0b.md` evidence section, `docs/gates/evidence/0b/checkpoint.md`, `scripts/gate-0b/verify-gate.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:370-371,388-390,699,708-712,729,736-745,752,802-821`.
 - Dependencies/parallelism: 0B-01 through 0B-20; no next gate begins before owner acceptance.
-- Acceptance: all required capabilities, target QuickJS builds, SHA-256 values, licensing checks and manual player results have linked evidence; the command matrix contains exact verified commands, marks any Appendix B proposal corrected by testing, and has no unsupported success claim. A failed requirement triggers the stop rule.
+- Acceptance: all required capabilities, target QuickJS builds, SHA-256 values, licensing checks and manual player results have linked evidence; the command matrix contains exact verified commands, marks any Appendix B proposal corrected by testing, and has no unsupported success claim. For every required test, the matrix review records which component fetches media and verifies that FFmpeg never has to fetch an HTTPS input (including HLS/DASH paths); local FFmpeg post-processing is allowed. Any required test that depends on FFmpeg HTTPS input fails review until the owner resolves the licensing/build question. A failed requirement triggers the stop rule.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0b/verify-gate.ps1`.
 
 ## Time risks and planned splits

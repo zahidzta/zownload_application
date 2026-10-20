@@ -65,6 +65,14 @@ function Invoke-YtDlpMetadata([string[]]$arguments, [string]$label) {
     return $output
 }
 
+function Estimate-FormatBytes($format, [double]$duration, [string]$label) {
+    if ([double]$format.filesize -gt 0) { return [long][math]::Ceiling([double]$format.filesize) }
+    if ([double]$format.filesize_approx -gt 0) { return [long][math]::Ceiling([double]$format.filesize_approx) }
+    Assert-Fixture ([double]$format.tbr -gt 0 -and $duration -gt 0) "$label has no size or bitrate estimate"
+    # tbr is kilobits/s. Allow 50% for rate variation and HLS segment overhead.
+    return [long][math]::Ceiling([double]$format.tbr * $duration * 1000 / 8 * 1.5)
+}
+
 Assert-Fixture ($lock.schema -eq 1) 'unexpected schema version'
 Assert-Fixture ($lock.checkedOn -match '^\d{4}-\d{2}-\d{2}$') 'missing access date'
 Assert-Fixture ($lock.youtubeShort.url -eq "https://www.youtube.com/watch?v=$($lock.youtubeShort.id)") 'YouTube single URL changed'
@@ -120,6 +128,61 @@ foreach ($id in $lock.blenderPlaylist.videoIds) {
     Write-Output "OK Blender video $id`: available heights $($heights -join ',')"
 }
 Write-Output "OK YouTube playlist and mixed URL: $($lock.blenderPlaylist.id), 2 locked entries"
+
+$clipLock = $lock.natureclipVideoPlaylist
+Assert-Fixture ($clipLock.url -eq "https://www.youtube.com/playlist?list=$($clipLock.id)") 'NatureClip playlist URL changed'
+Assert-Fixture ($clipLock.entries.Count -ge 3) 'NatureClip playlist must lock at least three entries'
+Assert-Fixture ($clipLock.minDistinctVideoHeights -ge 2) 'NatureClip resolution requirement was weakened'
+Assert-Fixture ($clipLock.maxDurationSeconds -eq 20) 'NatureClip duration cap changed'
+Assert-Fixture ($clipLock.maxEstimatedBytesPerEntry -eq 524288) 'NatureClip size cap changed'
+$clipIndices = @($clipLock.entries | ForEach-Object { [int]$_.playlistIndex })
+Assert-Fixture (@($clipIndices | Select-Object -Unique).Count -eq $clipLock.entries.Count) 'NatureClip playlist positions are duplicated'
+$clipCommon = @('--ignore-config', '--quiet', '--no-warnings', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
+$clipFlatText = Invoke-YtDlpMetadata ($clipCommon + @('--flat-playlist', '--dump-single-json', '--', $clipLock.url)) 'NatureClip flat playlist'
+$clipFlat = ($clipFlatText | Out-String) | ConvertFrom-Json
+Assert-Fixture ($clipFlat.id -eq $clipLock.id -and $clipFlat.title -eq $clipLock.title) 'NatureClip playlist identity changed'
+foreach ($entry in $clipLock.entries) {
+    $index = [int]$entry.playlistIndex
+    Assert-Fixture ($index -ge 1 -and $index -le $clipFlat.entries.Count) "NatureClip entry $index is outside the playlist"
+    Assert-Fixture ($clipFlat.entries[$index - 1].id -eq $entry.id) "NatureClip entry $index changed identity"
+}
+$clipSelections = @{}
+foreach ($preset in @(@{ Name = 'Max'; Selector = 'bv*+ba/b' }, @{ Name = 'Min'; Selector = 'wv*+ba/w' })) {
+    $clipJsonText = Invoke-YtDlpMetadata ($clipCommon + @('--playlist-items', ($clipIndices -join ','),
+        '--skip-download', '-f', $preset.Selector, '--dump-single-json', '--', $clipLock.url)) "NatureClip $($preset.Name)"
+    $clipJson = ($clipJsonText | Out-String) | ConvertFrom-Json
+    Assert-Fixture ($clipJson.id -eq $clipLock.id -and $clipJson.entries.Count -eq $clipLock.entries.Count) "NatureClip $($preset.Name) selection changed playlist shape"
+    for ($i = 0; $i -lt $clipLock.entries.Count; $i++) {
+        $entry = $clipLock.entries[$i]
+        $video = $clipJson.entries[$i]
+        Assert-Fixture ($video.id -eq $entry.id -and [int]$video.playlist_index -eq [int]$entry.playlistIndex) "NatureClip $($preset.Name) entry order changed"
+        Assert-Fixture ($video.title -eq $entry.title -and $video.uploader -eq $clipLock.uploader) "NatureClip $($entry.id) title or creator changed"
+        Assert-Fixture ($video.license -eq $clipLock.license) "NatureClip $($entry.id) CC BY license changed"
+        Assert-Fixture ([double]$video.duration -gt 0 -and [double]$video.duration -le [double]$clipLock.maxDurationSeconds) "NatureClip $($entry.id) exceeds the duration cap"
+        $heights = @($video.formats | Where-Object { $_.vcodec -ne 'none' -and [int]$_.height -gt 0 } |
+            ForEach-Object { [int]$_.height } | Sort-Object -Unique)
+        Assert-Fixture ($heights.Count -ge [int]$clipLock.minDistinctVideoHeights) "NatureClip $($entry.id) offers only one video resolution"
+        $parts = @($video.requested_formats)
+        Assert-Fixture ($parts.Count -eq 2 -and $parts[0].vcodec -ne 'none' -and $parts[0].acodec -eq 'none' -and
+            $parts[1].vcodec -eq 'none' -and $parts[1].acodec -ne 'none') "NatureClip $($entry.id) lacks separate selected video and audio"
+        $estimatedBytes = [long]0
+        foreach ($part in $parts) {
+            Assert-Fixture (@('https', 'm3u8_native') -contains [string]$part.protocol) "NatureClip $($entry.id) selected a downloader protocol that may require FFmpeg network input"
+            $estimatedBytes += Estimate-FormatBytes $part ([double]$video.duration) "NatureClip $($entry.id) $($part.format_id)"
+        }
+        Assert-Fixture ($estimatedBytes -le [long]$clipLock.maxEstimatedBytesPerEntry) "NatureClip $($entry.id) $($preset.Name) estimate $estimatedBytes exceeds $($clipLock.maxEstimatedBytesPerEntry) bytes"
+        $clipSelections["$($preset.Name)-$($entry.id)"] = [pscustomobject]@{
+            Height = [int]$parts[0].height; AudioId = [string]$parts[1].format_id
+        }
+        Write-Output "OK NatureClip $($entry.playlistIndex) $($entry.id) $($preset.Name): heights $($heights -join ','), selected $($video.format_id) at $($parts[0].height)p, estimated $estimatedBytes bytes (limit $($clipLock.maxEstimatedBytesPerEntry))"
+    }
+}
+foreach ($entry in $clipLock.entries) {
+    $max = $clipSelections["Max-$($entry.id)"]
+    $min = $clipSelections["Min-$($entry.id)"]
+    Assert-Fixture ($max.Height -gt $min.Height -and $max.AudioId -eq $min.AudioId) "NatureClip $($entry.id) Max/Min heights or common audio changed"
+}
+Write-Output "OK NatureClip real playlist: $($clipLock.entries.Count) short CC BY entries, metadata only; no media downloaded"
 
 $audio = Read-Archive $lock.archiveAudio
 Assert-License $audio $lock.archiveAudio.license $lock.archiveAudio.id
