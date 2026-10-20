@@ -1,11 +1,19 @@
 # Third-party notices and Gate 0B redistribution plan
 
-Zownload's own source uses the [MIT License](../LICENSE). This audits the
-locked Gate 0B engine artifacts; no release package exists yet. Exact source
+Zownload's own source from task 0C-01B onward uses
+[GPL-3.0-or-later](../LICENSE). Copies of the earlier MIT-licensed history
+remain under MIT for people who received them; this change does not revoke
+those grants. The component licences below remain those components' own terms.
+This audits the locked Gate 0B engine artifacts; no release package exists yet. Exact source
 URLs and signatures are in [`engine-sources.md`](engine-sources.md), build
 commands in [`engine-builds.md`](engine-builds.md), and observations in
 [`license-audit.txt`](gates/evidence/0b/license-audit.txt). No engine binary
 or source archive is tracked by Git.
+
+The Gate 0B LGPL FFmpeg evidence below describes that exact desktop build.
+It is not a repo-wide LGPL-only requirement. The selected Android library
+has GPL components; its resolved package and corresponding-source inventory
+remain Gate 0C work before any distribution.
 
 For each release, ship a versioned bundle beside the installer/APK with the
 **verbatim** license texts below, exact corresponding source and patches,
