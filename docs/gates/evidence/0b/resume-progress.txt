@@ -1,0 +1,61 @@
+0B-19 — Partial resume and parseable progress (2026-10-20)
+
+Exact verification:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case resume-progress
+  Exit 0. Fixture preflight passed before media transfer. Pinned executable
+  SHA-256 checks passed: yt-dlp.exe 66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a,
+  qjs.exe bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83,
+  ffprobe.exe bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7,
+  ffmpeg.exe fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66.
+  Verbose logs identified yt-dlp stable@2026.08.19, QuickJS 2026-06-04
+  as the sole JS runtime and bundled yt_dlp_ejs 0.8.0.
+
+Fixture: Justin Cone, Building on the Past, CC BY 3.0, locked Archive item
+  https://archive.org/details/Justin_Cone_-_Building_On_The_Past_-_640x480
+  Metadata-only selection: best[height<=240] => format 0, ext mp4,
+  protocol https, duration 120 s. yt-dlp's HTTP downloader fetched
+  Justin_Cone_-_Building_On_The_Past_-_640x480_512kb.mp4 directly.
+  FFmpeg received no HTTPS input; ffprobe inspected the local final MP4.
+
+Exact option arrays and a reproduction command are in docs/ytdlp-commands.md.
+Both download attempts used --ignore-config --verbose --no-js-runtimes,
+--js-runtimes quickjs:<pinned qjs>, --no-playlist, -f best[height<=240],
+--continue --part --newline, the ZP1 progress template and the same output
+path. The first attempt additionally used --limit-rate 64K. The verifier
+stopped its process after the .part file exceeded 131,072 bytes.
+
+First attempt: process interrupted at 7.33 s with exit -1; only
+resume.mp4.part existed, containing 195,136 bytes. Its SHA-256 was
+74ed9cf299ca81145f8f904cdaefa6ab615218ce968f1dcc5a2fe088d9b81147.
+It emitted 7 parseable downloading progress lines. Representative line:
+  ZP1|Justin_Cone_-_Building_On_The_Past_-_640x480|downloading|130048|8632706
+
+Second attempt: exit 0 in 12.5 s; stdout reported exactly
+  [download] Resuming download at byte 195136
+The first resumed progress line counted from that offset:
+  ZP1|Justin_Cone_-_Building_On_The_Past_-_640x480|downloading|196160|8632706
+The final progress line was:
+  ZP1|Justin_Cone_-_Building_On_The_Past_-_640x480|finished|8632706|8632706
+All 18 resumed progress lines matched the five-field parser. The completed
+file's first 195,136 bytes had the same SHA-256 as the saved .part bytes;
+the .part file was gone after finalization. This and yt-dlp's byte-offset
+message demonstrate reuse of the partial file, rather than just a new
+complete transfer.
+
+Pinned ffprobe: MP4 container, one H.264 video stream at 360x240, one AAC
+audio stream, 119.986653 s, 8,632,706 bytes. Final SHA-256:
+50aba2b2044ffe094463fcd7b445652d6c968b4d9752d7dc069d9330444d8236.
+Normal [info]/[download] lines remained on stdout and [debug] diagnostics
+remained on stderr. The same --newline/progress-template options with the
+locked malformed input not-a-url exited 1; stderr retained:
+  ERROR: [generic] 'not-a-url' is not a valid URL
+No ZP1 record leaked into stderr or appeared for the failed input.
+
+An initial verifier run also exited 0 with a 260,613-byte partial and the
+same 8,632,706-byte final SHA-256. The interruption byte count varies with
+the polling moment; the fixed 131,072-byte threshold and prefix/offset
+checks are the reproducible criteria.
+
+Full stdout/stderr, ffprobe JSON and media from the exact run remain ignored:
+  work/engine/cli/resume-progress/20261020-081949/
+No media or full log is tracked in Git.

@@ -330,6 +330,45 @@ and [FFmpeg MP3 attached-picture documentation](https://ffmpeg.org/ffmpeg-all.ht
 describe the CLI behavior; the pinned runs above establish the outcome for
 these fixtures.
 
+## 0B-19 — Partial resume and parseable progress
+
+The verifier uses the locked Justin Cone Archive item, selects its direct
+360×240 MP4 (format `0`, 120 seconds), and throttles the first transfer to
+64 KiB/s. It stops the yt-dlp process as soon as `resume.mp4.part` reaches
+131,072 bytes, retaining the actual partial file. The second command uses the
+same output path and explicit `--continue --part`, without the rate limit.
+The exact commands assembled by the verifier are:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$out = Join-Path (Get-Location) 'work/engine/cli/resume-progress/manual'
+New-Item -ItemType Directory -Path $out -Force | Out-Null
+$url = 'https://archive.org/details/Justin_Cone_-_Building_On_The_Past_-_640x480'
+$common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$qjs", '--no-playlist')
+$template = 'download:ZP1|%(info.id)s|%(progress.status)s|%(progress.downloaded_bytes|0)d|%(progress.total_bytes,progress.total_bytes_estimate|0)d'
+$options = @('-f', 'best[height<=240]', '--continue', '--part', '--newline', '--progress-template', $template, '-o', (Join-Path $out 'resume.%(ext)s'))
+& $yt @common @options --limit-rate 64K -- $url # interrupt after resume.mp4.part reaches 131072 bytes
+& $yt @common @options -- $url
+& $yt @common --newline --progress-template $template -- 'not-a-url' # expected exit 1, ERROR on stderr
+```
+
+The automated interruption and exact verification are in
+`powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case resume-progress`.
+The `ZP1|id|status|downloaded_bytes|total_bytes` lines are isolated by prefix
+and parsed as five fields; all byte fields must be integers, and the ID and
+status must match the selected item and `downloading`/`finished`. Ordinary
+`[info]` and `[download]` lines remain on stdout, verbose diagnostics remain
+on stderr, and the malformed URL still produces its normal `ERROR:` line on
+stderr. The verifier checks the reported resume offset and compares SHA-256
+of the saved `.part` bytes with the same-length prefix of the final MP4. See
+[`resume-progress.txt`](gates/evidence/0b/resume-progress.txt) for the actual
+offset, progress samples, final stream inspection, hashes and ignored log path.
+
+The [yt-dlp download and progress options](https://github.com/yt-dlp/yt-dlp/blob/master/README.md#download-options)
+document `--continue`, `.part` files, the rate limit, `--newline` and progress
+templates. The pinned executable output supplies the version-specific proof.
+
 ## Gate 0B transport review for the command matrix
 
 The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
@@ -354,4 +393,5 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-16 bounded-height single | yt-dlp HTTP fetched the selected MP4; no FFmpeg merge was needed. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-17 AAC | yt-dlp HTTP fetched H.264 and Opus components; FFmpeg read two local `file:` inputs, copied video and encoded AAC audio. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-18 metadata/cover | yt-dlp HTTP fetched Archive MP3 and NatureClip media/thumbnail; PowerShell fetched Archive PNG. FFmpeg read local MP3, PNG and MP4 components; MP4 image embedding used mutagen. | No FFmpeg HTTPS dependency in passing probe |
-| 0B-19 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
+| 0B-19 resume/progress | yt-dlp's HTTP downloader fetched the direct Archive HTTPS MP4 on both attempts; FFmpeg inspected the final local file with ffprobe and was not a downloader. | No FFmpeg HTTPS dependency in passing probe |
+| 0B-20 errors | Check selected protocol and actual downloader when its required command runs. | Pending command-specific review |
