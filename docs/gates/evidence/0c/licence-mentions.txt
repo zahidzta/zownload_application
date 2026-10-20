@@ -1,0 +1,203 @@
+0C-01B complete literal MIT/LGPL mention inventory (2026-10-20)
+Command: rg -n 'MIT|LGPL' --hidden -g '!.git/**' -g '!LICENSE' -g '!docs/gates/evidence/0c/licence-mentions.txt' . | Sort-Object
+The output file itself is excluded to avoid self-reference; GNU LICENSE is excluded because it is verbatim source text.
+Historical facts and third-party licences are retained for context; this is a review list, not a list of errors.
+Match count: 197
+
+.\docs\engine-builds.md:202:## 0B-10 — Windows x64 LGPL FFmpeg configuration
+.\docs\engine-builds.md:258:The configure probe must report `License: LGPL version 2.1 or later` and enable
+.\docs\engine-builds.md:283:reported LGPL license. It lists enabled MP3/AAC/JPEG encoders, PNG decoder,
+.\docs\engine-builds.md:318:choose another LGPL-compliant relinking method. Rebuild and check the exact
+.\docs\engine-sources.md:110:| yt-dlp | [immutable 2026.08.19 release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.08.19), [tagged README licensing section](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/README.md#licensing), [tagged dependency licenses](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/THIRD_PARTY_LICENSES.txt), [tagged own license](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/LICENSE) | Release page publishes the archive, binary, and checksum-file SHA-256 values above. Its README calls the official PyInstaller executables GPLv3+ combined works, despite yt-dlp's own Unlicense. Preserve the complete platform-specific notices and corresponding-source obligations. The source tarball and Unix zipimport variant also include ISC Meriyah and MIT Astring. |
+.\docs\engine-sources.md:111:| yt-dlp-ejs | [yt-dlp 2026.08.19 dependency pin](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml), [ejs 0.8.0 release](https://github.com/yt-dlp/ejs/releases/tag/0.8.0), [PyPI artifact hashes and provenance](https://pypi.org/project/yt-dlp-ejs/0.8.0/), [tagged ejs license notes](https://github.com/yt-dlp/ejs/blob/0.8.0/README.md#licensing) | yt-dlp pins `yt-dlp-ejs==0.8.0` in both `default` and `pin` dependencies. Official standalone executables already bundle matching EJS; the separate source distribution and wheel preserve its provenance and allow later packaging inspection. The solver scripts include ISC Meriyah and MIT Astring. |
+.\docs\engine-sources.md:112:| QuickJS | [official 2026-06-04 download and MIT statement](https://bellard.org/quickjs/) | Only the upstream source tarball was acquired. No published SHA-256 was found on the official page; 0B-03 computed its hash and inspected the archive's MIT `LICENSE`. |
+.\docs\engine-sources.md:115:| LAME | [project's 3.100 source and published SHA-256](https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download), [project license notice](https://lame.sourceforge.io/license.txt) | FFmpeg documents `--enable-libmp3lame` as the external MP3 encoder requirement. LAME's encoder library is LGPL, but its old mpglib decoder is GPL. 0B-10 must prove that the decoder is absent from the linked build; otherwise stop the LGPL build. |
+.\docs\engine-sources.md:122:| Linux x64 | Official pinned `yt-dlp_linux` includes EJS; use the exact binary hash above. | Build `qjs` from the same source in 0B-06. | Later platform build from the same locked sources and LGPL configuration. |
+.\docs\engine-sources.md:123:| macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; its hash is attested from the signed checksum file. | Build native `qjs` separately on each host in 0B-07/08. | Later platform builds from the same locked sources and LGPL configuration. |
+.\docs\engine-sources.md:160:hash; its archive `LICENSE` contains the MIT grant. FFmpeg's value was computed
+.\docs\engine-sources.md:212:the project's current LGPL-compatible Android FFmpeg plan, so Android engine
+.\docs\engine-sources.md:50:    "license": "Unlicense (own code); ISC and MIT in packaged solver scripts",
+.\docs\engine-sources.md:62:    "license": "MIT",
+.\docs\engine-sources.md:71:    "license": "LGPL-2.1-or-later only if configuration and linked libraries pass 0B-10/12",
+.\docs\engine-sources.md:96:    "license": "LGPL for encoder library; GPL-only mpglib decoder must be excluded",
+.\docs\gates\evidence\0b\checkpoint.md:15:| LGPL-compatible FFmpeg and codecs | [Windows build and smoke encodes](ffmpeg-windows.txt) show FFmpeg 8.1.3 and ffprobe 8.1.3, `CONFIG_GPL=0`, `CONFIG_NONFREE=0`, `CONFIG_VERSION3=0`, no `--enable-gpl`/`--enable-nonfree`, encoder-only LAME 3.100 and zlib 1.3.2. Actual MP3 and AAC outputs are inspected below. |
+.\docs\gates\evidence\0b\checkpoint.md:16:| Notices and corresponding sources | [Redistribution audit](license-audit.txt), [notice and per-release source plan](../../../THIRD-PARTY-NOTICES.md). The official bundled yt-dlp binaries are GPL-3.0-or-later combined works; Zownload's own source remains MIT. Transitive source packaging, LGPL relinking materials and Microsoft runtime entitlement remain release obligations, not completed Gate 0B artifacts. |
+.\docs\gates\evidence\0b\ffmpeg-windows.txt:1:Gate 0B-11 — Windows x64 LGPL FFmpeg build
+.\docs\gates\evidence\0b\ffmpeg-windows.txt:34:CONFIG_VERSION3=0. FFmpeg configure reported "License: LGPL version 2.1 or
+.\docs\gates\evidence\0b\license-audit.txt:18:  Python PSF-2.0; bzip2 bzip2-1.0.6; libffi MIT; OpenSSL 1.x OpenSSL;
+.\docs\gates\evidence\0b\license-audit.txt:20:  mpdecimal BSD-2-Clause; zlib Zlib; Expat MIT;
+.\docs\gates\evidence\0b\license-audit.txt:23:  libuuid BSD-3-Clause; libintl LGPL-2.1-or-later;
+.\docs\gates\evidence\0b\license-audit.txt:24:  libidn2 LGPL-3.0-or-later; libidn2 Unicode data Unicode-TOU AND
+.\docs\gates\evidence\0b\license-audit.txt:25:  Unicode-DFS-2016; libunistring LGPL-3.0-or-later;
+.\docs\gates\evidence\0b\license-audit.txt:26:  curl-impersonate MIT; curl curl; BoringSSL Apache-2.0;
+.\docs\gates\evidence\0b\license-audit.txt:27:  nghttp2 MIT; ngtcp2 MIT; nghttp3 MIT; zstd BSD-3-Clause; brotli MIT;
+.\docs\gates\evidence\0b\license-audit.txt:28:  curl_cffi MIT; Tornado Apache-2.0; httpx BSD-3-Clause; cffi MIT-0;
+.\docs\gates\evidence\0b\license-audit.txt:31:  requests Apache-2.0; charset-normalizer MIT; idna BSD-3-Clause;
+.\docs\gates\evidence\0b\license-audit.txt:32:  urllib3 MIT; SecretStorage BSD-3-Clause; cryptography Apache-2.0;
+.\docs\gates\evidence\0b\license-audit.txt:33:  Jeepney MIT; websockets BSD-3-Clause; Meriyah ISC; Astring MIT.
+.\docs\gates\evidence\0b\license-audit.txt:53:contains the MIT LICENSE. Binary SHA-256 values and exact configuration:
+.\docs\gates\evidence\0b\license-audit.txt:69:Both actual executables report LGPL 2.1 or later and enable libmp3lame and
+.\docs\gates\evidence\0b\license-audit.txt:76:The source archives contain FFmpeg LGPL 2.1, LAME Library GPL 2-or-later
+.\docs\gates\evidence\0b\license-audit.txt:82:build configurations, source/binary checksums, and LGPL relinking materials.
+.\docs\gates\evidence\0c\architecture-decision.md:11:| Option | Licence consequence for today's MIT repo | Added work; what 0C still must prove | Main risk |
+.\docs\gates\evidence\0c\architecture-decision.md:13:| **A. Accept GPL-3.0 and use youtubedl-android** | Existing MIT code may retain its MIT notices, but distributing the combined Android app with the GPL-3.0 modules/GPL FFmpeg entails GPL-3.0 obligations for that distribution, including corresponding source and notices. The present MIT-only/LGPL-compatible release promise must change; exact distribution treatment needs legal review. | **~8–16 sessions:** audit packaged AAR and transitive sources/licences; adapt pinned QuickJS and matching yt-dlp/ejs; implement checksum-checked, idle-only update and post-acceptance rollback outside the tagged updater; document release source/build inputs. 0C must then prove arm64 MP3, JS execution, update/rollback and AC-30..35 on device. | GPL obligations and the library's unproved update/rollback may outweigh the adapter's convenience. |
+.\docs\gates\evidence\0c\architecture-decision.md:14:| **B. Own Android engine:** embedded Python, yt-dlp, QuickJS and own LGPL FFmpeg for arm64 | MIT application licence can remain if every bundled/transitive component passes its own licence audit and FFmpeg is built without GPL/nonfree flags, with LGPL source/build/notices supplied. | **~20–35 sessions:** package/bridge Python and yt-dlp/ejs; package the pinned QuickJS; reproducibly build arm64 LGPL FFmpeg with MP3 support; design process cancellation and verified updater/rollback; inventory all native dependencies. 0C still must prove these pieces together plus AC-30..35. | Native packaging, execution restrictions and update atomicity may exceed the 1–2 day spike. |
+.\docs\gates\evidence\0c\architecture-decision.md:15:| **C. MIT library candidate:** [`ffmpegkit-maintained/yt-dlp-android` v2.0.2](https://github.com/ffmpegkit-maintained/yt-dlp-android/releases/tag/v2.0.2) | The [tagged LICENSE](https://github.com/ffmpegkit-maintained/yt-dlp-android/blob/v2.0.2/LICENSE) is MIT. MIT posture remains **conditional** on an unverified audit of the published AAR and transitives; the library licence alone is insufficient. Own LGPL FFmpeg and its release obligations would still be needed. | **~12–24 sessions:** verify artifact provenance/licences, integrate a separate LGPL FFmpeg, pinned QuickJS/ejs, and build a safe yt-dlp update/rollback layer. 0C still must prove the complete engine and AC-30..35. | The candidate removes neither the FFmpeg build nor the updater problem; actual artifact contents are **UNVERIFIED**. |
+.\docs\gates\evidence\0c\architecture-decision.md:16:| **D. Postpone Android** | MIT posture and current desktop engine plan stay as written. | **~2–4 documentation/planning sessions now** to move the gate/checkpoint and record re-entry criteria; the original 0C device work remains later. Nothing in AC-30..35 is proved or waived. | Android feasibility remains unknown while later work proceeds. |
+.\docs\gates\evidence\0c\architecture-decision.md:25:| B | **185** (Android update mechanics for embedded Python), **348** (own native packaging), **372** (own engine), **386** (own Kotlin adapter), **753** (revised spike), **820** (obsolete library note). Keep **388, 627** MIT/LGPL rule. | Replace **0C-04** with own Python/FFmpeg package proof; expand **0C-05**, **0C-14** and **0C-16**; **0C-06** must use the new engine. Add source/build audit tasks before integration. |
+.\docs\gates\evidence\0c\architecture-decision.md:26:| C | **185** (Android update mechanics), **348, 372, 386** (new adapter/packaging), **753** (new spike), **820** (obsolete library note). Keep **388, 627** MIT/LGPL rule. | Replace **0C-04** with candidate AAR and separate FFmpeg audit; expand **0C-05**, **0C-14**, **0C-16**; **0C-06** must use the new pair. Add artifact/licence audit tasks first. |
+.\docs\gates\evidence\0c\architecture-decision.md:5:**Decision record (2026-10-20).** Use youtubedl-android under Option A and set the repo-wide licence to GPL-3.0-or-later (SPDX `GPL-3.0-or-later`). The owner states that they are the sole copyright holder. The repo-wide licence change is **PENDING** as separate task **0C-01B**, requiring owner review; do not change `LICENSE` or licence headers in this session. The Option A `PROJECT.md` revisions at lines **372, 388, 627, 753, 820** also await follow-up approval. Until 0C-01B resolves the current MIT/LGPL requirement conflict, this decision authorizes planning only, not library integration. Legal review before the first public release is **OPEN**.
+.\docs\gates\evidence\0c\architecture-decision.md:7:The [0C-01 audit](library-audit.md) found that youtubedl-android 0.18.1's [library and ffmpeg POMs](https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/library/0.18.1/library-0.18.1.pom) ([ffmpeg POM](https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/ffmpeg/0.18.1/ffmpeg-0.18.1.pom)) declare GPL-3.0; its tagged arm64 FFmpeg embeds `--enable-gpl`, x264 and x265. Its bundled yt-dlp/ejs/QuickJS versions differ from Gate 0B's pins, and its [updater](https://github.com/yausername/youtubedl-android/blob/d725d5c9a18c3a99a13ee0308bf78275dc310760/library/src/main/java/com/yausername/youtubedl_android/YoutubeDLUpdater.kt#L16-L108) does not establish checksum verification or rollback after an accepted bad update. [FFmpeg's licence checklist](https://ffmpeg.org/legal.html) explains the LGPL build constraint. The Gate 0C stop rule remains in force.
+.\docs\gates\evidence\0c\library-audit.md:25:- The inspected tagged arm64 executable embeds **`--enable-gpl`**, `--enable-version3`, `--enable-libmp3lame`, `--enable-libx264`, and `--enable-libx265`. That is direct evidence of a GPL FFmpeg configuration, despite the MP3 encoder's presence. The tagged [`BUILD_FFMPEG.md`](https://github.com/yausername/youtubedl-android/blob/d725d5c9a18c3a99a13ee0308bf78275dc310760/BUILD_FFMPEG.md) describes a Termux build without a Termux commit, FFmpeg source digest, complete dependency/source inventory, or the exact flags used for this binary. [FFmpeg's own license checklist](https://ffmpeg.org/legal.html) requires an LGPL build to omit `--enable-gpl` and `--enable-nonfree`, and calls out libx264. Thus the candidate's tagged FFmpeg **fails** the confirmed LGPL-compatible constraint in `PROJECT.md:388`. MP3 encoding has not been run on a device.
+.\docs\gates\evidence\0c\library-audit.md:48:- The [tagged repository license](https://github.com/yausername/youtubedl-android/blob/d725d5c9a18c3a99a13ee0308bf78275dc310760/LICENSE) and the versioned Maven [library POM](https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/library/0.18.1/library-0.18.1.pom) / [ffmpeg POM](https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/ffmpeg/0.18.1/ffmpeg-0.18.1.pom) identify GPL-3.0. This conflicts with the confirmed MIT/LGPL distribution plan (`PROJECT.md:388`). A release using these modules would require an owner-approved licensing/architecture change and a corresponding-source, build-configuration, and dependency-notices plan; this audit is not a legal opinion.
+.\docs\gates\evidence\0c\licence-compat.md:13:| `@tauri-apps/api` | 2.12.0 | Apache-2.0 OR MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:14:| `react` | 19.3.1 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:15:| `react-dom` | 19.3.1 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:16:| `zustand` | 5.0.15 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:17:| `@tailwindcss/vite` | 4.3.3 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:18:| `@tauri-apps/cli` | 2.12.0 | Apache-2.0 OR MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:19:| `@types/node` | 24.19.2 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:20:| `@types/react` | 19.3.0 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:21:| `@types/react-dom` | 19.3.0 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:22:| `@vitejs/plugin-react` | 6.1.2 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:23:| `tailwindcss` | 4.3.3 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:25:| `vite` | 8.3.4 | MIT | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:33:| `tauri-build` | 2.7.3 | Apache-2.0 OR MIT | [crates.io](https://crates.io/api/v1/crates/tauri-build/2.7.3) | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:34:| `serde` | 1.0.229 | MIT OR Apache-2.0 | [crates.io](https://crates.io/api/v1/crates/serde/1.0.229) | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:35:| `tauri` | 2.12.4 | Apache-2.0 OR MIT | [crates.io](https://crates.io/api/v1/crates/tauri/2.12.4) | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:36:| `serde_json` | 1.0.154 | MIT OR Apache-2.0 | [crates.io](https://crates.io/api/v1/crates/serde_json/1.0.154) | Compatible |
+.\docs\gates\evidence\0c\licence-compat.md:42:The full line-numbered `rg` inventory is [`licence-mentions.txt`](licence-mentions.txt). It includes historical Gate 0A/0B evidence, true third-party MIT/LGPL licences, old planning alternatives, and current requirements. The scan intentionally excludes its own output file and the verbatim GNU `LICENSE` text.
+.\docs\gates\evidence\0c\licence-compat.md:44:`PROJECT.md` lines **388, 627, 684, and 708** still state a repo MIT or LGPL-only release commitment; **751–752** state historical Gate 0A/B deliverables in those terms. Lines **370, 473–474** describe third-party or desktop build licences, which remain facts about those components. Gate 0C also flags **372, 753, and 820** for owner review of the Option A engine/update plan. `PROJECT.md` was not edited. The existing `docs/PROJECT-INDEX.md:11`, `docs/gates/evidence/0b/checkpoint.md:16`, and earlier state/decision records also retain historical wording, as shown in the inventory.
+.\docs\gates\evidence\0c\licence-compat.md:9:Licence values below come from the locked entries in [`package-lock.json`](../../../../package-lock.json), which record npm registry package metadata. Each listed value is compatible with GPL-3.0-or-later under the owner's stated MIT/Apache/BSD/ISC/MPL acceptance rule.
+.\docs\gates\gate-0a.md:130:| Legal and design inventory | `LICENSE` contains MIT text; `docs/THIRD-PARTY-NOTICES.md` provides the engine notice template. The hosted design check passed for all nine indexed, tracked PNG paths and dimensions. No production UI or download engine was added in Gate 0A. |
+.\docs\gates\gate-0a.md:61:### 0A-07 — MIT and third-party notice template
+.\docs\gates\gate-0a.md:63:- Goal: add the MIT license and a place to record redistributed engine/source notices later.
+.\docs\gates\gate-0a.md:67:- Acceptance: MIT text is complete; notice template has ffmpeg/QuickJS/yt-dlp source, version, checksum, license and build-configuration fields, without inventing releases.
+.\docs\gates\gate-0a.md:68:- Exact verification command: `rg -q 'MIT License' LICENSE` and `rg -q 'ffmpeg' docs/THIRD-PARTY-NOTICES.md`.
+.\docs\gates\gate-0b.md:109:### 0B-10 — LGPL ffmpeg configuration
+.\docs\gates\gate-0b.md:118:### 0B-11 — Windows LGPL ffmpeg build
+.\docs\gates\gate-0b.md:254:five QuickJS target builds, LGPL FFmpeg/license audit, each required CLI probe,
+.\docs\gates\gate-0b.md:6:- Strict deliverable: pinned yt-dlp, reproducible upstream QuickJS 2026-06-04 builds for Windows x64, Linux x64, macOS x64 and arm64, and Android arm64; an LGPL-compatible ffmpeg build and license proof; real CLI evidence and an exact command matrix in `docs/ytdlp-commands.md`. The Windows CLI probe uses the pinned redistributable artifacts. Android execution belongs to Gate 0C. No Tauri engine integration, production UI, release, or Android spike is part of this gate.
+.\docs\gates\gate-0c.md:30:3. **Bundled ffmpeg:** exact bundled artifact/version/architectures, native dependencies, build configuration, GPL redistribution and corresponding-source obligations, and whether required MP3 encoding works on arm64. The tagged GPL build conflicts with the current LGPL-compatible requirement in `PROJECT.md:388`; 0C-01B must resolve that document before integration.
+.\docs\gates\gate-0c.md:43:- Acceptance: versioned primary links and source evidence answer each assumption or name the missing proof; selected artifacts have a hash/provenance plan; no unsupported claim of update, rollback, JS, or LGPL ffmpeg.
+.\docs\gates\gate-0c.md:53:- Acceptance: the proposed repo-wide licence and requirement text match Option A, the owner has reviewed the change, and the current MIT/LGPL conflict is resolved before engine integration. No library is integrated in this task.
+.\docs\PROJECT-INDEX.md:11:5. Engine: yt-dlp, LGPL-compatible ffmpeg, upstream QuickJS 2026-06-04 (`368,370,388`).
+.\docs\STATE.md:3:- Current gate: Gate 0B accepted by the owner on 2026-10-20 after PR #45 merged. The owner approved the Gate 0C plan and selected Option A (youtubedl-android, repo-wide GPL-3.0-or-later) on 2026-10-20. Android integration remains blocked until owner-reviewed task 0C-01B resolves the existing `PROJECT.md` MIT/LGPL conflict and the pending repo-wide licence change.
+.\docs\STATE.md:39:- Completed 0B-03 on `task-0b-03` (2026-10-18, `1d71e5e`): acquired the pinned yt-dlp source and three desktop binaries, matching EJS source and wheel, upstream QuickJS and FFmpeg source, LAME source, yt-dlp checksum manifest, detached signatures and signer keys into ignored `work/engine/downloads/`. `docs/engine-sources.md` now locks the formerly unlisted macOS, QuickJS and FFmpeg SHA-256 values plus signature/key hashes and signer fingerprints; `docs/gates/evidence/0b/source-hashes.txt` attests all 14 files. `fetch-sources.ps1` downloads missing locked files, and `verify-downloads.ps1` checks all hashes, signed yt-dlp manifest entries and both detached signatures before later build/CLI use. QuickJS archive `LICENSE` was inspected as MIT. No engine was built or executed, and no binary or media was tracked (`1d71e5e`).
+.\docs\STATE.md:59:- Verification 0B-10: exact `powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -CheckConfiguration` exited 0. The offline verifier passed all 15 locked inputs and FFmpeg signature. Pinned GCC 16.2.0 (`x86_64-w64-mingw32`) and GNU Make 4.4.1 built static LAME SHA-256 `fa25a11fa88fd2cada753ccc8e8d59be1be69e2730fa872697958afeec8f7a30` and zlib SHA-256 `ed44fb031978eacc1a6baac366f53f8d0ad6ea16fb6635992659ec0e1f854e7f`. LAME `HAVE_MPGLIB` remained undefined and the archive had no GPL decoder objects. FFmpeg reported `License: LGPL version 2.1 or later`, with `CONFIG_GPL=0`, `CONFIG_NONFREE=0`, `CONFIG_VERSION3=0`; only `libmp3lame` and `zlib` were enabled as external libraries. Generated configuration enabled LAME MP3 and native AAC encoders, MP3/MOV/MP4 muxers, PNG decoder, MJPEG encoder, scaling and ffmpeg/ffprobe. All full logs and outputs remain ignored under `work/engine/build/ffmpeg/windows-x64/recipe/`; staged whitespace check passed. Earlier local attempts exposed PowerShell 5.1 native-stderr handling and a generated-Makefile whitespace mismatch, both fixed before the passing run.
+.\docs\STATE.md:60:- Completed 0B-11 on `task-0b-11` (2026-10-19, `8872134`): extended the locked FFmpeg recipe to build Windows x64 `ffmpeg.exe` and `ffprobe.exe` from a fresh extraction with pinned w64devkit GCC 16.2.0 and `make.exe -j2 V=1`. The script verifies built version, LGPL license and configuration, required codec/muxer/filter lists, MP3/MP4 smoke encodes and PE DLL imports. Full logs, binaries and smoke outputs remain ignored; exact commands and evidence are in `docs/engine-builds.md` and `docs/gates/evidence/0b/ffmpeg-windows.txt`.
+.\docs\STATE.md:61:- Verification 0B-11: exact `powershell -NoProfile -File scripts/gate-0b/build-ffmpeg.ps1 -Verify` exited 0. FFmpeg 8.1.3 SHA-256 `fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66` and ffprobe 8.1.3 SHA-256 `bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7` reported LGPL 2.1 or later, no GPL/nonfree/version3 configuration, and only Windows system DLL imports. A synthetic LAME MP3 probed as `mp3`; an MP4 encoded with native AAC probed as `mpeg4,aac`. LAME and zlib archive hashes vary across clean runs because pinned `ar.exe` stores build-time member timestamps; this run's hashes are recorded in the evidence. The initial quiet Make command produced `@printf` shell errors and the first license-text assertion missed a wrapped line; both were fixed before the passing fresh build. Staged whitespace check passed.
+.\docs\STATE.md:62:- Completed 0B-12 on `task-0b-12` (2026-10-19, `9aaa53e`): filled the redistribution notice and corresponding-source plan; added `scripts/gate-0b/verify-licenses.ps1` and `docs/gates/evidence/0b/license-audit.txt`. The audit inspected all three signed official yt-dlp PyInstaller binaries: their embedded notices have the same 45 license entries after newline normalization, and both EJS scripts match the locked wheel. It records the GPL-3.0-or-later effective yt-dlp binary license, QuickJS MIT source/license and five target hashes, LGPL-compatible FFmpeg plus LAME/zlib source/license evidence, MinGW-w64 runtime notices, and release packaging obligations. No binary/source archive was tracked.
+.\docs\STATE.md:63:- Verification 0B-12: exact `powershell -NoProfile -File scripts/gate-0b/verify-licenses.ps1` exited 0 after checking all 15 locked inputs/signatures, actual embedded notices, source license texts, Windows QuickJS/FFmpeg/ffprobe hashes, FFmpeg GPL/nonfree exclusions, LAME decoder exclusion, DLL imports, and documented source plan. Staged `git diff --cached --check` passed. The owner chose the existing source lock plus a per-release corresponding-source plan rather than separately locking every bundled yt-dlp dependency in Gate 0B. Before any release, package and checksum those dependency sources, LGPL relinking materials and full notices, and verify Microsoft runtime redistribution entitlement; the audit does not claim those release artifacts already exist.
+.\docs\STATE.md:7:- Completed 0A-07: MIT `LICENSE` and `docs/THIRD-PARTY-NOTICES.md` template (`ae318fc`). No engine artifacts or app scaffold were added by this task.
+.\docs\STATE.md:70:- Completed resumed 0B-14 on `task-0b-14` (2026-10-19, `c76fcbc`): the verifier now runs four independent yt-dlp downloads of the locked Commons Vorbis original, retains and hashes each downloaded WebM against the fixture lock, converts with the pinned LGPL-compatible FFmpeg/LAME build, and checks MP3 stream count, duration, bitrate and distinct output hashes with pinned ffprobe. The exact command matrix and full results are in `docs/ytdlp-commands.md` and `docs/gates/evidence/0b/mp3-singles.txt`. The earlier already-MP3 Archive finding remains recorded and unchanged.
+.\docs\STATE.md:8:- Verification 0A-07: both exact `rg -q` commands passed; all three notice sections contain source, version, checksum, license and build-configuration fields; staged whitespace check passed. MIT text was checked against OSI.
+.\docs\STATE.md:87:- **OPEN question — FFmpeg network input:** the pinned LGPL-compatible FFmpeg build cannot read `https://` input, as the 0B-16 short-section diagnostic recorded in `mp4.txt` showed. This may affect HLS/DASH cases where yt-dlp uses FFmpeg as the downloader. Gate 0B matrix review must check each required test's actual downloader and confirm FFmpeg only receives local inputs. Keep the current build; any rebuild with TLS first needs an owner licensing decision.
+.\docs\STATE.md:93:- Verification 0B-21: exact `powershell -NoProfile -File scripts/gate-0b/verify-gate.ps1` exited 0. It checked 27 local evidence links, all eight CLI cases, five QuickJS target hashes, locked Windows binaries and the offline redistribution audit (15 locked inputs, three yt-dlp inventories, EJS match and LGPL FFmpeg checks). Staged `git diff --cached --check` passed. This verifies the evidence package, not new media downloads or human playback. Gate 0C remains closed.
+.\docs\STATE.md:97:- Completed 0C-01 on `task-0c-01` (2026-10-20, `ed54fc2`): audited youtubedl-android `0.18.1` at upstream commit `d725d5c9a18c3a99a13ee0308bf78275dc310760` and the versioned Maven metadata. Tagged Kotlin source passes `--js-runtimes quickjs:<nativeLibraryDir>/libqjs.so` and sets `TMPDIR` to app cache, but device execution is unproved. The bundled Python zipapp contains yt-dlp `2025.11.12` and ejs `0.3.1`, while the bundled arm64 QuickJS contains a `2025-04-26` version string; these are not the project's locked `2026.08.19`/`0.8.0`/`2026-06-04` pair. The updater has no digest check, active-work exclusion, or demonstrated bad-update rollback. The `library` and `ffmpeg` Maven POMs both declare GPL-3.0; tagged arm64 FFmpeg `7.1.1` embeds `--enable-gpl`, x264/x265, and a Termux r28c build path. This conflicts with the confirmed MIT/LGPL-compatible distribution plan in `PROJECT.md:388`, so the Gate 0C hard stop is invoked before dependency integration. Candidate AAR and tagged native SHA-256 values, full FFmpeg configure flags, source/API links, and open device checks are in `docs/gates/evidence/0c/library-audit.md`; `docs/engine-sources.md` retains the Gate 0B lock unchanged. No app code, dependency, APK, or device run was added. Current Android documentation supports `dataSync` as a foreground-service type proposal, but the owner has not chosen a type.
+.\docs\STATE.md:99:- Completed 0C-01A on `task-0c-01a` (2026-10-20, `5a6b366`): wrote the two-page-maximum, 875-word owner memo at `docs/gates/evidence/0c/architecture-decision.md`. It compares accepting GPL-3.0/youtubedl-android, an owned Python/yt-dlp/QuickJS/LGPL-FFmpeg engine, an MIT-library candidate, and postponement; each has MIT-repo licence consequences, added ~30-minute task estimates, remaining 0C proof, main risk, exact conditional `PROJECT.md` lines and Gate 0C task edits. Tagged primary-source checks found the candidate's MIT LICENSE but no bundled FFmpeg or in-app updater; published AAR contents and future maintenance remain UNVERIFIED. No option was recommended or selected; no Android library, build, download, licence, or approved requirement changed.
+.\docs\THIRD-PARTY-NOTICES.md:13:The Gate 0B LGPL FFmpeg evidence below describes that exact desktop build.
+.\docs\THIRD-PARTY-NOTICES.md:14:It is not a repo-wide LGPL-only requirement. The selected Android library
+.\docs\THIRD-PARTY-NOTICES.md:28:| FFmpeg 8.1.3, LGPL-2.1-or-later | `ffmpeg.exe` `fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66`; `ffprobe.exe` `bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7` | `ffmpeg-8.1.3.tar.xz` `7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3`; ship `LICENSE.md`, `COPYING.LGPLv2.1` and source notices. |
+.\docs\THIRD-PARTY-NOTICES.md:33:The executables report LGPL version 2.1 or later. Their configuration has
+.\docs\THIRD-PARTY-NOTICES.md:4:[GPL-3.0-or-later](../LICENSE). Copies of the earlier MIT-licensed history
+.\docs\THIRD-PARTY-NOTICES.md:42:object files or another LGPL-compliant relinking method. The ignored recipe
+.\docs\THIRD-PARTY-NOTICES.md:49:QuickJS 2026-06-04 is MIT-licensed. Ship its unmodified source archive
+.\docs\THIRD-PARTY-NOTICES.md:5:remain under MIT for people who received them; this change does not revoke
+.\docs\THIRD-PARTY-NOTICES.md:87:and Astring MIT. Ship the EJS source, wheel `licenses/LICENSE`, and the
+.\docs\ytdlp-commands.md:476:  LGPL build. It is excluded from the passing command matrix.
+.\docs\ytdlp-commands.md:64:MP3 with the pinned LGPL-compatible ffmpeg and LAME build:
+.\package-lock.json:101:      "license": "MIT",
+.\package-lock.json:1012:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1032:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1052:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1072:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1092:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1112:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1129:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1146:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1163:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:1177:      "license": "MIT",
+.\package-lock.json:118:      "license": "MIT",
+.\package-lock.json:1187:      "license": "MIT",
+.\package-lock.json:1197:      "license": "MIT",
+.\package-lock.json:135:      "license": "MIT",
+.\package-lock.json:152:      "license": "MIT",
+.\package-lock.json:1547:      "license": "MIT",
+.\package-lock.json:1577:      "license": "MIT"
+.\package-lock.json:1594:      "license": "MIT",
+.\package-lock.json:1608:      "license": "MIT",
+.\package-lock.json:1627:      "license": "MIT",
+.\package-lock.json:1648:      "license": "MIT",
+.\package-lock.json:169:      "license": "MIT",
+.\package-lock.json:186:      "license": "MIT",
+.\package-lock.json:1931:      "license": "MIT",
+.\package-lock.json:1947:      "license": "MIT",
+.\package-lock.json:1967:      "license": "MIT",
+.\package-lock.json:1994:      "license": "MIT",
+.\package-lock.json:2008:      "license": "MIT",
+.\package-lock.json:2017:      "license": "MIT",
+.\package-lock.json:2030:      "license": "MIT",
+.\package-lock.json:206:      "license": "MIT",
+.\package-lock.json:2063:      "license": "MIT"
+.\package-lock.json:2080:      "license": "MIT"
+.\package-lock.json:2087:      "license": "MIT",
+.\package-lock.json:2101:      "license": "MIT",
+.\package-lock.json:2153:      "license": "MIT"
+.\package-lock.json:2160:      "license": "MIT",
+.\package-lock.json:2237:      "license": "MIT",
+.\package-lock.json:226:      "license": "MIT",
+.\package-lock.json:246:      "license": "MIT",
+.\package-lock.json:266:      "license": "MIT",
+.\package-lock.json:286:      "license": "MIT",
+.\package-lock.json:306:      "license": "MIT",
+.\package-lock.json:323:      "license": "MIT",
+.\package-lock.json:340:      "license": "MIT",
+.\package-lock.json:357:      "license": "MIT",
+.\package-lock.json:371:      "license": "MIT"
+.\package-lock.json:378:      "license": "MIT",
+.\package-lock.json:38:      "license": "MIT",
+.\package-lock.json:49:      "license": "MIT",
+.\package-lock.json:60:      "license": "MIT",
+.\package-lock.json:667:      "license": "MIT",
+.\package-lock.json:694:      "license": "MIT",
+.\package-lock.json:70:      "license": "MIT"
+.\package-lock.json:711:      "license": "MIT",
+.\package-lock.json:728:      "license": "MIT",
+.\package-lock.json:745:      "license": "MIT",
+.\package-lock.json:762:      "license": "MIT",
+.\package-lock.json:77:      "license": "MIT",
+.\package-lock.json:782:      "license": "MIT",
+.\package-lock.json:802:      "license": "MIT",
+.\package-lock.json:822:      "license": "MIT",
+.\package-lock.json:842:      "license": "MIT",
+.\package-lock.json:867:      "license": "MIT",
+.\package-lock.json:88:      "license": "MIT",
+.\package-lock.json:889:      "license": "MIT",
+.\package-lock.json:906:      "license": "MIT",
+.\package-lock.json:920:      "license": "MIT",
+.\package-lock.json:934:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:945:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:978:      "license": "Apache-2.0 OR MIT",
+.\package-lock.json:995:      "license": "Apache-2.0 OR MIT",
+.\PROJECT.md:370:| D-07 | JS runtime for yt-dlp: upstream **QuickJS 2026-06-04** on all platforms initially. Build reproducibly from the official source in CI for every desktop target and Android `arm64-v8a`; record source checksum and build commands. Do not depend on opaque third-party binaries. | `[CONFIRMED]` | MIT-licensed, meets yt-dlp's performance floor, one runtime/code path; Deno is unavailable on Android |
+.\PROJECT.md:388:| D-25 | Zownload source code uses the **MIT License**. Redistributed ffmpeg must remain LGPL-compatible: build without `--enable-gpl` and `--enable-nonfree`, pin exact source, preserve license/notices, publish corresponding source and build configuration with each release, and validate required codecs in Gate 0B. | `[CONFIRMED]` | Keeps the application permissively licensed while respecting ffmpeg redistribution obligations; this is a compliance plan, not legal advice |
+.\PROJECT.md:473:| LGPL-compatible ffmpeg build (no GPL/nonfree flags) | `[CONFIRMED]` | Audio extraction (mp3), merging, re-encoding, metadata/cover embedding; reproducible redistribution evidence required |
+.\PROJECT.md:474:| Upstream QuickJS 2026-06-04, reproducibly built from official source | `[CONFIRMED]` | MIT-licensed JS runtime for YouTube; light; meets the performance floor and compiles for Android |
+.\PROJECT.md:627:- **Licensing/compliance:** Zownload is MIT-licensed. Keep ffmpeg LGPL-compatible (`--enable-gpl` and `--enable-nonfree` forbidden), preserve third-party notices, publish the exact corresponding ffmpeg/QuickJS source, checksums and build configuration with releases, and verify every bundled dependency's effective license. `[CONFIRMED]`
+.\PROJECT.md:684:- AC-36: Release compliance evidence contains the MIT license, all third-party notices, exact ffmpeg/QuickJS versions and checksums, reproducible build commands, and corresponding source archives; the ffmpeg configuration contains neither `--enable-gpl` nor `--enable-nonfree`.
+.\PROJECT.md:708:| 11 | ~~Project/ffmpeg licensing.~~ **Resolved:** Zownload MIT; LGPL-compatible ffmpeg without GPL/nonfree flags; publish notices, exact source and build configuration (D-25). Required codecs still need Gate 0B verification. | Gate 0B verification | — |
+.\PROJECT.md:751:| **0A — Reproducible foundation** | Follow `docs/gates/gate-0a.md`. Scaffold Tauri 2 + React/TypeScript/Vite; integrate both contract files; configure Tailwind and Zustand only; initialize Android project; select and pin exact Tauri/Rust/Node/package-manager/JDK/NDK/SDK versions; commit lockfiles/wrappers; add MIT license, third-party notice template, `AGENTS.md`, `opencode.json`, and a CI skeleton. Preserve and validate the `docs/design/README.md` inventory, but implement no production UI. | Record all tool versions and setup commands in `docs/toolchain.md`; clean checkout builds/type-checks on Windows; Rust contract compiles; frontend type-checks; Android skeleton compiles; CI repeats the checks. Verify TypeScript/Rust contract JSON fixtures match and every indexed design path exists. | Reproducible empty application and contracts are accepted. Toolchain/version uncertainty is closed before feature work; design references are intact and remain unimplemented. |
+.\PROJECT.md:752:| **0B — Real CLI and licensing proof** | Obtain pinned yt-dlp; reproducibly build upstream QuickJS 2026-06-04 and LGPL-compatible ffmpeg; write the exact command matrix in `docs/ytdlp-commands.md`. Test singles/playlists, mp3 presets, mp4 Max/Min, metadata/cover conversion, AAC compatibility, partial resume, progress output and representative errors. No Tauri engine integration. | Save command output and produced-file inspection results; play MP3/MP4 in common players; inspect metadata; verify ffmpeg configuration excludes GPL/nonfree flags and required MP3/AAC features work; record source URLs, versions and SHA-256 checksums. | Every required CLI capability works with redistributable binaries. If not, stop and revise formats/licensing/engine assumptions. |
+.\README.md:9:Copies of the repository's earlier MIT-licensed history remain available under the MIT terms to people who received those versions. This change does not revoke those grants.
+.\scripts\gate-0b\build-ffmpeg.ps1:1:# Configure, build and inspect the locked LGPL FFmpeg recipe on Windows x64.
+.\scripts\gate-0b\build-ffmpeg.ps1:139:Assert-Recipe ($configLog -match '(?m)^License: LGPL version 2\.1 or later\r?$') 'FFmpeg did not report LGPL-2.1-or-later'
+.\scripts\gate-0b\build-ffmpeg.ps1:172:Write-Output 'License: LGPL version 2.1 or later (configured)'
+.\scripts\gate-0b\build-ffmpeg.ps1:194:                   $license -match 'version 2\.1') "built binary did not report LGPL-2.1-or-later: $exe"
+.\scripts\gate-0b\build-ffmpeg.ps1:235:Write-Output 'Binary license: LGPL version 2.1 or later; GPL/nonfree/version3 options absent'
+.\scripts\gate-0b\verify-gate.ps1:79:# hashes, LGPL flags, codec inventory and notice/source obligations.
+.\scripts\gate-0b\verify-licenses.ps1:156:    Assert-License ($licenseCode -eq 0 -and $licenseFlat -match 'Lesser General Public License' -and $licenseFlat -match 'version 2\.1 of the License, or .*any later version') "LGPL license output missing from $exe"
+.\scripts\gate-0b\verify-licenses.ps1:205:Write-Output 'Gate 0B license audit passed: 15 locked inputs, 3 yt-dlp inventories, EJS wheel match, source texts, QuickJS, LGPL FFmpeg/ffprobe, LAME decoder exclusion, notices and release plan.'
+.\scripts\gate-0b\verify-licenses.ps1:43:Assert-License ($quickLicense -match 'Permission is hereby granted, free of charge') 'QuickJS MIT text is missing'
+.\scripts\gate-0b\verify-licenses.ps1:44:$ffLicense = Read-ArchiveText (Join-Path $downloads 'ffmpeg-8.1.3.tar.xz') 'ffmpeg-8.1.3/COPYING.LGPLv2.1'
+.\scripts\gate-0b\verify-licenses.ps1:45:Assert-License ($ffLicense -match 'GNU LESSER GENERAL PUBLIC LICENSE') 'FFmpeg LGPL 2.1 text is missing'
