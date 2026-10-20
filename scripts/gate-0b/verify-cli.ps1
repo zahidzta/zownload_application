@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')]
     [string]$Case
 )
 
@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')) {
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')) {
     Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
@@ -52,7 +52,7 @@ function Stop-EngineChildren([int]$parentId) {
     }
 }
 
-function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds) {
+function New-EngineStartInfo([string]$name, [string[]]$arguments) {
     # Windows PowerShell 5.1 has no ProcessStartInfo.ArgumentList. Every argument
     # here is a controlled option, local path or locked URL; quote each one so
     # the mixed URL's ampersand and paths with spaces survive Windows parsing.
@@ -68,8 +68,12 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
     $start.RedirectStandardError = $true
     $start.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
     $start.StandardErrorEncoding = New-Object System.Text.UTF8Encoding($false)
+    return $start
+}
+
+function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds, [bool]$allowFailure = $false) {
     $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $start
+    $process.StartInfo = New-EngineStartInfo $name $arguments
     $clock = [Diagnostics.Stopwatch]::StartNew()
     try {
         if (-not $process.Start()) { throw "Could not start $ytDlp" }
@@ -92,10 +96,56 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
         $status = if ($finished -and $clock.Elapsed.TotalSeconds -lt $timeoutSeconds) { $process.ExitCode } else { 'timeout' }
         Write-Host "$name`: exit=$status elapsed=$([math]::Round($clock.Elapsed.TotalSeconds, 2))s"
         if ($status -eq 'timeout') { throw "$name timed out after $timeoutSeconds seconds; see $runDir" }
-        if ($process.ExitCode -ne 0) { throw "$name exited $($process.ExitCode); see $runDir" }
-        return [pscustomobject]@{ Stdout = $stdout; Stderr = $stderr; Seconds = $clock.Elapsed.TotalSeconds }
+        if ($process.ExitCode -ne 0 -and -not $allowFailure) { throw "$name exited $($process.ExitCode); see $runDir" }
+        return [pscustomobject]@{ Stdout = $stdout; Stderr = $stderr; Seconds = $clock.Elapsed.TotalSeconds; ExitCode = $process.ExitCode }
     }
     finally { $process.Dispose() }
+}
+
+function Invoke-InterruptedEngine([string]$name, [string[]]$arguments, [string]$partPath, [int]$minimumBytes, [int]$timeoutSeconds) {
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = New-EngineStartInfo $name $arguments
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        if (-not $process.Start()) { throw "Could not start $ytDlp" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        while ($clock.Elapsed.TotalSeconds -lt $timeoutSeconds) {
+            if ($process.HasExited) { throw "$name finished before a partial file could be interrupted; see $runDir" }
+            if ((Test-Path -LiteralPath $partPath -PathType Leaf) -and
+                (Get-Item -LiteralPath $partPath).Length -ge $minimumBytes) { break }
+            Start-Sleep -Milliseconds 200
+        }
+        if ($clock.Elapsed.TotalSeconds -ge $timeoutSeconds) { throw "$name did not produce $minimumBytes partial bytes within $timeoutSeconds seconds" }
+        Stop-EngineChildren $process.Id
+        if (-not $process.HasExited) { $process.Kill() }
+        $process.WaitForExit(5000) | Out-Null
+        Assert-Shape ([Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), 5000)) "$name output pipes remained open"
+        [IO.File]::WriteAllText((Join-Path $runDir "$name.stdout.txt"), $stdoutTask.Result, (New-Object System.Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText((Join-Path $runDir "$name.stderr.txt"), $stderrTask.Result, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "$name`: interrupted after $([math]::Round($clock.Elapsed.TotalSeconds, 2))s, exit=$($process.ExitCode)"
+        return [pscustomobject]@{ Stdout = $stdoutTask.Result; Stderr = $stderrTask.Result; ExitCode = $process.ExitCode }
+    }
+    finally {
+        if (-not $process.HasExited) {
+            Stop-EngineChildren $process.Id
+            $process.Kill()
+            $process.WaitForExit(5000) | Out-Null
+        }
+        $process.Dispose()
+    }
+}
+
+function Read-ProgressLines([string]$stdout, [string]$name, [string]$expectedId) {
+    $lines = @($stdout -split '\r?\n' | Where-Object { $_ -like 'ZP1|*' })
+    Assert-Shape ($lines.Count -gt 0) "$name has no templated progress lines"
+    $parsed = @()
+    foreach ($line in $lines) {
+        Assert-Shape ($line -match '^ZP1\|(?<id>[A-Za-z0-9_-]+)\|(?<status>downloading|finished)\|(?<downloaded>\d+)\|(?<total>\d+)\r?$') "$name has an unparseable progress line: $line"
+        Assert-Shape ($Matches.id -eq $expectedId) "$name progress names the wrong item"
+        $parsed += [pscustomobject]@{ Status = $Matches.status; Downloaded = [int64]$Matches.downloaded; Total = [int64]$Matches.total }
+    }
+    return $parsed
 }
 
 function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [double]$duration, [double]$durationTolerance = 2) {
@@ -115,7 +165,7 @@ function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [do
     Write-Output "$name`: video=$($video[0].codec_name) $($video[0].width)x$($video[0].height) audio=$($audio[0].codec_name) duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
 }
 
-if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4, aac or metadata' }
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist, mp4, aac, metadata or resume-progress' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -128,9 +178,75 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata')) {
+if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4', 'aac', 'metadata', 'resume-progress')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'resume-progress') {
+    $fixture = $fixtures.archiveVideo
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs", '--no-playlist')
+    $selector = 'best[height<=240]'
+    $selected = Invoke-Engine 'selection' ($common + @('--skip-download', '-f', $selector,
+        '--print', '%(id)s|%(format_id)s|%(ext)s|%(protocol)s|%(duration)s', '--', $fixture.url)) 180
+    Assert-Runtime $selected 'selection'
+    $fields = $selected.Stdout.Trim() -split '\|'
+    Assert-Shape ($fields.Count -eq 5 -and $fields[0] -eq $fixture.id -and $fields[2] -eq 'mp4' -and
+        $fields[3] -eq 'https' -and [double]$fields[4] -ge 110) 'resume fixture no longer selects a direct MP4'
+    $output = Join-Path $runDir 'resume.mp4'
+    $part = "$output.part"
+    $template = 'download:ZP1|%(info.id)s|%(progress.status)s|%(progress.downloaded_bytes|0)d|%(progress.total_bytes,progress.total_bytes_estimate|0)d'
+    $options = @('-f', $selector, '--continue', '--part', '--newline', '--progress-template', $template,
+        '-o', (Join-Path $runDir 'resume.%(ext)s'))
+    $interrupted = Invoke-InterruptedEngine 'interrupted' ($common + $options + @('--limit-rate', '64K', '--', $fixture.url)) $part 131072 180
+    Assert-Runtime $interrupted 'interrupted'
+    Assert-Shape ((Test-Path -LiteralPath $part -PathType Leaf) -and -not (Test-Path -LiteralPath $output)) 'interruption did not leave only a .part file'
+    $partial = [IO.File]::ReadAllBytes($part)
+    Assert-Shape ($partial.Length -ge 131072) 'interrupted partial file is too small'
+    $initialProgress = @(Read-ProgressLines $interrupted.Stdout 'interrupted' $fixture.id)
+    Assert-Shape (@($initialProgress | Where-Object Status -eq 'downloading').Count -gt 0) 'interrupted download did not report progress'
+    Assert-Shape ($interrupted.Stderr -notmatch '(?m)^ERROR:|^ZP1\|') 'interrupted download stderr contains an error or progress line'
+
+    $resumed = Invoke-Engine 'resumed' ($common + $options + @('--', $fixture.url)) 300
+    Assert-Runtime $resumed 'resumed'
+    Assert-Shape ($resumed.Stdout -match 'Resuming download at byte ([0-9]+)') 'yt-dlp did not report reusing partial bytes'
+    $resumeOffset = [int64]$Matches[1]
+    Assert-Shape ($resumeOffset -ge 131072 -and $resumeOffset -le $partial.Length) 'reported resume offset disagrees with saved partial file'
+    $resumeProgress = @(Read-ProgressLines $resumed.Stdout 'resumed' $fixture.id)
+    Assert-Shape (@($resumeProgress | Where-Object Status -eq 'downloading').Count -gt 0 -and
+        @($resumeProgress | Where-Object Status -eq 'finished').Count -gt 0) 'resumed download lacks download/finish progress events'
+    Assert-Shape (@($resumeProgress | Where-Object { $_.Downloaded -ge $resumeOffset }).Count -gt 0) 'progress bytes never reached the resume offset'
+    Assert-Shape ($resumed.Stdout -match '(?m)^\[download\] Destination: ' -and $resumed.Stderr -match '(?m)^\[debug\] ') 'normal output or diagnostics were lost'
+    Assert-Shape ($resumed.Stderr -notmatch '(?m)^ZP1\||^ERROR:') 'resumed stderr contains progress or an error'
+    Assert-Shape ((Test-Path -LiteralPath $output -PathType Leaf) -and -not (Test-Path -LiteralPath $part)) 'resume did not finalize the MP4'
+    $complete = [IO.File]::OpenRead($output)
+    try {
+        Assert-Shape ($complete.Length -gt $partial.Length) 'completed file did not grow beyond the partial file'
+        $finalLength = $complete.Length
+        $prefix = New-Object byte[] $partial.Length
+        $readCount = 0
+        while ($readCount -lt $prefix.Length) {
+            $count = $complete.Read($prefix, $readCount, $prefix.Length - $readCount)
+            Assert-Shape ($count -gt 0) 'could not read completed prefix'
+            $readCount += $count
+        }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            $partialHash = [BitConverter]::ToString($sha.ComputeHash($partial)).Replace('-', '').ToLowerInvariant()
+            $prefixHash = [BitConverter]::ToString($sha.ComputeHash($prefix)).Replace('-', '').ToLowerInvariant()
+        } finally { $sha.Dispose() }
+        Assert-Shape ($partialHash -eq $prefixHash) 'completed file does not retain the saved partial bytes'
+    } finally { $complete.Dispose() }
+    Assert-Mp4 $output 'resume' 360 240 120
+    $errorProbe = Invoke-Engine 'invalid-with-template' ($common + @('--newline', '--progress-template', $template,
+        '--', $fixtures.invalidInput)) 60 $true
+    Assert-Shape ($errorProbe.ExitCode -ne 0 -and $errorProbe.Stderr -match '(?m)^ERROR: ' -and
+        $errorProbe.Stdout -notmatch '(?m)^ZP1\|') 'progress options masked or corrupted a CLI error'
+    Write-Output "resume: format=$($fields[1]) interrupted=$($partial.Length) bytes offset=$resumeOffset bytes progress=$($initialProgress.Count)+$($resumeProgress.Count) lines"
+    Write-Output "partial-prefix sha256=$partialHash final bytes=$finalLength sha256=$((Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant())"
+    Write-Output "invalid input with progress options: exit=$($errorProbe.ExitCode), ERROR line retained on stderr"
+    Write-Output "Full stdout/stderr, ffprobe JSON and MP4 output: $runDir (ignored)"
+    return
 }
 
 if ($Case -eq 'metadata') {
