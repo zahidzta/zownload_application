@@ -135,9 +135,12 @@ if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4')) {
 
 if ($Case -eq 'mp4') {
     $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
-    $playlistUrl = $fixtures.blenderPlaylist.url
-    $playlistIndices = '2,3'
-    $expectedIds = @($fixtures.blenderPlaylist.videoIds)
+    $playlist = $fixtures.natureclipVideoPlaylist
+    $playlistUrl = $playlist.url
+    $entries = @($playlist.entries)
+    Assert-Shape ($entries.Count -eq 3) 'NatureClip fixture must lock exactly three MP4 entries'
+    $playlistIndices = (@($entries | ForEach-Object { [int]$_.playlistIndex }) -join ',')
+    $expectedIds = @($entries | ForEach-Object { $_.id })
     $selections = @{}
     foreach ($quality in @(@{ Name = 'max'; Selector = 'bv*+ba/b' },
             @{ Name = 'min'; Selector = 'wv*+ba/w' })) {
@@ -148,16 +151,16 @@ if ($Case -eq 'mp4') {
             '--', $playlistUrl)) 180
         Assert-Runtime $selection "$name-selection"
         $lines = @($selection.Stdout -split '\r?\n' | Where-Object { $_ -ne '' })
-        Assert-Shape ($lines.Count -eq 2) "$name selection did not yield exactly two playlist entries"
-        for ($i = 0; $i -lt 2; $i++) {
+        Assert-Shape ($lines.Count -eq $entries.Count) "$name selection did not yield exactly $($entries.Count) playlist entries"
+        for ($i = 0; $i -lt $entries.Count; $i++) {
             $fields = $lines[$i] -split '\|'
-            Assert-Shape ($fields.Count -eq 6 -and $fields[0] -eq [string]($i + 2) -and $fields[1] -eq $expectedIds[$i]) "$name playlist order or identity changed"
+            Assert-Shape ($fields.Count -eq 6 -and $fields[0] -eq [string]$entries[$i].playlistIndex -and $fields[1] -eq $expectedIds[$i]) "$name playlist order or identity changed"
             Assert-Shape ($fields[2] -match '^([^+]+)\+([^+]+)$' -and [int]$fields[3] -gt 0 -and [int]$fields[4] -gt 0) "$name entry $($fields[1]) lacks separate video/audio formats or dimensions"
             $selections["$name-$($fields[1])"] = [pscustomobject]@{
                 FormatId = $fields[2]; VideoId = $Matches[1]; AudioId = $Matches[2]
                 Height = [int]$fields[3]; Width = [int]$fields[4]; Duration = [double]$fields[5]
             }
-            Write-Output "$name selection entry $($i + 2): id=$($fields[1]) format=$($fields[2]) $($fields[4])x$($fields[3]) duration=$($fields[5])s"
+            Write-Output "$name selection entry $($entries[$i].playlistIndex): id=$($fields[1]) format=$($fields[2]) $($fields[4])x$($fields[3]) duration=$($fields[5])s"
         }
     }
     foreach ($id in $expectedIds) {
@@ -182,7 +185,7 @@ if ($Case -eq 'mp4') {
             Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "$name MP4 is missing for $id"
             Assert-Mp4 $output "$name-$id" $selected.Width $selected.Height $selected.Duration
         }
-        Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -Filter '*.mp4' -File).Count -eq 2) "$name did not produce exactly two MP4 files"
+        Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -Filter '*.mp4' -File).Count -eq $entries.Count) "$name did not produce exactly $($entries.Count) MP4 files"
     }
 
     $singleUrl = $fixtures.archiveVideo.url

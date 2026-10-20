@@ -189,11 +189,45 @@ too slowly and hit the 600-second command bound at 46.3%; the verifier exited
 1 before Min or the bounded single. A short-section diagnostic could not use
 the pinned FFmpeg as a network downloader because that build lacks HTTPS
 input. The exact observations and ignored log locations are in
-[`mp4.txt`](gates/evidence/0b/mp4.txt). The MP4 acceptance criteria remain
-unverified. The owner approved 0B-16A, which locked the short NatureClip
+[`mp4.txt`](gates/evidence/0b/mp4.txt). The original probe did not meet MP4
+acceptance. The owner approved 0B-16A, which locked the short NatureClip
 playlist at positions 4, 6 and 7 in [`fixtures.md`](gates/evidence/0b/fixtures.md).
-The next 0B-16 session must update the verifier to use those three entries and
-rerun the unchanged Max/Min, bounded-height single, ffprobe and playback checks.
+The successful rerun below retains this stopped finding.
+
+## 0B-16 rerun — NatureClip MP4 Max/Min and bounded-height single
+
+The exact verifier command passed with pinned yt-dlp, QuickJS and FFmpeg:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp4
+```
+
+For `S` equal to `bv*+ba/b` (Max) and `wv*+ba/w` (Min), the verifier used
+these exact option sequences. `$yt`, `$qjs` and `$ff` resolve to the pinned
+paths above; `$out` is a fresh ignored directory for each preset.
+
+```powershell
+& $yt @common --playlist-items '4,6,7' --skip-download -f $S --print '%(playlist_index)s|%(id)s|%(format_id)s|%(height)s|%(width)s|%(duration)s' -- 'https://www.youtube.com/playlist?list=PL7EDEF163A9B185EF'
+& $yt @common --playlist-items '4,6,7' -f $S --merge-output-format mp4 --ffmpeg-location $ff -o "$out/%(id)s.%(ext)s" -- 'https://www.youtube.com/playlist?list=PL7EDEF163A9B185EF'
+```
+
+The bounded single used the locked Archive video URL with `H=240`. Its
+unbounded comparison selected 480p; the capped command selected 360×240.
+
+```powershell
+& $yt @common --no-playlist --skip-download -f 'bv*[height<=240]+ba/b[height<=240]' --print '%(id)s|%(format_id)s|%(height)s|%(width)s|%(duration)s' -- 'https://archive.org/details/Justin_Cone_-_Building_On_The_Past_-_640x480'
+& $yt @common --no-playlist --skip-download -f 'bv*+ba/b' --print '%(height)s' -- 'https://archive.org/details/Justin_Cone_-_Building_On_The_Past_-_640x480'
+& $yt @common --no-playlist -f 'bv*[height<=240]+ba/b[height<=240]' --merge-output-format mp4 --ffmpeg-location $ff -o "$out/%(id)s.%(ext)s" -- 'https://archive.org/details/Justin_Cone_-_Building_On_The_Past_-_640x480'
+```
+
+Max selected 1080p, 720p and 1080p video for the three playlist entries;
+Min selected 144p for all three and retained each Max audio format. Pinned
+ffprobe confirmed one video and one audio stream at each selected size in all
+seven MP4 files. VLC 3.0.24 played each past two seconds with video decoding
+enabled. The download trace shows yt-dlp `http` or `hlsnative` fetching media;
+all twelve FFmpeg merge inputs were local `file:` paths. Exact dimensions,
+codecs, hashes, timings and player positions are in
+[`mp4.txt`](gates/evidence/0b/mp4.txt).
 
 ## Gate 0B transport review for the command matrix
 
@@ -215,5 +249,6 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-13 analysis | Metadata extraction only; no media transfer or FFmpeg | No FFmpeg HTTPS dependency |
 | 0B-14 MP3 singles | yt-dlp fetches HTTPS original; FFmpeg reads the retained local WebM for MP3 conversion | No FFmpeg HTTPS dependency in passing probe |
 | 0B-15 MP3 playlist | yt-dlp fetches HTTPS WAV originals; FFmpeg reads local files for MP3 conversion | No FFmpeg HTTPS dependency in passing probe |
-| 0B-16 MP4 playlist rerun | Proposed NatureClip Max uses `https`; Min selects `m3u8_native` video and `https` audio. yt-dlp's native downloader must fetch both; FFmpeg must merge local files only. | Pending 0B-16 rerun and verbose-log confirmation |
-| 0B-16 bounded-height single, 0B-17 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
+| 0B-16 MP4 playlist rerun | yt-dlp HTTP fetched all six Max streams; its HLS native downloader fetched three Min video streams, and HTTP fetched three Min audio streams. FFmpeg merged local files only, with twelve `file:` inputs. | No FFmpeg HTTPS dependency in passing probe |
+| 0B-16 bounded-height single | yt-dlp HTTP fetched the selected MP4; no FFmpeg merge was needed. | No FFmpeg HTTPS dependency in passing probe |
+| 0B-17 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
