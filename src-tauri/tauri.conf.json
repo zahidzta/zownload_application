@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "Zownload",
-        "width": 800,
-        "height": 600
+        "title": "Zownload Android spike",
+        "width": 420,
+        "height": 700
       }
     ],
     "security": {
