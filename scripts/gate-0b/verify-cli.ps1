@@ -1,6 +1,6 @@
 # Gate 0B CLI probes. Later tasks add cases to this entrypoint.
 param(
-    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist')]
+    [ValidateSet('analyze', 'mp3-singles', 'mp3-playlist', 'mp4')]
     [string]$Case
 )
 
@@ -9,7 +9,7 @@ $ProgressPreference = 'SilentlyContinue'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $downloadDir = Join-Path $root 'work\engine\downloads'
-$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist')) {
+$runDir = if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4')) {
     Join-Path $root ('work\engine\cli\' + $Case + '\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 } else {
     Join-Path $root 'work\engine\cli\analyze'
@@ -43,6 +43,15 @@ function Assert-Runtime($result, [string]$name) {
     Assert-Shape ($result.Stderr -match 'yt_dlp_ejs-0\.8\.0') "$name did not detect bundled EJS 0.8.0"
 }
 
+function Stop-EngineChildren([int]$parentId) {
+    # The signed yt-dlp one-file executable can leave a child alive after its
+    # launcher exits; that child keeps redirected stdout/stderr pipes open.
+    foreach ($child in @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $parentId")) {
+        Stop-EngineChildren ([int]$child.ProcessId)
+        Stop-Process -Id ([int]$child.ProcessId) -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds) {
     # Windows PowerShell 5.1 has no ProcessStartInfo.ArgumentList. Every argument
     # here is a controlled option, local path or locked URL; quote each one so
@@ -67,22 +76,46 @@ function Invoke-Engine([string]$name, [string[]]$arguments, [int]$timeoutSeconds
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
         $finished = $process.WaitForExit($timeoutSeconds * 1000)
-        if (-not $finished) { $process.Kill(); $process.WaitForExit() }
+        $remainingMs = [int][math]::Max(0, $timeoutSeconds * 1000 - $clock.ElapsedMilliseconds)
+        $readsFinished = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), $remainingMs)
+        if (-not $finished -or -not $readsFinished) {
+            Stop-EngineChildren $process.Id
+            if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit(5000) | Out-Null }
+            $readsFinished = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), 5000)
+        }
         $clock.Stop()
+        if (-not $readsFinished) { throw "$name timed out and its output pipe remained open; see $runDir" }
         $stdout = $stdoutTask.Result
         $stderr = $stderrTask.Result
         [IO.File]::WriteAllText((Join-Path $runDir "$name.stdout.txt"), $stdout, (New-Object System.Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText((Join-Path $runDir "$name.stderr.txt"), $stderr, (New-Object System.Text.UTF8Encoding($false)))
-        $status = if ($finished) { $process.ExitCode } else { 'timeout' }
+        $status = if ($finished -and $clock.Elapsed.TotalSeconds -lt $timeoutSeconds) { $process.ExitCode } else { 'timeout' }
         Write-Host "$name`: exit=$status elapsed=$([math]::Round($clock.Elapsed.TotalSeconds, 2))s"
-        if (-not $finished) { throw "$name timed out after $timeoutSeconds seconds; see $runDir" }
+        if ($status -eq 'timeout') { throw "$name timed out after $timeoutSeconds seconds; see $runDir" }
         if ($process.ExitCode -ne 0) { throw "$name exited $($process.ExitCode); see $runDir" }
         return [pscustomobject]@{ Stdout = $stdout; Stderr = $stderr; Seconds = $clock.Elapsed.TotalSeconds }
     }
     finally { $process.Dispose() }
 }
 
-if (-not $Case) { throw 'Specify -Case analyze, mp3-singles or mp3-playlist' }
+function Assert-Mp4([string]$path, [string]$name, [int]$width, [int]$height, [double]$duration, [double]$durationTolerance = 2) {
+    Assert-Shape (Test-Path -LiteralPath $path -PathType Leaf) "$name output is missing"
+    $probeText = (& $ffprobe -v error -show_entries 'stream=codec_name,codec_type,width,height:format=format_name,duration,size' -of json -- $path | Out-String)
+    Assert-Shape ($LASTEXITCODE -eq 0) "ffprobe failed for $name"
+    [IO.File]::WriteAllText((Join-Path $runDir "$name.ffprobe.json"), $probeText, (New-Object System.Text.UTF8Encoding($false)))
+    $probe = $probeText | ConvertFrom-Json
+    $video = @($probe.streams | Where-Object { $_.codec_type -eq 'video' })
+    $audio = @($probe.streams | Where-Object { $_.codec_type -eq 'audio' })
+    Assert-Shape ($probe.format.format_name -match '(^|,)mp4(,|$)') "$name is not an MP4 container"
+    Assert-Shape ($video.Count -eq 1 -and $audio.Count -eq 1 -and $probe.streams.Count -eq 2) "$name needs one video and one audio stream"
+    Assert-Shape ($video[0].width -eq $width -and $video[0].height -eq $height) "$name video dimensions differ from selection"
+    Assert-Shape ($video[0].codec_name -ne 'none' -and $audio[0].codec_name -ne 'none') "$name has an unknown codec"
+    Assert-Shape ([math]::Abs([double]$probe.format.duration - $duration) -lt $durationTolerance) "$name duration differs from requested sample"
+    $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    Write-Output "$name`: video=$($video[0].codec_name) $($video[0].width)x$($video[0].height) audio=$($audio[0].codec_name) duration=$($probe.format.duration)s bytes=$($probe.format.size) sha256=$hash"
+}
+
+if (-not $Case) { throw 'Specify -Case analyze, mp3-singles, mp3-playlist or mp4' }
 
 $source = Read-Lock (Join-Path $root 'docs\engine-sources.md') 'source-lock'
 $fixtures = Read-Lock (Join-Path $root 'docs\gates\evidence\0b\fixtures.md') 'fixture-lock'
@@ -95,9 +128,86 @@ if ($source.ytDlp.ejsVersion -ne $source.ejs.version) { throw 'yt-dlp/EJS source
 if (-not $?) { throw 'Fixture preflight failed' }
 New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-if ($Case -in @('mp3-singles', 'mp3-playlist')) {
+if ($Case -in @('mp3-singles', 'mp3-playlist', 'mp4')) {
     Assert-Hash $ffprobe 'bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7'
     Assert-Hash (Join-Path $ffmpegDir 'ffmpeg.exe') 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+}
+
+if ($Case -eq 'mp4') {
+    $common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$quickJs")
+    $playlistUrl = $fixtures.blenderPlaylist.url
+    $playlistIndices = '2,3'
+    $expectedIds = @($fixtures.blenderPlaylist.videoIds)
+    $selections = @{}
+    foreach ($quality in @(@{ Name = 'max'; Selector = 'bv*+ba/b' },
+            @{ Name = 'min'; Selector = 'wv*+ba/w' })) {
+        $name = $quality.Name
+        $selection = Invoke-Engine "$name-selection" ($common + @('--playlist-items', $playlistIndices,
+            '--skip-download', '-f', $quality.Selector,
+            '--print', '%(playlist_index)s|%(id)s|%(format_id)s|%(height)s|%(width)s|%(duration)s',
+            '--', $playlistUrl)) 180
+        Assert-Runtime $selection "$name-selection"
+        $lines = @($selection.Stdout -split '\r?\n' | Where-Object { $_ -ne '' })
+        Assert-Shape ($lines.Count -eq 2) "$name selection did not yield exactly two playlist entries"
+        for ($i = 0; $i -lt 2; $i++) {
+            $fields = $lines[$i] -split '\|'
+            Assert-Shape ($fields.Count -eq 6 -and $fields[0] -eq [string]($i + 2) -and $fields[1] -eq $expectedIds[$i]) "$name playlist order or identity changed"
+            Assert-Shape ($fields[2] -match '^([^+]+)\+([^+]+)$' -and [int]$fields[3] -gt 0 -and [int]$fields[4] -gt 0) "$name entry $($fields[1]) lacks separate video/audio formats or dimensions"
+            $selections["$name-$($fields[1])"] = [pscustomobject]@{
+                FormatId = $fields[2]; VideoId = $Matches[1]; AudioId = $Matches[2]
+                Height = [int]$fields[3]; Width = [int]$fields[4]; Duration = [double]$fields[5]
+            }
+            Write-Output "$name selection entry $($i + 2): id=$($fields[1]) format=$($fields[2]) $($fields[4])x$($fields[3]) duration=$($fields[5])s"
+        }
+    }
+    foreach ($id in $expectedIds) {
+        $max = $selections["max-$id"]
+        $min = $selections["min-$id"]
+        Assert-Shape ($max.Height -gt $min.Height) "Max video is not taller than Min for $id"
+        Assert-Shape ($max.AudioId -eq $min.AudioId) "Min did not retain Max audio format for $id"
+    }
+    foreach ($quality in @(@{ Name = 'max'; Selector = 'bv*+ba/b' },
+            @{ Name = 'min'; Selector = 'wv*+ba/w' })) {
+        $name = $quality.Name
+        $outputDir = Join-Path $runDir $name
+        New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        $download = Invoke-Engine "$name-download" ($common + @('--playlist-items', $playlistIndices,
+            '-f', $quality.Selector, '--merge-output-format', 'mp4', '--ffmpeg-location', $ffmpegDir,
+            '-o', (Join-Path $outputDir '%(id)s.%(ext)s'), '--', $playlistUrl)) 600
+        Assert-Runtime $download "$name-download"
+        foreach ($id in $expectedIds) {
+            $selected = $selections["$name-$id"]
+            Assert-Shape ($download.Stdout.Contains("[info] ${id}: Downloading 1 format(s): $($selected.FormatId)")) "$name download format changed for $id"
+            $output = Join-Path $outputDir "$id.mp4"
+            Assert-Shape (Test-Path -LiteralPath $output -PathType Leaf) "$name MP4 is missing for $id"
+            Assert-Mp4 $output "$name-$id" $selected.Width $selected.Height $selected.Duration
+        }
+        Assert-Shape (@(Get-ChildItem -LiteralPath $outputDir -Filter '*.mp4' -File).Count -eq 2) "$name did not produce exactly two MP4 files"
+    }
+
+    $singleUrl = $fixtures.archiveVideo.url
+    $heightLimit = 240
+    $boundedSelector = "bv*[height<=$heightLimit]+ba/b[height<=$heightLimit]"
+    $singleSelection = Invoke-Engine 'single-selection' ($common + @('--no-playlist', '--skip-download',
+        '-f', $boundedSelector, '--print', '%(id)s|%(format_id)s|%(height)s|%(width)s|%(duration)s', '--', $singleUrl)) 180
+    Assert-Runtime $singleSelection 'single-selection'
+    $singleFields = $singleSelection.Stdout.Trim() -split '\|'
+    Assert-Shape ($singleFields.Count -eq 5 -and $singleFields[0] -eq $fixtures.archiveVideo.id -and [int]$singleFields[2] -gt 0 -and [int]$singleFields[2] -le $heightLimit) 'bounded single selection changed'
+    $unbounded = Invoke-Engine 'single-unbounded-selection' ($common + @('--no-playlist', '--skip-download',
+        '-f', 'bv*+ba/b', '--print', '%(height)s', '--', $singleUrl)) 180
+    Assert-Runtime $unbounded 'single-unbounded-selection'
+    Assert-Shape ([int]$unbounded.Stdout.Trim() -gt [int]$singleFields[2]) 'single fixture no longer demonstrates a height cap'
+    Write-Output "single selection: format=$($singleFields[1]) $($singleFields[3])x$($singleFields[2]) limit=$heightLimit; unbounded=$($unbounded.Stdout.Trim())"
+    $singleDir = Join-Path $runDir 'single-240'
+    New-Item -ItemType Directory -Path $singleDir -Force | Out-Null
+    $singleDownload = Invoke-Engine 'single-download' ($common + @('--no-playlist', '-f', $boundedSelector,
+        '--merge-output-format', 'mp4', '--ffmpeg-location', $ffmpegDir,
+        '-o', (Join-Path $singleDir '%(id)s.%(ext)s'), '--', $singleUrl)) 300
+    Assert-Runtime $singleDownload 'single-download'
+    Assert-Shape ($singleDownload.Stdout.Contains("[info] $($fixtures.archiveVideo.id): Downloading 1 format(s): $($singleFields[1])")) 'single download format changed'
+    Assert-Mp4 (Join-Path $singleDir "$($fixtures.archiveVideo.id).mp4") 'single-240' ([int]$singleFields[3]) ([int]$singleFields[2]) ([double]$singleFields[4])
+    Write-Output "Full stdout/stderr, ffprobe JSON and MP4 outputs: $runDir (ignored)"
+    return
 }
 
 if ($Case -eq 'mp3-playlist') {

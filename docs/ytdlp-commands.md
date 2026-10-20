@@ -152,3 +152,43 @@ were not tested on those already-MP3 sources. See
 input lock, hashes, durations, logs and playback result. The owner approved
 the separate non-MP3 fixture task 0B-15A, and the resumed 0B-15 probe above
 passed on that fixture.
+
+## 0B-16 — MP4 selection probe stopped
+
+The locked Blender playlist at positions 2 and 3 offers distinct Max and Min
+video heights. The metadata-only selection commands, repeated for S equal to
+`bv*+ba/b` and `wv*+ba/w`, are:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$common = @('--ignore-config', '--verbose', '--no-js-runtimes', '--js-runtimes', "quickjs:$qjs")
+& $yt @common --playlist-items '2,3' --skip-download -f $S --print '%(playlist_index)s|%(id)s|%(format_id)s|%(height)s|%(width)s|%(duration)s' -- 'https://www.youtube.com/playlist?list=PL6B3937A5D230E335'
+```
+
+For each playlist preset, the verifier then uses this full-download command:
+
+```powershell
+$ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Path
+$out = (Join-Path (Get-Location) 'work/engine/cli/mp4/manual/max')
+& $yt @common --playlist-items '2,3' -f 'bv*+ba/b' --merge-output-format mp4 --ffmpeg-location $ff -o "$out/%(id)s.%(ext)s" -- 'https://www.youtube.com/playlist?list=PL6B3937A5D230E335'
+```
+
+For Min, the selector is `wv*+ba/w` and the output directory is `min`. The
+planned bounded-height single uses `--no-playlist -f
+"bv*[height<=240]+ba/b[height<=240]" --merge-output-format mp4` with the
+locked `archive-video` URL. The exact verifier entrypoint is:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp4
+```
+
+On 2026-10-19 the Max playlist command completed entry 2 as a valid MP4 with
+VP9 1080p video and Opus audio. Entry 3's selected 1608p stream transferred
+too slowly and hit the 600-second command bound at 46.3%; the verifier exited
+1 before Min or the bounded single. A short-section diagnostic could not use
+the pinned FFmpeg as a network downloader because that build lacks HTTPS
+input. The exact observations and ignored log locations are in
+[`mp4.txt`](gates/evidence/0b/mp4.txt). The MP4 acceptance criteria remain
+unverified; a shorter, rights-documented real playlist is the proposed next
+fixture task, subject to owner review.

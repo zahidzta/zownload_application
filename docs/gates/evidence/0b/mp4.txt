@@ -1,0 +1,63 @@
+0B-16 STOP — MP4 Max/Min playlist and height selection (2026-10-19)
+
+Exact verification command from the repository root:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case mp4
+Exit status: 1. The read-only fixture preflight passed: both locked Blender
+videos remain members of the real 17-entry playlist and expose multiple video
+heights; the locked Archive single exposes distinct video resolutions. The
+verifier checked pinned yt-dlp stable@2026.08.19, QuickJS 2026-06-04, EJS
+0.8.0, ffmpeg and ffprobe SHA-256 values. All selection/download CLI logs
+identified only QuickJS as enabled.
+
+Pinned executable SHA-256:
+  yt-dlp.exe  66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  qjs.exe     bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+  ffmpeg.exe  fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe.exe bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+
+For each selector, the verifier ran a bounded metadata-only playlist probe
+with --playlist-items '2,3', --skip-download, -f <selector>, and --print of
+playlist index, ID, format ID, dimensions and duration. Both exited 0:
+
+  Entry  ID           Preset  Format   Dimensions  Duration  Audio ID
+  2      u9lj-c29dxI  Max     616+251  1920x1080  238 s     251
+  2      u9lj-c29dxI  Min     602+251   256x144   238 s     251
+  3      UXqq0ZvbOnk  Max     401+251  3840x1608  263 s     251
+  3      UXqq0ZvbOnk  Min     602+251   256x128   263 s     251
+
+The exact Max download invocation resolved $yt, $qjs, $ff and $out to the
+locked executable paths and an ignored fresh output directory:
+  & $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --playlist-items '2,3' -f 'bv*+ba/b' --merge-output-format mp4 --ffmpeg-location $ff -o "$out/%(id)s.%(ext)s" -- 'https://www.youtube.com/playlist?list=PL6B3937A5D230E335'
+
+It completed entry 2, then timed out after 600.06 seconds while downloading
+entry 3's selected 401 video stream. The 401 source was 106.28 MiB; the
+captured yt-dlp output reached 46.3% at about 23 KiB/s, with a roughly
+41-minute remaining estimate. Its partial file was 51,637,829 bytes at stop.
+This was a transfer timeout, not an FFmpeg merge or codec error. The signed
+media URL and full progress output remain in ignored logs.
+
+The completed entry 2 was inspected with pinned ffprobe 8.1.3, exit 0:
+  container: mov,mp4,m4a,3gp,3g2,mj2; video: VP9 1920x1080;
+  audio: Opus; duration: 237.934 s; size: 59,360,066 bytes;
+  SHA-256: d2b2339c0fd0623d7f02839c0a86b0238761379e1e2e3c2c396bfda99d92d36b
+No common-player check was run after the playlist timeout. Neither Min
+download nor the bounded-height Archive single was reached. The 0B-16
+acceptance criteria are not met.
+
+Diagnostic transport probes, not accepted as 0B-16 verification:
+  * A direct selected-format 401 retry using yt-dlp --http-chunk-size 10M
+    stayed near 56 KiB/s with about 30 minutes estimated remaining; it was
+    stopped. No format, source, binary or runtime was substituted.
+  * A 12-second --download-sections sample of the same playlist was tried
+    with the pinned ffmpeg. The CLI exited 1 at entry 3 because that static
+    FFmpeg build has no HTTPS input protocol: "https or dtls protocol not
+    found, recompile FFmpeg with openssl, gnutls or securetransport enabled."
+    This option calls FFmpeg as the network downloader, unlike the normal
+    yt-dlp download followed by local merge. It is not a viable bounded
+    sample command with the pinned build; the verifier was restored to the
+    full-download command. No alternate FFmpeg build was used.
+
+Ignored files:
+  work/engine/cli/mp4/20261019-182848/ (first full command and partial media)
+  work/engine/cli/mp4/20261019-184604/ (diagnostic section command)
+  work/engine/cli/mp4-console.txt, mp4-console-rerun.txt, mp4-chunk-probe.txt
