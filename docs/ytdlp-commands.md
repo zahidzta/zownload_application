@@ -190,5 +190,30 @@ too slowly and hit the 600-second command bound at 46.3%; the verifier exited
 the pinned FFmpeg as a network downloader because that build lacks HTTPS
 input. The exact observations and ignored log locations are in
 [`mp4.txt`](gates/evidence/0b/mp4.txt). The MP4 acceptance criteria remain
-unverified; a shorter, rights-documented real playlist is the proposed next
-fixture task, subject to owner review.
+unverified. The owner approved 0B-16A, which locked the short NatureClip
+playlist at positions 4, 6 and 7 in [`fixtures.md`](gates/evidence/0b/fixtures.md).
+The next 0B-16 session must update the verifier to use those three entries and
+rerun the unchanged Max/Min, bounded-height single, ffprobe and playback checks.
+
+## Gate 0B transport review for the command matrix
+
+The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
+`--download-sections` diagnostic exposed this because it handed a remote media
+URL to FFmpeg. This is an **OPEN** compatibility question for HLS/DASH paths
+where yt-dlp can choose FFmpeg as the downloader. The build and 600-second
+timeout remain unchanged.
+
+At 0B-21, review **every required command** against this rule: record the
+selected media protocol and downloader from verbose output, then confirm that
+every FFmpeg input is a local file. A required row fails matrix review if
+FFmpeg must fetch HTTPS, including a selected HLS or DASH stream. This check
+also applies when adding the 0B-17 through 0B-20 commands. A TLS-enabled
+FFmpeg rebuild needs an owner licensing decision first.
+
+| Current matrix row | Media fetcher / FFmpeg role | Review state |
+|---|---|---|
+| 0B-13 analysis | Metadata extraction only; no media transfer or FFmpeg | No FFmpeg HTTPS dependency |
+| 0B-14 MP3 singles | yt-dlp fetches HTTPS original; FFmpeg reads the retained local WebM for MP3 conversion | No FFmpeg HTTPS dependency in passing probe |
+| 0B-15 MP3 playlist | yt-dlp fetches HTTPS WAV originals; FFmpeg reads local files for MP3 conversion | No FFmpeg HTTPS dependency in passing probe |
+| 0B-16 MP4 playlist rerun | Proposed NatureClip Max uses `https`; Min selects `m3u8_native` video and `https` audio. yt-dlp's native downloader must fetch both; FFmpeg must merge local files only. | Pending 0B-16 rerun and verbose-log confirmation |
+| 0B-16 bounded-height single, 0B-17 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
