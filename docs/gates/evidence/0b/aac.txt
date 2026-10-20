@@ -1,0 +1,64 @@
+0B-17 PASS — MP4 AAC compatibility (2026-10-19)
+
+Exact verification command:
+  powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case aac
+Exit: 0. The read-only fixture preflight passed first. Full logs, ffprobe
+JSON, retained source components and final MP4 are ignored under:
+  work/engine/cli/aac/20261019-195543/
+
+Pinned executables checked by SHA-256 before the media probe:
+  yt-dlp.exe  66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a
+  qjs.exe     bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83
+  ffmpeg.exe  fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66
+  ffprobe.exe bf44a50347aaba3e433c34c8c881d67eeaca41001577482ce3ba69b780824ec7
+yt-dlp reported stable@2026.08.19, only QuickJS 2026-06-04, and bundled
+yt_dlp_ejs 0.8.0. The pinned FFmpeg/ffprobe build is 8.1.3.
+
+Source: the locked NatureClip CC BY playlist's entry 7, Full Moon, ID
+YC0kTqKbeFs, https://www.youtube.com/watch?v=YC0kTqKbeFs. The selection
+command used --no-playlist --skip-download -f 'bv*+ba/b'
+--dump-single-json and exited 0 in 6.41 seconds. It selected separate
+137/avc1.640028 video at 1920x1080 and 251/opus audio; reported duration
+16 seconds. The earlier 0B-16 ordinary MP4 merge retained Opus for this
+same entry, so the AAC override is needed for this selected source.
+
+Media options, in exact order after the common pinned CLI/runtime options:
+  --no-playlist -f 'bv*+ba/b' --merge-output-format mp4
+  --postprocessor-args 'Merger+ffmpeg_o:-c:a aac' --keep-video
+  --ffmpeg-location <pinned-ffmpeg-directory>
+  -o '<fresh-ignored-directory>/%(id)s.%(ext)s'
+  -- 'https://www.youtube.com/watch?v=YC0kTqKbeFs'
+The full resolved command is in docs/ytdlp-commands.md. The media command
+exited 0 in 6.42 seconds and selected the same 137+251 formats. Verbose
+output reports yt-dlp's HTTP downloader for both components. Its single
+FFmpeg merge command read the two local file: components, then applied:
+  -c copy -map 0:v:0 -map 1:a:0 -movflags +faststart -c:a aac
+No FFmpeg HTTPS input was used. Signed media URLs remain only in the ignored
+full log and are omitted here.
+
+Pinned ffprobe command for each retained source and final file:
+  ffprobe -v error -show_entries
+  'stream=codec_name,codec_type,width,height,bit_rate:format=format_name,duration,size'
+  -of json -- <file>
+All three ffprobe invocations exited 0:
+  source-video: MP4, one H.264 video stream, 1920x1080, 15.932583 s,
+    85,980 bytes, SHA-256 ff28a896787d8e994126e3b41a71f0ee206bd4a1b3ef92ffaadbdb5eba7d3434
+  source-audio: WebM, one Opus audio stream, 16.021000 s,
+    7,536 bytes, SHA-256 d08bf5dfe292464de33be13be916a6c9042ab238a7456ca02672fe0349bd4448
+  final: MP4, one H.264 video stream at 1920x1080 and one AAC audio
+    stream, 15.998000 s, 96,559 bytes,
+    SHA-256 2edece07fa770057bf6658440ac9767c921a1fbc468b4c2708be56c501a4d69f
+The final file is converted/YC0kTqKbeFs.mp4 in the ignored run directory.
+
+Common-player playback command:
+  $aacOutput = (Resolve-Path -LiteralPath 'work/engine/cli/aac/20261019-195543/converted/YC0kTqKbeFs.mp4').Path
+  & py work/engine/cli/play_vlc_video.py $aacOutput
+Exit: 0. Portable VLC 3.0.24/libVLC entered state 3 (playing), advanced to
+2,153 ms and reported D3D11VA video decoding. This is automated player
+playback/decode evidence, not a human visual or listening assessment.
+
+The archive-video Ogg file listed as a candidate in fixtures.md was not
+selected for this probe. The NatureClip source allows AAC audio conversion
+while copying an already MP4-compatible H.264 video stream. This result
+proves the tested Merger command for separate H.264/Opus streams; it does
+not claim a single-file Ogg remux or conversion path was tested.

@@ -229,6 +229,51 @@ all twelve FFmpeg merge inputs were local `file:` paths. Exact dimensions,
 codecs, hashes, timings and player positions are in
 [`mp4.txt`](gates/evidence/0b/mp4.txt).
 
+## 0B-17 — MP4 AAC compatibility
+
+The earlier 0B-16 Max probe retained Opus audio in the MP4 for NatureClip
+playlist entry 7. The locked 16-second entry has H.264 video and Opus audio,
+so it tests the audio conversion without requiring a video transcode. The
+Archive Ogg item in the fixture plan remains an untested candidate for this
+case; the AAC result below uses the already locked NatureClip source. Apply
+the AAC override only after selecting a non-AAC source. A source that already
+has AAC can use the ordinary MP4 merge shown in 0B-16.
+
+The exact reproducible verifier passed:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-cli.ps1 -Case aac
+```
+
+It first ran a metadata-only `--dump-single-json` with `-f 'bv*+ba/b'` and
+confirmed separate `137` H.264 video and `251` Opus audio. It then ran this
+media command with the pinned executables and a fresh ignored output path:
+
+```powershell
+$yt = (Resolve-Path work/engine/downloads/yt-dlp.exe).Path
+$qjs = (Resolve-Path work/engine/build/quickjs/windows-x64/qjs.exe).Path
+$ff = (Resolve-Path work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3).Path
+$out = Join-Path (Get-Location) 'work/engine/cli/aac/manual'
+New-Item -ItemType Directory -Path $out -Force | Out-Null
+& $yt --ignore-config --verbose --no-js-runtimes --js-runtimes "quickjs:$qjs" --no-playlist -f 'bv*+ba/b' --merge-output-format mp4 --postprocessor-args 'Merger+ffmpeg_o:-c:a aac' --keep-video --ffmpeg-location $ff -o "$out/%(id)s.%(ext)s" -- 'https://www.youtube.com/watch?v=YC0kTqKbeFs'
+```
+
+`--merge-output-format mp4` alone does not change Opus to AAC, as the 0B-16
+probe showed. The `Merger+ffmpeg_o` override appends `-c:a aac` before the
+output file: the recorded FFmpeg command used `-c copy` for the streams, then
+`-c:a aac` for audio. Its two inputs were local `file:` paths. `--keep-video`
+retained the downloaded components so pinned ffprobe could confirm Opus in
+the source; it is an inspection option for this probe. Pinned ffprobe found
+H.264 and AAC in the final MP4 at the selected 1920×1080 resolution. VLC
+3.0.24/libVLC entered playing state and advanced past two seconds with video
+decoding enabled. See [`aac.txt`](gates/evidence/0b/aac.txt) for source and
+output stream details, hashes, logs and player results.
+
+The [yt-dlp postprocessor-argument reference](https://github.com/yt-dlp/yt-dlp/blob/master/README.md#post-processing-options)
+defines the `Merger+ffmpeg_o` placement; the [FFmpeg stream-codec reference](https://ffmpeg.org/ffmpeg.html#Stream-specifiers-1)
+defines `-c:a` as an audio-only codec choice. The passing pinned CLI trace
+above is the version-specific proof for this command.
+
 ## Gate 0B transport review for the command matrix
 
 The pinned FFmpeg build cannot open `https://` inputs. The stopped 0B-16
@@ -251,4 +296,5 @@ FFmpeg rebuild needs an owner licensing decision first.
 | 0B-15 MP3 playlist | yt-dlp fetches HTTPS WAV originals; FFmpeg reads local files for MP3 conversion | No FFmpeg HTTPS dependency in passing probe |
 | 0B-16 MP4 playlist rerun | yt-dlp HTTP fetched all six Max streams; its HLS native downloader fetched three Min video streams, and HTTP fetched three Min audio streams. FFmpeg merged local files only, with twelve `file:` inputs. | No FFmpeg HTTPS dependency in passing probe |
 | 0B-16 bounded-height single | yt-dlp HTTP fetched the selected MP4; no FFmpeg merge was needed. | No FFmpeg HTTPS dependency in passing probe |
-| 0B-17 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
+| 0B-17 AAC | yt-dlp HTTP fetched H.264 and Opus components; FFmpeg read two local `file:` inputs, copied video and encoded AAC audio. | No FFmpeg HTTPS dependency in passing probe |
+| 0B-18 through 0B-20 | Check each selected protocol and actual downloader when its required command runs. | Pending command-specific review |
