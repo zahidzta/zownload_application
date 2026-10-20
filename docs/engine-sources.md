@@ -194,3 +194,22 @@ build commands and five binary hashes are linked from
 corresponding sources are the locked FFmpeg, LAME and zlib archives. Its
 static-link relinking materials and full configuration must accompany each
 release. The Gate 0B Windows hashes do not attest future platform builds.
+
+## Gate 0C Android library candidate (0C-01; integration stopped)
+
+The [Android library audit](gates/evidence/0c/library-audit.md) inspected
+`io.github.junkfood02.youtubedl-android:{library,ffmpeg}:0.18.1`, upstream tag
+`0.18.1` at commit `d725d5c9a18c3a99a13ee0308bf78275dc310760`.
+Maven Central publishes SHA-256
+`579b5fb480892b1abc2b218c2089699d52759cc8d7ba256bf876453f0365faef`
+for the library AAR and
+`0a87ffa6cf912b0fe76c1a99b9107f543ee2f247935fae2c71f0822eb7bc5f49`
+for its FFmpeg AAR. These are **candidate** hashes, not additions to the Gate
+0B source lock or app dependencies. The tag bundles yt-dlp 2025.11.12 with
+ejs 0.3.1 and a different QuickJS binary. Its Maven metadata says GPL-3.0;
+the tagged arm64 FFmpeg 7.1.1 executable has `--enable-gpl` and x264/x265.
+The built-in updater has no digest check or bad-update rollback. This fails
+the project's current LGPL-compatible Android FFmpeg plan, so Android engine
+integration stops for owner architecture/licensing decision 0C-01A. The audit
+records exact source links, tagged binary hashes, and open package/device
+checks. Gate 0B's pinned yt-dlp/ejs/QuickJS sources remain unchanged.
