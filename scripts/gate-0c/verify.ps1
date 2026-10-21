@@ -2,12 +2,130 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'recents') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        if (-not $env:ZOWNLOAD_ANDROID_LONG_URL) { throw 'Set ZOWNLOAD_ANDROID_LONG_URL to the approved rights-cleared long YouTube single.' }
+        $url = [uri]$env:ZOWNLOAD_ANDROID_LONG_URL
+        if ($url.Scheme -ne 'https' -or $url.Host -notin @('www.youtube.com', 'youtu.be')) {
+            throw 'ZOWNLOAD_ANDROID_LONG_URL must be an HTTPS YouTube single.'
+        }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        $webView = (& $adb -s $serial shell dumpsys webviewupdate | Select-String 'Current WebView package' | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a' -or [int]$api -lt 24) { throw "Requires physical arm64 API 24+; found $abi API $api" }
+        $logs = Join-Path $root 'work/android/0c-10'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $env:ANDROID_HOME = $sdk
+        Push-Location $root
+        try {
+            $buildLog = Join-Path $logs 'android-build.log'
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+        Push-Location (Join-Path $root 'src-tauri/gen/android')
+        try {
+            $testBuildLog = Join-Path $logs 'android-test-build.log'
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        foreach ($package in @($apk, $testApk)) {
+            $installed = $false
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+                try { $installReport = (& $adb -s $serial install -r $package 2>&1 | Out-String).Trim() }
+                finally { $ErrorActionPreference = $prior }
+                if ($LASTEXITCODE -eq 0 -and $installReport.Contains('Success')) { $installed = $true; break }
+                Start-Sleep -Seconds 3
+            }
+            if (-not $installed) { throw "Could not install $(Split-Path $package -Leaf) after 3 attempts: $installReport" }
+        }
+        $cleared = (& $adb -s $serial shell pm clear com.zownload.app | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $cleared -ne 'Success') { throw "Could not clear prior spike queue: $cleared" }
+        & $adb -s $serial logcat -c | Out-Null
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($url.AbsoluteUri))
+        $testLog = Join-Path $logs 'device-test.log'
+        & $adb -s $serial shell am instrument -w -r -e class 'com.zownload.app.RecentsRemovalDeviceTest#removingTaskPausesRustAndStopsEngineAndService' `
+            -e youtubeUrlB64 $encoded 'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner' 2>&1 | Out-File $testLog
+        $testOutput = Get-Content $testLog -Raw
+        if (-not $testOutput.Contains('OK (1 test)') -and
+                -not $testOutput.Contains('INSTRUMENTATION_RESULT: shortMsg=Process crashed.')) {
+            throw "Task-removal phase failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+        }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C10:I' 'Zownload0C08:I' 'RustStdoutStderr:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        foreach ($term in @('RECENTS_REMOVING', 'TASK_REMOVED', 'RUST_PAUSED_ON_TASK_REMOVAL', 'ENGINE_CANCEL', 'RUST_SERVICE_STOP_REQUESTED', 'SERVICE_STOPPED')) {
+            if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+        }
+        $proof = [regex]::Match($report, 'RECENTS_REMOVING at=\S+ item=([a-f0-9-]+) percent=([\d.]+) children=\[([0-9, ]+)\] bytes=(\d+)')
+        if (-not $proof.Success -or [long]$proof.Groups[4].Value -le 0 -or
+                -not $report.Contains('ENGINE_CANCEL') -or -not $report.Contains('workerExited=true')) {
+            throw 'Task removal lacks active child, partial media, or completed engine cancellation proof.'
+        }
+        $processes = & $adb -s $serial shell ps -A -o PID,PPID,NAME | Out-String
+        $livePids = @([regex]::Matches($processes, '(?m)^\s*(\d+)\s+') | ForEach-Object { $_.Groups[1].Value })
+        foreach ($childPid in ($proof.Groups[3].Value -split ',\s*')) {
+            if ($childPid -in $livePids) { throw "Engine child PID $childPid survived task removal." }
+        }
+        $notifications = & $adb -s $serial shell dumpsys notification --noredact | Out-String
+        $activeNotifications = ($notifications -split 'mArchive=Archive')[0]
+        if ($activeNotifications.Contains('StatusBarNotification(pkg=com.zownload.app user=UserHandle{0} id=108')) {
+            throw 'Foreground-service notification 108 remained active.'
+        }
+        $filesAfter = (& $adb -s $serial shell run-as com.zownload.app find cache/zownload-0c-06 -type f 2>&1 | Out-String).Trim()
+        Start-Sleep -Seconds 2
+        $filesLater = (& $adb -s $serial shell run-as com.zownload.app find cache/zownload-0c-06 -type f 2>&1 | Out-String).Trim()
+        if ($filesAfter -ne '' -or $filesLater -ne '') { throw "Private media remained or grew after cancellation: $filesLater" }
+        $reopenLog = Join-Path $logs 'reopen-test.log'
+        & $adb -s $serial shell am instrument -w -r -e class 'com.zownload.app.RecentsRemovalDeviceTest#reopenedQueueIsPaused' `
+            'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner' 2>&1 | Out-File $reopenLog
+        $reopenOutput = Get-Content $reopenLog -Raw
+        if ($LASTEXITCODE -ne 0 -or -not $reopenOutput.Contains('OK (1 test)')) {
+            throw "Reopen phase failed:`n$((Get-Content $reopenLog | Select-Object -Last 50) -join "`n")"
+        }
+        & $adb -s $serial logcat -d -s 'Zownload0C10:I' 'Zownload0C08:I' 'RustStdoutStderr:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        if (-not $report.Contains("REOPENED_PAUSED item=$($proof.Groups[1].Value)")) {
+            throw 'Reopened get_queue did not return the same paused item.'
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-10 recents: PASS; $model API $api $abi serial $serial."
+        Write-Output "WebView: $webView; APK SHA-256: $apkHash; child PIDs absent, no private media files, notification absent."
+        Write-Output 'Local feasibility only; Android distribution remains blocked.'
+        Get-Content $deviceLog | Where-Object { $_ -match 'RECENTS_REMOVING|TASK_REMOVED|RUST_PAUSED_ON_TASK_REMOVAL|ENGINE_CANCEL|SERVICE_STOPPED|REOPENED_PAUSED' } | Select-Object -Last 20
+        exit 0
+    } catch {
+        Write-Error "0C-10 recents: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'home') {
     try {

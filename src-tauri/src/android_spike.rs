@@ -194,6 +194,14 @@ struct DownloadMp3Response {
     uri: Option<String>,
     #[serde(default, rename = "timedOut")]
     timed_out: bool,
+    #[serde(default, rename = "taskRemoved")]
+    task_removed: bool,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+struct CancelWorkRequest<'a> {
+    id: &'a str,
 }
 
 #[cfg(target_os = "android")]
@@ -337,6 +345,44 @@ fn enqueue_download_blocking<R: Runtime>(
                 item.id,
                 if result.is_ok() { "ok" } else { "error" }
             );
+            if let Ok(response) = &result {
+                if response.task_removed {
+                    // The service keeps this process alive after a recents
+                    // swipe. Save first, then stop the native worker and service.
+                    let paused = with_queue(&queue, |store| {
+                        store.checkpoint(&item.id, ItemStatus::Paused, None, None)
+                    });
+                    if let Ok(ref paused) = paused {
+                        emit_item(&app, paused);
+                        eprintln!("Zownload0C10 RUST_PAUSED_ON_TASK_REMOVAL item={}", item.id);
+                    }
+                    // Even if SQLite fails, still terminate native work and
+                    // stop the service before reporting the write failure.
+                    let cancelled = response.id.as_deref().map_or_else(
+                        || Err("Missing engine cancellation ID".to_string()),
+                        |id| {
+                            plugin
+                                .0
+                                .run_mobile_plugin::<serde_json::Value>(
+                                    "cancelWork",
+                                    CancelWorkRequest { id },
+                                )
+                                .map(|_| ())
+                                .map_err(|error| {
+                                    format!("Could not cancel Android engine: {error}")
+                                })
+                        },
+                    );
+                    let stopped: Result<serde_json::Value, PluginInvokeError> = plugin
+                        .0
+                        .run_mobile_plugin("stopWorkService", serde_json::json!({}));
+                    eprintln!("Zownload0C10 RUST_SERVICE_STOP_REQUESTED item={}", item.id);
+                    paused?;
+                    cancelled?;
+                    stopped.map_err(|error| format!("Could not stop Android service: {error}"))?;
+                    return Err("Download paused after removal from recents".into());
+                }
+            }
             let stopped: Result<serde_json::Value, PluginInvokeError> = plugin
                 .0
                 .run_mobile_plugin("stopWorkService", serde_json::json!({}));

@@ -29,15 +29,28 @@ class DownloadMp3Args {
     var onProgress: Channel? = null
 }
 
+@InvokeArg
+class CancelWorkArgs {
+    lateinit var id: String
+}
+
 @TauriPlugin
 class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
     companion object {
         private val timeoutCallback = AtomicReference<(() -> Unit)?>(null)
+        private val taskRemovedCallback = AtomicReference<(() -> Unit)?>(null)
+        private val activeWorker = AtomicReference<Pair<String, java.util.concurrent.CountDownLatch>?>(null)
         // Instrumentation can slow a real transfer so Home remains observable.
         @Volatile internal var testRateLimit: String? = null
 
         fun onForegroundTimeout() {
             timeoutCallback.getAndSet(null)?.invoke()
+        }
+
+        fun onTaskRemoved(): Boolean {
+            val callback = taskRemovedCallback.getAndSet(null) ?: return false
+            callback()
+            return true
         }
     }
 
@@ -61,6 +74,27 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     @Command
+    fun cancelWork(invoke: Invoke) {
+        val id = invoke.parseArgs(CancelWorkArgs::class.java).id
+        val worker = activeWorker.get()
+        if (worker == null || worker.first != id) {
+            invoke.reject("Active engine ID does not match cancellation request")
+            return
+        }
+        Thread {
+            try {
+                val killed = AndroidEngineAdapter(activity.applicationContext).cancel(id)
+                val exited = worker.second.await(20, java.util.concurrent.TimeUnit.SECONDS)
+                Log.i("Zownload0C10", "ENGINE_CANCEL id=$id killed=$killed workerExited=$exited")
+                if (exited) invoke.resolve(JSObject())
+                else invoke.reject("Engine worker did not exit after cancellation")
+            } catch (error: Exception) {
+                invoke.reject(error.message ?: error.javaClass.simpleName)
+            }
+        }.start()
+    }
+
+    @Command
     fun smoke(invoke: Invoke) {
         val args = invoke.parseArgs(SmokeArgs::class.java)
         val reply = JSObject()
@@ -80,6 +114,9 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
         }
         val id = UUID.randomUUID().toString()
         val finished = AtomicBoolean(false)
+        val workerExited = java.util.concurrent.CountDownLatch(1)
+        val workerHandle = id to workerExited
+        activeWorker.set(workerHandle)
         // Only a transient cancellation handle crosses into the service. The
         // queue state and timeout decision remain in Rust.
         val onTimeout: () -> Unit = {
@@ -98,6 +135,16 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
             }
         }
         timeoutCallback.set(onTimeout)
+        val onTaskRemoved: () -> Unit = {
+            if (finished.compareAndSet(false, true)) {
+                val reply = JSObject()
+                reply.put("taskRemoved", true)
+                reply.put("id", id)
+                invoke.resolve(reply)
+                Log.i("Zownload0C10", "TASK_REMOVED_RETURNED_TO_RUST id=$id")
+            }
+        }
+        taskRemovedCallback.set(onTaskRemoved)
         // Tauri dispatches mobile commands on the main thread. Engine work and
         // the MediaStore copy must run on a worker so the WebView stays live.
         Thread {
@@ -149,7 +196,10 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
                 if (finished.compareAndSet(false, true)) invoke.reject(error.message ?: error.javaClass.simpleName)
             } finally {
                 timeoutCallback.compareAndSet(onTimeout, null)
+                taskRemovedCallback.compareAndSet(onTaskRemoved, null)
                 directory.deleteRecursively()
+                workerExited.countDown()
+                activeWorker.compareAndSet(workerHandle, null)
             }
         }.start()
     }
