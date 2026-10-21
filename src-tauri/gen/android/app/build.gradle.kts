@@ -26,6 +26,7 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         getByName("debug") {
@@ -59,6 +60,14 @@ android {
     buildFeatures {
         buildConfig = true
     }
+    sourceSets.getByName("main").apply {
+        jniLibs.srcDir(file("../../../../work/android/0c-05/jniLibs"))
+        res.srcDir(file("../../../../work/android/0c-05/res"))
+    }
+    packaging {
+        jniLibs.useLegacyPackaging = true
+        jniLibs.pickFirsts.add("**/libqjs.so")
+    }
 }
 
 kotlin {
@@ -73,7 +82,13 @@ rust {
 
 dependencies {
     val androidEngineVersion = "0.18.1"
+    val pinnedQuickJs = file("../../../../work/android/0c-05/jniLibs/arm64-v8a/libqjs.so")
+    val pinnedYtDlp = file("../../../../work/android/0c-05/res/raw/ytdlp")
+    require(pinnedQuickJs.isFile && pinnedYtDlp.isFile) {
+        "Run scripts/gate-0c/package-quickjs.ps1 before building Android."
+    }
     implementation("io.github.junkfood02.youtubedl-android:library:$androidEngineVersion")
+    implementation("io.github.junkfood02.youtubedl-android:common:$androidEngineVersion")
     implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$androidEngineVersion")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")

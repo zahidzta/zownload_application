@@ -127,4 +127,24 @@ The exact `gh run list --limit 5` command showed [Foundation CI run 39177425523]
 
 The exact selected tool versions, source links and setup commands are in the tables and sections above. The generated Android project additionally pins Gradle `9.6.1`, Android Gradle Plugin `9.3.1`, and Kotlin Gradle Plugin `2.2.10`; `src-tauri/Cargo.lock` and `package-lock.json` record the dependency trees.
 
-The local APK still exists at `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`: 136,162,644 bytes, SHA-256 `11B696468F8B586E5C3EBE48BBB38887210EE619B826879DF5475B8494D7D25A`, rechecked during 0A-12. Hosted CI also completed its Android build, but the workflow does not upload the APK as an artifact; the checked file and hash are from the local 0A-09/0A-10 build. The 0A-11 section above records the independent clean-checkout Windows proof. Gate 0A owner acceptance is pending; Android device behavior and release installers are later-stage checks.
+At 0A-12, the local APK at `src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk` was 136,162,644 bytes, SHA-256 `11B696468F8B586E5C3EBE48BBB38887210EE619B826879DF5475B8494D7D25A`. Hosted CI also completed its Android build, but the workflow does not upload the APK as an artifact; the checked file and hash are from the local 0A-09/0A-10 build. The 0A-11 section above records the independent clean-checkout Windows proof. Gate 0A owner acceptance is pending; Android device behavior and release installers are later-stage checks.
+
+## 0C-05 Android runtime package setup
+
+On the pinned Ubuntu 24.04 host with NDK r30 installed at the CI path, prepare
+the ignored local Android engine package before `npm run android:debug`:
+
+```bash
+export NDK_HOME=/usr/local/lib/android/sdk/ndk/30.0.16248370
+bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify
+pwsh -NoProfile -File scripts/gate-0c/package-quickjs.ps1 -QuickJsPath work/engine/build/quickjs/android-arm64/qjs
+```
+
+The packaging script checks the Gate 0B QuickJS hash, downloads and checks the
+official yt-dlp 2026.08.19 zipapp, checks its yt-dlp and EJS version files,
+then writes the pinned native and raw-resource inputs under ignored
+`work/android/0c-05/`. Gradle keeps the original pinned youtubedl-android
+0.18.1 Maven modules and includes those two inputs in the APK. The Android CI
+job runs these commands before its debug build and does not upload the APK or
+native output. On Windows, use an Ubuntu 24.04 build environment for the
+QuickJS ELF; pass its local path to the same PowerShell packaging command.
