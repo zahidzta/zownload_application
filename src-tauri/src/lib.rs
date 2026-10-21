@@ -10,6 +10,7 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         android_spike::enqueue_download,
+        android_spike::resume_download,
         android_spike::get_queue
     ]);
     builder

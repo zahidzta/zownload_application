@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
+#[cfg(target_os = "android")]
+use crate::contract::ErrorCode;
 #[cfg(any(test, target_os = "android"))]
 use crate::contract::{AppError, DownloadRequest, ItemStatus, Progress, QueueItem};
 #[cfg(any(test, target_os = "android"))]
@@ -177,6 +179,8 @@ pub struct SmokeResponse {
 #[derive(Serialize)]
 struct DownloadMp3Request {
     url: String,
+    #[serde(rename = "itemId")]
+    item_id: String,
     #[serde(rename = "onProgress")]
     on_progress: Channel<EngineProgress>,
 }
@@ -245,7 +249,7 @@ fn enqueue_download_blocking<R: Runtime>(
     app: AppHandle<R>,
     request: DownloadRequest,
 ) -> Result<String, String> {
-    use crate::contract::{ErrorCode, Format, Quality};
+    use crate::contract::{Format, Quality};
     if request.format != Format::Mp3
         || request.is_playlist
         || !matches!(request.quality, Quality::Audio { bitrate: 128 })
@@ -256,6 +260,36 @@ fn enqueue_download_blocking<R: Runtime>(
     let queue = app.state::<SpikeQueue>();
     let item = with_queue(&queue, |store| store.enqueue(request.clone()))?;
     emit_item(&app, &item);
+    run_download_blocking(app, item)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn resume_download<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || resume_download_blocking(app, id))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[cfg(target_os = "android")]
+fn resume_download_blocking<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
+    let queue = app.state::<SpikeQueue>();
+    // Claim the paused item before starting Android work. A second Continue
+    // cannot launch another engine against the same partial file.
+    let item = with_queue(&queue, |store| {
+        let current = store.current()?.ok_or("Queue item is missing")?;
+        if current.id != id || current.status != ItemStatus::Paused {
+            return Err("Only the matching paused item can continue".into());
+        }
+        store.checkpoint(&id, ItemStatus::Queued, None, None)
+    })?;
+    emit_item(&app, &item);
+    run_download_blocking(app, item).map(|_| ())
+}
+
+#[cfg(target_os = "android")]
+fn run_download_blocking<R: Runtime>(app: AppHandle<R>, item: QueueItem) -> Result<String, String> {
+    let queue = app.state::<SpikeQueue>();
     let plugin = app.state::<AndroidSpike<R>>();
     // Android forbids starting this service from the background on recent
     // versions. This call is initiated by the user's foreground enqueue.
@@ -336,7 +370,8 @@ fn enqueue_download_blocking<R: Runtime>(
                 plugin.0.run_mobile_plugin(
                     "downloadMp3",
                     DownloadMp3Request {
-                        url: request.url,
+                        url: item.request.url.clone(),
+                        item_id: item.id.clone(),
                         on_progress,
                     },
                 );
@@ -426,6 +461,15 @@ fn enqueue_download_blocking<R: Runtime>(
             Ok(item.id)
         }
         Err(message) => {
+            // Recents removal and foreground timeout have already saved a
+            // paused checkpoint. Leave that row for an explicit Continue.
+            if with_queue(&queue, |store| {
+                Ok(store.current()?.is_some_and(|current| {
+                    current.id == item.id && current.status == ItemStatus::Paused
+                }))
+            })? {
+                return Err(message);
+            }
             let failed = with_queue(&queue, |store| {
                 store.checkpoint(
                     &item.id,
