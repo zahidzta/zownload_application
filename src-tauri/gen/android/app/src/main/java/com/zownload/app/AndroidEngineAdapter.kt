@@ -7,11 +7,8 @@ import android.content.Context
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.R as EngineR
 import com.yausername.youtubedl_android.mapper.VideoInfo
 import java.io.File
-import java.io.IOException
-import java.security.MessageDigest
 
 // Rust owns job state. This adapter supplies engine progress to the plugin,
 // which forwards it to Rust without keeping a second queue.
@@ -24,9 +21,14 @@ internal class AndroidEngineAdapter(
     }
 
     fun analyze(url: String): VideoInfo {
-        val request = YoutubeDLRequest(url)
-        packageProvider.configure(request)
-        return YoutubeDL.getInstance().getInfo(request)
+        VerifiedYtDlpUpdate.beginJob()
+        try {
+            val request = YoutubeDLRequest(url)
+            packageProvider.configure(request)
+            return YoutubeDL.getInstance().getInfo(request)
+        } finally {
+            VerifiedYtDlpUpdate.endJob()
+        }
     }
 
     fun downloadOne(
@@ -37,25 +39,30 @@ internal class AndroidEngineAdapter(
         onProgress: (Float, Long, String) -> Unit,
         onError: (Throwable) -> Unit,
     ): EngineRun {
-        val request = YoutubeDLRequest(url)
-        packageProvider.configure(request)
-        request.addOption("--no-playlist")
-        request.addOption("--extract-audio")
-        request.addOption("--audio-format", "mp3")
-        request.addOption("--audio-quality", "128K")
-        request.addOption("-f", "bestaudio/best")
-        request.addOption("--verbose")
-        request.addOption("--no-mtime")
-        request.addOption("--continue")
-        request.addOption("--part")
-        if (BuildConfig.DEBUG && rateLimit != null) request.addOption("--limit-rate", rateLimit)
-        request.addOption("-o", output.absolutePath)
-        return try {
-            val result = YoutubeDL.getInstance().execute(request, processId, onProgress)
-            EngineRun(result.out, result.err)
-        } catch (error: Exception) {
-            onError(error)
-            throw error
+        VerifiedYtDlpUpdate.beginJob()
+        try {
+            val request = YoutubeDLRequest(url)
+            packageProvider.configure(request)
+            request.addOption("--no-playlist")
+            request.addOption("--extract-audio")
+            request.addOption("--audio-format", "mp3")
+            request.addOption("--audio-quality", "128K")
+            request.addOption("-f", "bestaudio/best")
+            request.addOption("--verbose")
+            request.addOption("--no-mtime")
+            request.addOption("--continue")
+            request.addOption("--part")
+            if (BuildConfig.DEBUG && rateLimit != null) request.addOption("--limit-rate", rateLimit)
+            request.addOption("-o", output.absolutePath)
+            return try {
+                val result = YoutubeDL.getInstance().execute(request, processId, onProgress)
+                EngineRun(result.out, result.err)
+            } catch (error: Exception) {
+                onError(error)
+                throw error
+            }
+        } finally {
+            VerifiedYtDlpUpdate.endJob()
         }
     }
 
@@ -85,14 +92,19 @@ internal data class EnginePaths(
 
 internal class BundledEnginePackage : AndroidEnginePackage {
     override val version = "0.18.1"
-    override val ytDlpVersion = "2026.08.19"
+    override val ytDlpVersion: String
+        get() = if (VerifiedYtDlpUpdate.sha256(File(paths.ytDlpArchive!!)) == VerifiedYtDlpUpdate.candidateHash) {
+            VerifiedYtDlpUpdate.candidateVersion
+        } else {
+            VerifiedYtDlpUpdate.baselineVersion
+        }
     override val ejsVersion = "0.8.0"
     override lateinit var paths: EnginePaths
         private set
 
     @Synchronized
     override fun initialize(context: Context) {
-        installPinnedZipapp(context)
+        VerifiedYtDlpUpdate.initialize(context)
         YoutubeDL.getInstance().init(context)
         FFmpeg.getInstance().init(context)
         val root = File(context.noBackupFilesDir, YoutubeDL.baseName)
@@ -107,40 +119,5 @@ internal class BundledEnginePackage : AndroidEnginePackage {
         // The 0.18.1 library supplies its own --js-runtimes and FFmpeg paths.
         // The app's pinned native source replaces that fixed QuickJS path.
         // The FFmpeg build configuration is deliberately not assumed here.
-    }
-
-    private fun installPinnedZipapp(context: Context) {
-        val root = File(context.noBackupFilesDir, YoutubeDL.baseName)
-        val directory = File(root, YoutubeDL.ytdlpDirName)
-        if (!directory.isDirectory && !directory.mkdirs()) throw IOException("Cannot create yt-dlp directory")
-        val target = File(directory, YoutubeDL.ytdlpBin)
-        val expected = "1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6"
-        if (target.isFile && sha256(target) == expected) return
-
-        // Initialization precedes all spike jobs. A same-directory rename makes
-        // an upgrade from the library's older copied zipapp visible at once.
-        val staging = File(directory, "${YoutubeDL.ytdlpBin}.staging")
-        try {
-            context.resources.openRawResource(EngineR.raw.ytdlp).use { input ->
-                staging.outputStream().use { output -> input.copyTo(output) }
-            }
-            if (sha256(staging) != expected) throw IOException("Pinned yt-dlp resource hash differs")
-            if (!staging.renameTo(target)) throw IOException("Cannot activate pinned yt-dlp zipapp")
-        } finally {
-            staging.delete()
-        }
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val bytes = ByteArray(8192)
-            while (true) {
-                val count = input.read(bytes)
-                if (count < 0) break
-                digest.update(bytes, 0, count)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

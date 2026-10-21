@@ -2,12 +2,121 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip', 'update-rollback')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'update-rollback') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $env:ANDROID_HOME = $sdk
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        $virtual = (& $adb -s $serial shell getprop ro.kernel.qemu | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a' -or [int]$api -lt 24 -or $virtual -eq '1') {
+            throw "Requires physical arm64 API 24+; found $abi API $api qemu=$virtual"
+        }
+
+        $logs = Join-Path $root 'work/android/0c-14'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $candidate = Join-Path $logs 'yt-dlp-2026.10.21'
+        $manifest = Join-Path $logs 'SHA2-256SUMS'
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/yt-dlp' -OutFile $candidate
+        }
+        if (-not (Test-Path -LiteralPath $manifest)) {
+            Invoke-WebRequest -Uri 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/SHA2-256SUMS' -OutFile $manifest
+        }
+        $candidateHash = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($candidateHash -ne 'b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14' -or
+            -not ((Get-Content -LiteralPath $manifest -Raw).Contains("$candidateHash  yt-dlp"))) {
+            throw 'Candidate differs from its pinned SHA-256 or published checksum manifest.'
+        }
+        $baseline = Join-Path $root 'work/android/0c-05/res/raw/ytdlp'
+        if (-not (Test-Path -LiteralPath $baseline) -or
+            (Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant() -ne
+            '1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6') {
+            throw 'The packaged yt-dlp baseline is missing or differs from its pin.'
+        }
+
+        $buildLog = Join-Path $logs 'android-build.log'
+        Push-Location $root
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+
+        $testBuildLog = Join-Path $logs 'android-test-build.log'
+        Push-Location (Join-Path $root 'src-tauri/gen/android')
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        & $adb -s $serial install -r $apk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the app APK.' }
+        & $adb -s $serial install -r $testApk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the test APK.' }
+        & $adb -s $serial logcat -c | Out-Null
+
+        $testLog = Join-Path $logs 'device-test.log'
+        $testErr = Join-Path $logs 'device-test-error.log'
+        $args = @('-s', $serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+            'com.zownload.app.YtDlpUpdateDeviceTest#verifiedStableUpdateRejectsUnsafeSwapsAndRollsBack',
+            'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner')
+        $instrument = Start-Process -FilePath $adb -ArgumentList $args -PassThru `
+            -RedirectStandardOutput $testLog -RedirectStandardError $testErr -WindowStyle Hidden
+        $null = $instrument.WaitForExit(240000)
+        if (-not $instrument.HasExited) {
+            $instrument.Kill()
+            throw 'Update/rollback instrumentation timed out.'
+        }
+        $testReport = Get-Content -LiteralPath $testLog -Raw
+        if (-not $testReport.Contains('OK (1 test)') -or -not $testReport.Contains('INSTRUMENTATION_CODE: -1')) {
+            throw "Update/rollback instrumentation failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+        }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C14:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content -LiteralPath $deviceLog -Raw
+        foreach ($term in @('BASELINE version=2026.08.19', 'ACTIVE_JOB_REJECTED',
+                'BAD_CANDIDATE_REJECTED', 'CANDIDATE_VERIFIED version=2026.10.21 ejs=0.8.0',
+                'UPDATE_OK version=2026.10.21', 'RUNTIME [debug] yt-dlp version stable@2026.10.21',
+                'POST_ACCEPT_FAILURE reason=injected post-acceptance failure',
+                'ROLLBACK_OK version=2026.08.19', 'RECOVERY_OK version=2026.08.19')) {
+            if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-14 update-rollback: physical device PASS; $model API $api $abi serial $serial."
+        Write-Output "Baseline 2026.08.19/$((Get-FileHash -LiteralPath $baseline -Algorithm SHA256).Hash.ToLowerInvariant()); candidate 2026.10.21/$candidateHash; EJS 0.8.0."
+        Write-Output 'Active-job and bad-hash swaps rejected; accepted candidate executed; injected post-acceptance failure restored the executable baseline.'
+        Write-Output "APK SHA-256: $apkHash; local feasibility only; Android distribution remains blocked."
+        exit 0
+    } catch {
+        Write-Error "0C-14 update-rollback failed: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'mediastore-zip') {
     try {

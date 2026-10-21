@@ -260,6 +260,14 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
         val finished = AtomicBoolean(false)
         val workerExited = java.util.concurrent.CountDownLatch(1)
         val workerHandle = id to workerExited
+        // Reserve the engine before starting a worker, closing the gap in
+        // which an update could otherwise swap archives before execute().
+        try {
+            VerifiedYtDlpUpdate.beginJob()
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: error.javaClass.simpleName)
+            return
+        }
         activeWorker.set(workerHandle)
         // Only a transient cancellation handle crosses into the service. The
         // queue state and timeout decision remain in Rust.
@@ -350,6 +358,7 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
                 directory.deleteRecursively()
                 workerExited.countDown()
                 activeWorker.compareAndSet(workerHandle, null)
+                VerifiedYtDlpUpdate.endJob()
             }
         }.start()
     }
