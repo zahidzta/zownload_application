@@ -181,8 +181,10 @@ struct DownloadMp3Request {
 #[cfg(target_os = "android")]
 #[derive(Deserialize)]
 struct DownloadMp3Response {
-    id: String,
-    uri: String,
+    id: Option<String>,
+    uri: Option<String>,
+    #[serde(default, rename = "timedOut")]
+    timed_out: bool,
 }
 
 #[cfg(target_os = "android")]
@@ -237,26 +239,71 @@ fn enqueue_download_blocking<R: Runtime>(
     let queue = app.state::<SpikeQueue>();
     let item = with_queue(&queue, |store| store.enqueue(request.clone()))?;
     emit_item(&app, &item);
-    let active = with_queue(&queue, |store| {
-        store.checkpoint(&item.id, ItemStatus::Downloading, None, None)
-    })?;
-    emit_item(&app, &active);
-
-    // The Kotlin call can outlive a WebView. Never hold the database lock while
-    // it runs; get_queue must remain available to a recreated UI.
     let plugin = app.state::<AndroidSpike<R>>();
-    let result: Result<DownloadMp3Response, PluginInvokeError> = plugin
+    // Android forbids starting this service from the background on recent
+    // versions. This call is initiated by the user's foreground enqueue.
+    let started: Result<serde_json::Value, PluginInvokeError> = plugin
         .0
-        .run_mobile_plugin("downloadMp3", DownloadMp3Request { url: request.url });
-    let outcome = result
-        .map_err(|error| error.to_string())
-        .and_then(|response| {
-            if response.id.is_empty() || !response.uri.starts_with("content://") {
-                Err("Android plugin returned an invalid published MP3".into())
-            } else {
-                Ok(())
+        .run_mobile_plugin("startWorkService", serde_json::json!({}));
+    let outcome = match started {
+        Err(error) => Err(error.to_string()),
+        Ok(_) => {
+            eprintln!("Zownload0C08 RUST_SERVICE_STARTED item={}", item.id);
+            let active = with_queue(&queue, |store| {
+                store.checkpoint(&item.id, ItemStatus::Downloading, None, None)
+            });
+            let active = match active {
+                Ok(active) => active,
+                Err(error) => {
+                    let _: Result<serde_json::Value, PluginInvokeError> = plugin
+                        .0
+                        .run_mobile_plugin("stopWorkService", serde_json::json!({}));
+                    return Err(error);
+                }
+            };
+            emit_item(&app, &active);
+
+            // The Kotlin call can outlive a WebView. Never hold the database
+            // lock while it runs; get_queue must answer a recreated UI.
+            let result: Result<DownloadMp3Response, PluginInvokeError> = plugin
+                .0
+                .run_mobile_plugin("downloadMp3", DownloadMp3Request { url: request.url });
+            eprintln!(
+                "Zownload0C08 RUST_DOWNLOAD_CALLBACK item={} result={}",
+                item.id,
+                if result.is_ok() { "ok" } else { "error" }
+            );
+            let stopped: Result<serde_json::Value, PluginInvokeError> = plugin
+                .0
+                .run_mobile_plugin("stopWorkService", serde_json::json!({}));
+            eprintln!("Zownload0C08 RUST_SERVICE_STOP_REQUESTED item={}", item.id);
+            match (result, stopped) {
+                (Ok(response), stop_result) if response.timed_out => {
+                    if let Err(error) = stop_result {
+                        eprintln!("Zownload0C08 RUST_TIMEOUT_STOP_ERROR {error}");
+                    }
+                    eprintln!("Zownload0C08 RUST_TIMEOUT_CALLBACK item={}", item.id);
+                    let paused = with_queue(&queue, |store| {
+                        store.checkpoint(&item.id, ItemStatus::Paused, None, None)
+                    })?;
+                    emit_item(&app, &paused);
+                    return Err("Foreground service timed out; open Zownload to continue".into());
+                }
+                (Ok(response), Ok(_))
+                    if response.id.as_deref().is_some_and(|id| !id.is_empty())
+                        && response
+                            .uri
+                            .as_deref()
+                            .is_some_and(|uri| uri.starts_with("content://")) =>
+                {
+                    Ok(())
+                }
+                (Ok(_), Ok(_)) => Err("Android plugin returned an invalid published MP3".into()),
+                (Err(error), _) => Err(error.to_string()),
+                (_, Err(error)) => Err(format!("Could not stop Android service: {error}")),
             }
-        });
+        }
+    };
 
     match outcome {
         Ok(()) => {
