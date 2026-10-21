@@ -13,8 +13,8 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 
-// Rust will own job state and call this adapter through the plugin in later
-// tasks. The 0C-05 device test exercises package setup and a smoke request.
+// Rust owns job state. This adapter supplies engine progress to the plugin,
+// which forwards it to Rust without keeping a second queue.
 internal class AndroidEngineAdapter(
     context: Context,
     private val packageProvider: AndroidEnginePackage = BundledEnginePackage(),
@@ -33,6 +33,7 @@ internal class AndroidEngineAdapter(
         url: String,
         output: File,
         processId: String,
+        rateLimit: String?,
         onProgress: (Float, Long, String) -> Unit,
         onError: (Throwable) -> Unit,
     ): EngineRun {
@@ -45,6 +46,7 @@ internal class AndroidEngineAdapter(
         request.addOption("-f", "bestaudio/best")
         request.addOption("--verbose")
         request.addOption("--no-mtime")
+        if (BuildConfig.DEBUG && rateLimit != null) request.addOption("--limit-rate", rateLimit)
         request.addOption("-o", output.absolutePath)
         return try {
             val result = YoutubeDL.getInstance().execute(request, processId, onProgress)

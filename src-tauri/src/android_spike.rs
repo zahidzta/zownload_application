@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use tauri::{
+    ipc::Channel,
     plugin::{mobile::PluginInvokeError, PluginHandle},
     AppHandle, Emitter, Manager, State,
 };
@@ -124,8 +125,8 @@ impl QueueStore {
         Ok(item)
     }
 
-    // The current Kotlin bridge supplies only a final result. Later callback
-    // work can feed intermediate percentages through this durable checkpoint.
+    // The Kotlin engine callback reaches this durable checkpoint through a
+    // Rust channel; Kotlin does not keep queue state.
     fn checkpoint(
         &self,
         id: &str,
@@ -176,6 +177,14 @@ pub struct SmokeResponse {
 #[derive(Serialize)]
 struct DownloadMp3Request {
     url: String,
+    #[serde(rename = "onProgress")]
+    on_progress: Channel<EngineProgress>,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Deserialize)]
+struct EngineProgress {
+    percent: f32,
 }
 
 #[cfg(target_os = "android")]
@@ -265,9 +274,64 @@ fn enqueue_download_blocking<R: Runtime>(
 
             // The Kotlin call can outlive a WebView. Never hold the database
             // lock while it runs; get_queue must answer a recreated UI.
-            let result: Result<DownloadMp3Response, PluginInvokeError> = plugin
-                .0
-                .run_mobile_plugin("downloadMp3", DownloadMp3Request { url: request.url });
+            // Kotlin sends transient engine progress directly to this Rust
+            // channel. Rust alone checkpoints it and publishes queue events.
+            let progress_app = app.clone();
+            let progress_id = item.id.clone();
+            let on_progress = Channel::new(move |body| {
+                let update: EngineProgress = match body.deserialize() {
+                    Ok(update) => update,
+                    Err(error) => {
+                        eprintln!("Zownload0C09 RUST_PROGRESS_INVALID {error}");
+                        return Ok(());
+                    }
+                };
+                let state = progress_app.state::<SpikeQueue>();
+                let changed = with_queue(&state, |store| {
+                    let Some(current) = store.current()? else {
+                        return Ok(None);
+                    };
+                    let Progress::Single { percent: previous } = current.progress else {
+                        return Ok(None);
+                    };
+                    if current.id != progress_id
+                        || current.status != ItemStatus::Downloading
+                        || !update.percent.is_finite()
+                        || update.percent <= previous
+                        || update.percent > 100.0
+                    {
+                        return Ok(None);
+                    }
+                    store
+                        .checkpoint(
+                            &progress_id,
+                            ItemStatus::Downloading,
+                            Some(update.percent),
+                            None,
+                        )
+                        .map(Some)
+                });
+                match changed {
+                    Ok(Some(item)) => {
+                        eprintln!(
+                            "Zownload0C09 RUST_PROGRESS item={} percent={}",
+                            item.id, update.percent
+                        );
+                        emit_item(&progress_app, &item);
+                    }
+                    Ok(None) => {}
+                    Err(error) => eprintln!("Zownload0C09 RUST_PROGRESS_SAVE_FAILED {error}"),
+                }
+                Ok(())
+            });
+            let result: Result<DownloadMp3Response, PluginInvokeError> =
+                plugin.0.run_mobile_plugin(
+                    "downloadMp3",
+                    DownloadMp3Request {
+                        url: request.url,
+                        on_progress,
+                    },
+                );
             eprintln!(
                 "Zownload0C08 RUST_DOWNLOAD_CALLBACK item={} result={}",
                 item.id,
