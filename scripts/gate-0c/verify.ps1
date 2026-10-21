@@ -2,12 +2,161 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'mediastore-zip') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $env:ANDROID_HOME = $sdk
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a' -or [int]$api -lt 29) { throw "Requires physical arm64 API 29+; found $abi API $api" }
+
+        $logs = Join-Path $root 'work/android/0c-13'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $buildLog = Join-Path $logs 'android-build.log'
+        Push-Location $root
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+
+        $testBuildLog = Join-Path $logs 'android-test-build.log'
+        Push-Location (Join-Path $root 'src-tauri/gen/android')
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        & $adb -s $serial install -r $apk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the app APK.' }
+        & $adb -s $serial uninstall com.zownload.app.test | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not reset the separate test APK.' }
+        & $adb -s $serial install -r $testApk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the instrumentation APK.' }
+        & $adb -s $serial shell pm grant com.zownload.app.test android.permission.READ_EXTERNAL_STORAGE | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not grant the separate test APK read access.' }
+        & $adb -s $serial logcat -c | Out-Null
+
+        $testLog = Join-Path $logs 'device-test.log'
+        $testErr = Join-Path $logs 'device-test-error.log'
+        $args = @('-s', $serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+            'com.zownload.app.MediaStoreZipDeviceTest#rustStreamsZipAndDeletesFailedPendingRow',
+            'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner')
+        $instrument = Start-Process -FilePath $adb -ArgumentList $args -PassThru `
+            -RedirectStandardOutput $testLog -RedirectStandardError $testErr -WindowStyle Hidden
+        $pending = $null
+        $deadline = (Get-Date).AddSeconds(45)
+        while (-not $pending -and (Get-Date) -lt $deadline -and -not $instrument.HasExited) {
+            Start-Sleep -Milliseconds 250
+            $live = (& $adb -s $serial logcat -d -s 'Zownload0C13:I' '*:S' 2>&1 | Out-String)
+            $pending = [regex]::Match($live, 'ZIP_PENDING uri=(content://\S+) name=(Zownload-0C13-[a-f0-9-]+\.zip)')
+            if (-not $pending.Success) { $pending = $null }
+        }
+        if (-not $pending) { throw 'No pending ZIP row appeared during instrumentation.' }
+        $pendingUri = $pending.Groups[1].Value
+        $pendingName = $pending.Groups[2].Value
+        # adb's shell UID is privileged. The receiver queries as the separate
+        # test APK UID with read permission, before Rust writes the ZIP.
+        & $adb -s $serial shell am broadcast -n com.zownload.app.test/com.zownload.app.ZipVisibilityReceiver --es uri $pendingUri | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not query the pending row as the test app.' }
+        $visibility = (& $adb -s $serial logcat -d -s 'Zownload0C13:I' '*:S' 2>&1 | Out-String)
+        if ($visibility -notmatch "ZIP_VISIBILITY uid=\d+ uri=$([regex]::Escape($pendingUri)) visible=false") {
+            throw 'The separate test app did not confirm that the pending row was hidden.'
+        }
+        $pendingRow = (& $adb -s $serial shell content query --uri $pendingUri 2>&1 | Out-String)
+        if ($pendingRow -notmatch 'is_pending=1' -or
+            $visibility -match "ZIP_PUBLISHED uri=$([regex]::Escape($pendingUri))") {
+            throw 'The visibility query did not run before ZIP publication.'
+        }
+        $null = $instrument.WaitForExit(120000)
+        if (-not $instrument.HasExited) { throw 'ZIP instrumentation timed out.' }
+        $testReport = Get-Content $testLog -Raw
+        if (-not $testReport.Contains('OK (1 test)') -or -not $testReport.Contains('INSTRUMENTATION_CODE: -1')) {
+            throw "ZIP instrumentation failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+        }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C13:I' 'RustStdoutStderr:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        foreach ($term in @('ZIP_TEST_PUBLISHED OK:', 'ZIP_TEST_FAILED ERR:Injected ZIP failure', 'ZIP_DELETED uri=', 'deleted=1', 'ZIP_ABORT')) {
+            if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+        }
+        $deleted = [regex]::Match($report, 'ZIP_DELETED uri=(content://\S+) deleted=1')
+        if (-not $deleted.Success) { throw 'Could not parse the deleted failed ZIP row.' }
+        $failedRow = (& $adb -s $serial shell content query --uri $deleted.Groups[1].Value 2>&1 | Out-String)
+        if ($failedRow -match 'Row:|_display_name=') { throw 'The failed ZIP row still exists.' }
+        $published = [regex]::Match($report, 'ZIP_PUBLISHED uri=(content://\S+) name=(Zownload-0C13-[a-f0-9-]+\.zip) bytes=(\d+)')
+        if (-not $published.Success -or $published.Groups[1].Value -ne $pendingUri -or $published.Groups[2].Value -ne $pendingName) {
+            throw 'The pending ZIP row was not published under the same URI and name.'
+        }
+        # Downloads rows remain owner-scoped to MediaStore callers on API 29.
+        # The shell can inspect the published metadata and the actual file.
+        $publishedRow = (& $adb -s $serial shell content query --uri $pendingUri 2>&1 | Out-String)
+        if ($publishedRow -notmatch 'is_pending=0' -or $publishedRow -notmatch [regex]::Escape($pendingName)) {
+            throw 'Published MediaStore metadata is missing or still pending.'
+        }
+        $media = Join-Path $logs $pendingName
+        & $adb -s $serial pull "/sdcard/Download/$pendingName" $media | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Cannot pull Downloads/$pendingName." }
+        if ((Get-Item -LiteralPath $media).Length -ne [long]$published.Groups[3].Value) { throw 'Published ZIP byte count differs from the pulled file.' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($media)
+        try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName })
+            if ($names.Count -ne 2 -or $names[0] -ne 'manifest.txt' -or $names[1] -ne 'payload.bin') {
+                throw "ZIP entry order differs: $($names -join ', ')"
+            }
+            $textReader = New-Object IO.StreamReader($archive.Entries[0].Open())
+            try { $manifest = $textReader.ReadToEnd() } finally { $textReader.Dispose() }
+            if ($manifest -ne "Zownload Gate 0C-13`nRust owns ZIP entries and order.`n") { throw 'ZIP manifest differs.' }
+            [byte[]]$expected = New-Object byte[] (256 * 1024)
+            for ($i = 0; $i -lt $expected.Length; $i++) { $expected[$i] = [byte]($i % 256) }
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try {
+                $expectedHash = [BitConverter]::ToString($sha.ComputeHash($expected)).Replace('-', '').ToLowerInvariant()
+                $payloadStream = $archive.Entries[1].Open()
+                try { $actualHash = [BitConverter]::ToString($sha.ComputeHash($payloadStream)).Replace('-', '').ToLowerInvariant() }
+                finally { $payloadStream.Dispose() }
+            } finally { $sha.Dispose() }
+            if ($archive.Entries[1].Length -ne $expected.Length -or $actualHash -ne $expectedHash) { throw 'ZIP payload length or SHA-256 differs.' }
+        } finally { $archive.Dispose() }
+        $privateZip = (& $adb -s $serial shell run-as com.zownload.app find cache -type f -name '*.zip' 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $privateZip) { throw "Private ZIP copy check failed: $privateZip" }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        $zipHash = (Get-FileHash -LiteralPath $media -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-13 mediastore-zip: device and ZIP proof PASS; $model API $api $abi serial $serial."
+        Write-Output "Pending hidden from separate test app UID; published IS_PENDING=0; URI: $pendingUri; ZIP: $pendingName; bytes: $($published.Groups[3].Value); SHA-256: $zipHash."
+        Write-Output "Entries: $($names -join ', '); payload SHA-256: $actualHash; injected failure deleted its pending row."
+        Write-Output "APK SHA-256: $apkHash; local feasibility only; Android distribution remains blocked."
+        exit 0
+    } catch {
+        Write-Error "0C-13 mediastore-zip: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'webview-recreate') {
     try {
