@@ -2,12 +2,105 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'quickjs-device') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device $serial is not authorized and connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a') { throw "Device ABI is $abi, expected arm64-v8a." }
+
+        foreach ($input in @('work/android/0c-05/jniLibs/arm64-v8a/libqjs.so',
+                'work/android/0c-05/res/raw/ytdlp')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $root $input))) {
+                throw "Run package-quickjs.ps1 before building Android; missing $input."
+            }
+        }
+        $logs = Join-Path $root 'work/android/0c-05'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $buildLog = Join-Path $logs 'android-build.log'
+        Push-Location $root
+        try {
+            $prior = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) {
+                throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")"
+            }
+        } finally { Pop-Location }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        $archive = [IO.Compression.ZipFile]::OpenRead($apk)
+        try {
+            $expected = @{
+                'lib/arm64-v8a/libqjs.so' = '4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185'
+                'res/raw/ytdlp' = '1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6'
+            }
+            foreach ($name in $expected.Keys) {
+                $entry = $archive.GetEntry($name)
+                if (-not $entry) { throw "APK lacks $name" }
+                $stream = $entry.Open()
+                try { $actual = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.ToLowerInvariant() }
+                finally { $stream.Dispose() }
+                if ($actual -ne $expected[$name]) { throw "APK $name SHA-256 mismatch: $actual" }
+            }
+            if (@($archive.Entries | Where-Object { $_.FullName -like 'lib/*' -and $_.FullName -notlike 'lib/arm64-v8a/*' }).Count) {
+                throw 'APK includes a non-arm64 native library.'
+            }
+        } finally { $archive.Dispose() }
+
+        & $adb -s $serial logcat -c | Out-Null
+        $testLog = Join-Path $logs 'device-test.log'
+        $android = Join-Path $root 'src-tauri/gen/android'
+        Push-Location $android
+        try {
+            $prior = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                & .\gradlew.bat :app:connectedUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testLog
+            }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) {
+                throw "Device test failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+            }
+        } finally { Pop-Location }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C05:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        foreach ($term in @('ZOWNLOAD_QUICKJS_EXEC_OK', 'yt-dlp version stable@2026.08.19',
+                'yt_dlp_ejs-0.8.0', 'JS runtimes: quickjs-2026-06-04', 'writable cache=')) {
+            if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-05 quickjs-device: PASS; $model; API $api; $abi; serial $serial."
+        Write-Output "APK SHA-256: $apkHash; local feasibility only; Android distribution remains blocked."
+        Get-Content $deviceLog | Where-Object { $_ -match 'QuickJS script=|yt-dlp version|Optional libraries:|JS runtimes:|writable cache=' } |
+            Select-Object -Last 8
+        exit 0
+    } catch {
+        Write-Error "0C-05 quickjs-device: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'engine-reintegration') {
     try {

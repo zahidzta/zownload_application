@@ -22,6 +22,7 @@ dist/
 build/
 target/
 work/engine/
+work/android/
 
 # Configuracion local
 .codex/

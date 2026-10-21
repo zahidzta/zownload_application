@@ -90,6 +90,14 @@ jobs:
           rustup toolchain install 1.99.1 --profile minimal
           rustup target add aarch64-linux-android --toolchain 1.99.1
       - run: npm ci
+      - name: Build and package pinned Android QuickJS and yt-dlp
+        run: |
+          if ! bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify > "$RUNNER_TEMP/quickjs-build.log" 2>&1; then
+            tail -n 50 "$RUNNER_TEMP/quickjs-build.log"
+            exit 1
+          fi
+          pwsh -NoProfile -File scripts/gate-0c/package-quickjs.ps1 \
+            -QuickJsPath work/engine/build/quickjs/android-arm64/qjs
       - name: Build Android debug APK
         run: |
           chmod +x src-tauri/gen/android/gradlew
