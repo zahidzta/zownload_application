@@ -2,12 +2,118 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit')]
+    [ValidateSet('library-audit', 'engine-package')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'engine-package') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $evidence = Get-Content (Join-Path $root 'docs/gates/evidence/0c/engine-package.md') -Raw
+        $rows = @(Import-Csv (Join-Path $root 'docs/gates/evidence/0c/engine-package-native.tsv') -Delimiter "`t")
+        if ($rows.Count -ne 361) { throw "Expected 361 native inventory rows, got $($rows.Count)" }
+        if (@($rows | Where-Object { $_.sha256 -notmatch '^[a-f0-9]{64}$' -or $_.bytes -notmatch '^[0-9]+$' }).Count) {
+            throw 'Native manifest has an invalid hash or size.'
+        }
+        if (@($rows | Group-Object container, entry | Where-Object Count -gt 1).Count) {
+            throw 'Native manifest contains duplicate paths.'
+        }
+
+        $cache = Join-Path $env:USERPROFILE '.gradle/caches/modules-2/files-2.1/io.github.junkfood02.youtubedl-android'
+        $hashes = @{
+            library = '579b5fb480892b1abc2b218c2089699d52759cc8d7ba256bf876453f0365faef'
+            ffmpeg = '0a87ffa6cf912b0fe76c1a99b9107f543ee2f247935fae2c71f0822eb7bc5f49'
+            common = 'e0c0530bdbdf203e1598e900085d3582e27360731872872f3a67f23a9b24c0b5'
+        }
+        $artifacts = @{}
+        foreach ($module in $hashes.Keys) {
+            $file = Get-ChildItem (Join-Path $cache $module) -Filter "$module-0.18.1.aar" -Recurse -File |
+                Select-Object -First 1
+            if (-not $file) { throw "Resolved $module AAR is missing from Gradle cache." }
+            $actual = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($actual -ne $hashes[$module] -or -not $evidence.Contains($actual)) {
+                throw "Resolved $module AAR does not match the evidence."
+            }
+            $artifacts[$module] = $file.FullName
+        }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        foreach ($module in @('library', 'ffmpeg')) {
+            $outer = [System.IO.Compression.ZipFile]::OpenRead($artifacts[$module])
+            try {
+                $nestedName = if ($module -eq 'library') {
+                    'jni/arm64-v8a/libpython.zip.so'
+                } else {
+                    'jni/arm64-v8a/libffmpeg.zip.so'
+                }
+                $memory = [System.IO.MemoryStream]::new()
+                $source = $outer.GetEntry($nestedName).Open()
+                try { $source.CopyTo($memory) } finally { $source.Dispose() }
+                $memory.Position = 0
+                $nested = [System.IO.Compression.ZipArchive]::new($memory)
+                try {
+                    foreach ($row in $rows | Where-Object { $_.container -like "$module-0.18.1.aar*" }) {
+                        $entry = if ($row.container -eq "$module-0.18.1.aar") {
+                            $outer.GetEntry($row.entry)
+                        } elseif ($row.container -eq "$module-0.18.1.aar/$nestedName") {
+                            $nested.GetEntry($row.entry)
+                        } else {
+                            throw "Unexpected inventory container: $($row.container)"
+                        }
+                        if (-not $entry -or $entry.Length -ne [long]$row.bytes) {
+                            throw "Missing or wrong-sized native entry: $($row.entry)"
+                        }
+                        $stream = $entry.Open()
+                        try {
+                            $actual = (Get-FileHash -InputStream $stream -Algorithm SHA256).Hash.ToLowerInvariant()
+                        } finally { $stream.Dispose() }
+                        if ($actual -ne $row.sha256) {
+                            throw "Native entry hash differs: $($row.entry)"
+                        }
+                    }
+                } finally {
+                    $nested.Dispose()
+                    $memory.Dispose()
+                }
+            } finally {
+                $outer.Dispose()
+            }
+        }
+
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path $apk)) { throw 'The inspected debug APK is missing.' }
+        $apkHash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        if (-not $evidence.Contains($apkHash)) { throw 'APK hash differs from the evidence.' }
+        $archive = [System.IO.Compression.ZipFile]::OpenRead($apk)
+        try {
+            $native = @($archive.Entries | Where-Object FullName -Like 'lib/*')
+            if (@($native | Where-Object FullName -NotLike 'lib/arm64-v8a/*').Count) {
+                throw 'APK contains another native ABI.'
+            }
+            foreach ($name in @('libpython.so', 'libpython.zip.so', 'libqjs.so',
+                    'libffmpeg.so', 'libffmpeg.zip.so', 'libffprobe.so', 'libzownload_lib.so')) {
+                if (-not $archive.GetEntry("lib/arm64-v8a/$name")) {
+                    throw "APK lacks $name."
+                }
+            }
+        } finally {
+            $archive.Dispose()
+        }
+
+        foreach ($term in @('1,007 entries', '184 entries', 'corresponding-source',
+                '**Gate 0C stop rule invoked.**', 'not a completed 0C-04 integration')) {
+            if (-not $evidence.Contains($term)) { throw "Missing stop evidence: $term" }
+        }
+        Write-Output '0C-04 engine-package: evidence verified; Gate 0C BLOCKED by missing corresponding source/notices.'
+        exit 0
+    } catch {
+        Write-Error "0C-04 engine-package: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 try {
     $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path

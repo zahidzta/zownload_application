@@ -75,6 +75,7 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-04 — Pinned youtubedl-android adapter
 
+- **2026-10-20 stop:** the published 0.18.1 AARs resolved and an adapter compiled, but [the package inventory](evidence/0c/engine-package.md) could not establish corresponding source, build inputs, and notices for the exact native binaries. The temporary dependency and adapter were removed. 0C-04 acceptance is **blocked**; 0C-05 and later Android integration remain closed pending 0C-04A.
 - Goal: after 0C-01B review, add the 0C-01 pinned youtubedl-android dependency and a minimal Kotlin analyze/download-one/cancel adapter with progress/error callbacks. Inventory the resolved AAR, transitive packages, native binaries, FFmpeg build flags, exact versions/hashes, licences, corresponding sources, build configuration, and notices needed for GPL distribution.
 - Files: `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `src-tauri/src/android_spike.rs`, `docs/gates/evidence/0c/engine-package.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:348-349,368,372-374,386,388,753`.
@@ -82,6 +83,14 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 - Dependencies/parallelism: 0C-01, owner-reviewed 0C-01B, and 0C-03; independent of the later queue prototype.
 - Acceptance: pinned dependency resolves; arm64 packaging and adapter compile; actual GPL package/source inventory records the packaged yt-dlp, FFmpeg, native and transitive inputs plus source/build/notices gaps. Any missing hard redistribution input invokes the stop rule. No successful download is claimed here.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-package`.
+
+### 0C-04A — Owner source-provenance and architecture decision
+
+- Goal: review the 0C-04 hard stop. Either obtain a verifiable corresponding-source/build/notices bundle for the exact packaged Python, FFmpeg, QuickJS, and native dependencies, or explicitly reopen the architecture options in the decision memo. Do not treat the AAR repository link or an unpinned Termux recipe as the missing source bundle.
+- Files: `docs/gates/evidence/0c/engine-package.md`, `docs/gates/evidence/0c/architecture-decision.md`, `docs/gates/gate-0c.md`, `docs/STATE.md`; no Android implementation until the decision resolves the hard stop.
+- Device: **no**.
+- Dependencies/parallelism: follows the failed 0C-04 package/source audit; gates a resumed 0C-04 and all later Android engine work.
+- Acceptance: the owner records an explicit decision and the corresponding-source path is demonstrably complete for Option A, or the gate tasks are revised for a different approved architecture.
 
 ### 0C-05 — Pinned QuickJS and matching ejs on device
 
