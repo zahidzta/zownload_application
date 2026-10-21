@@ -7,7 +7,7 @@ export default function App() {
   const [url, setUrl] = useState('')
   const [queue, setQueue] = useState<QueueItem[] | null>(null)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('Check the Rust queue before starting.')
+  const [message, setMessage] = useState('Refresh the Rust queue before starting.')
   const [lastId, setLastId] = useState<string | null>(null)
 
   async function refreshQueue() {
@@ -40,7 +40,7 @@ export default function App() {
       })
       setLastId(id)
       setQueue(null)
-      setMessage('Rust accepted the item. Refresh status to inspect it.')
+      setMessage('MP3 published in Downloads. Open it on the device to check playback.')
     } catch (error) {
       setMessage(`Start failed: ${String(error)}`)
     } finally {

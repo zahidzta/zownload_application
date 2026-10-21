@@ -2,12 +2,104 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'youtube-mp3') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        if (-not $env:ZOWNLOAD_ANDROID_YOUTUBE_URL) { throw 'Set ZOWNLOAD_ANDROID_YOUTUBE_URL to the approved real YouTube single.' }
+        $url = [uri]$env:ZOWNLOAD_ANDROID_YOUTUBE_URL
+        if ($url.Scheme -ne 'https' -or $url.Host -notin @('www.youtube.com', 'youtu.be')) {
+            throw 'ZOWNLOAD_ANDROID_YOUTUBE_URL must be an HTTPS YouTube single.'
+        }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $env:ANDROID_HOME = $sdk
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a' -or [int]$api -lt 29) { throw "Requires physical arm64 API 29+; found $abi API $api" }
+        $logs = Join-Path $root 'work/android/0c-06'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $buildLog = Join-Path $logs 'android-build.log'
+        Push-Location $root
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+        $android = Join-Path $root 'src-tauri/gen/android'
+        $testBuildLog = Join-Path $logs 'android-test-build.log'
+        Push-Location $android
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        & $adb -s $serial install -r $apk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the app APK.' }
+        & $adb -s $serial install -r $testApk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the instrumentation APK.' }
+        & $adb -s $serial logcat -c | Out-Null
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($url.AbsoluteUri))
+        $testLog = Join-Path $logs 'device-test.log'
+        & $adb -s $serial shell am instrument -w -r -e class 'com.zownload.app.YoutubeMp3DeviceTest#tauriRustKotlinPublishesRealYoutubeMp3' `
+            -e youtubeUrlB64 $encoded 'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner' 2>&1 | Out-File $testLog
+        if ($LASTEXITCODE -ne 0 -or -not ((Get-Content $testLog -Raw).Contains('OK (1 test)'))) {
+            throw "Device test failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+        }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C06:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        foreach ($term in @('TAURI_RESULT OK:', 'PUBLISHED uri=content://', 'mime=audio/mpeg', 'sha256=', 'yt-dlp version stable@2026.08.19', 'JS runtimes: quickjs-2026-06-04', '[ExtractAudio]')) {
+            if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+        }
+        $match = [regex]::Match($report, 'PUBLISHED uri=(content://\S+) name=(Zownload-0C06-[a-f0-9-]+\.mp3) mime=audio/mpeg sha256=([a-f0-9]{64}) bytes=(\d+)')
+        if (-not $match.Success) { throw 'Could not parse the published MediaStore row.' }
+        $name = $match.Groups[2].Value
+        $media = Join-Path $logs $name
+        & $adb -s $serial pull "/sdcard/Download/$name" $media | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Cannot read Downloads/$name from the device." }
+        $hash = (Get-FileHash -LiteralPath $media -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($hash -ne $match.Groups[3].Value) { throw 'Host media SHA-256 differs from the published URI hash.' }
+        if ((Get-Item -LiteralPath $media).Length -ne [long]$match.Groups[4].Value) { throw 'Host media length differs from the published URI length.' }
+        $ffprobe = Join-Path $root 'work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3/ffprobe.exe'
+        if (-not (Test-Path -LiteralPath $ffprobe)) { throw 'Pinned Gate 0B ffprobe is missing.' }
+        $probe = & $ffprobe -v error -show_entries 'format=format_name,duration:stream=codec_name,codec_type,bit_rate' -of json $media | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or -not @($probe.streams | Where-Object { $_.codec_type -eq 'audio' -and $_.codec_name -eq 'mp3' }).Count) {
+            throw 'Published file has no probed MP3 audio stream.'
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-06 youtube-mp3: device and media proof PASS; $model API $api $abi serial $serial."
+        Write-Output "MediaStore URI: $($match.Groups[1].Value); name: $name; MIME: audio/mpeg."
+        Write-Output "MP3 bytes: $($match.Groups[4].Value); SHA-256: $hash; duration: $($probe.format.duration)s."
+        Write-Output "APK SHA-256: $apkHash; local feasibility only; Android distribution remains blocked."
+        Get-Content $deviceLog | Where-Object { $_ -match 'ENGINE .*yt-dlp version|ENGINE .*JS runtimes:|ENGINE .*ExtractAudio|PUBLISHED uri=|TAURI_RESULT' } | Select-Object -Last 8
+        exit 0
+    } catch {
+        Write-Error "0C-06 youtube-mp3: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'quickjs-device') {
     try {

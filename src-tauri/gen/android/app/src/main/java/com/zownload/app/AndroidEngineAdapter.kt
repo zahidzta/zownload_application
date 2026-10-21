@@ -35,16 +35,20 @@ internal class AndroidEngineAdapter(
         processId: String,
         onProgress: (Float, Long, String) -> Unit,
         onError: (Throwable) -> Unit,
-    ): String {
+    ): EngineRun {
         val request = YoutubeDLRequest(url)
         packageProvider.configure(request)
         request.addOption("--no-playlist")
         request.addOption("--extract-audio")
         request.addOption("--audio-format", "mp3")
         request.addOption("--audio-quality", "128K")
+        request.addOption("-f", "bestaudio/best")
+        request.addOption("--verbose")
+        request.addOption("--no-mtime")
         request.addOption("-o", output.absolutePath)
         return try {
-            YoutubeDL.getInstance().execute(request, processId, onProgress).out
+            val result = YoutubeDL.getInstance().execute(request, processId, onProgress)
+            EngineRun(result.out, result.err)
         } catch (error: Exception) {
             onError(error)
             throw error
@@ -53,6 +57,8 @@ internal class AndroidEngineAdapter(
 
     fun cancel(processId: String): Boolean = YoutubeDL.getInstance().destroyProcessById(processId)
 }
+
+internal data class EngineRun(val stdout: String, val stderr: String)
 
 // The provider lets the library choose its own executable paths. Later
 // traceable binaries can be supplied by another provider without changing the
