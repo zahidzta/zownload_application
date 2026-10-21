@@ -2,12 +2,110 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'webview-recreate') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to the physical arm64 device serial.' }
+        if (-not $env:ZOWNLOAD_ANDROID_LONG_URL) { throw 'Set ZOWNLOAD_ANDROID_LONG_URL to the approved rights-cleared long YouTube single.' }
+        $url = [uri]$env:ZOWNLOAD_ANDROID_LONG_URL
+        if ($url.Scheme -ne 'https' -or $url.Host -notin @('www.youtube.com', 'youtu.be')) {
+            throw 'ZOWNLOAD_ANDROID_LONG_URL must be an HTTPS YouTube single.'
+        }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        $webView = (& $adb -s $serial shell dumpsys webviewupdate | Select-String 'Current WebView package' | Out-String).Trim()
+        if ($abi -ne 'arm64-v8a' -or [int]$api -lt 24) { throw "Requires physical arm64 API 24+; found $abi API $api" }
+        $logs = Join-Path $root 'work/android/0c-12'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $env:ANDROID_HOME = $sdk
+        Push-Location $root
+        try {
+            $buildLog = Join-Path $logs 'android-build.log'
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+        Push-Location (Join-Path $root 'src-tauri/gen/android')
+        try {
+            $testBuildLog = Join-Path $logs 'android-test-build.log'
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        foreach ($package in @($apk, $testApk)) {
+            $installed = $false
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+                try { $installReport = (& $adb -s $serial install -r $package 2>&1 | Out-String).Trim() }
+                finally { $ErrorActionPreference = $prior }
+                if ($LASTEXITCODE -eq 0 -and $installReport.Contains('Success')) { $installed = $true; break }
+                Start-Sleep -Seconds 3
+            }
+            if (-not $installed) { throw "Could not install $(Split-Path $package -Leaf) after 3 attempts: $installReport" }
+        }
+        $cleared = (& $adb -s $serial shell pm clear com.zownload.app | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $cleared -ne 'Success') { throw "Could not clear prior spike queue: $cleared" }
+        & $adb -s $serial logcat -c | Out-Null
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($url.AbsoluteUri))
+        $testLog = Join-Path $logs 'webview-recreate-test.log'
+        & $adb -s $serial shell am instrument -w -r -e class `
+            'com.zownload.app.WebViewRecreationDeviceTest#recreatedActivityRestoresQueueAndReceivesProgressEvents' `
+            -e youtubeUrlB64 $encoded 'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner' 2>&1 | Out-File $testLog
+        $testExit = $LASTEXITCODE
+        $testResult = Get-Content $testLog -Raw
+        if ($testExit -ne 0 -or -not $testResult.Contains('OK (1 test)')) {
+            throw "WebView recreation instrumentation failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+        }
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        & $adb -s $serial logcat -d -s 'Zownload0C12:I' 'Zownload0C09:I' 'RustStdoutStderr:I' '*:S' | Out-File $deviceLog
+        $report = Get-Content $deviceLog -Raw
+        $before = [regex]::Match($report, 'BEFORE pid=(\d+) item=([a-f0-9-]{36}) status=downloading percent=([\d.]+) children=([\d,]+)')
+        $after = [regex]::Match($report, 'RECREATED pid=(\d+) item=([a-f0-9-]{36}) status=downloading percent=([\d.]+) children=([\d,]+)')
+        $live = [regex]::Match($report, 'LIVE_EVENT item=([a-f0-9-]{36}) status=downloading percent=([\d.]+) children=([\d,]+)')
+        if (-not $before.Success -or -not $after.Success -or -not $live.Success -or
+                $before.Groups[1].Value -ne $after.Groups[1].Value -or
+                $before.Groups[2].Value -ne $after.Groups[2].Value -or
+                $before.Groups[2].Value -ne $live.Groups[1].Value -or
+                $before.Groups[4].Value -ne $after.Groups[4].Value -or
+                $before.Groups[4].Value -ne $live.Groups[3].Value -or
+                [double]$after.Groups[3].Value -lt [double]$before.Groups[3].Value -or
+                [double]$live.Groups[2].Value -le [double]$after.Groups[3].Value) {
+            throw 'Activity recreation, same job, or new event subscription proof is missing.'
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-12 webview-recreate: PASS; $model API $api $abi serial $serial."
+        Write-Output "WebView: $webView; APK SHA-256: $apkHash."
+        Write-Output 'Local feasibility only; Android distribution remains blocked.'
+        Get-Content $deviceLog | Where-Object { $_ -match 'BEFORE pid=|RECREATED pid=|LIVE_EVENT item=' } | Select-Object -Last 3
+        exit 0
+    } catch {
+        Write-Error "0C-12 webview-recreate: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'process-death') {
     try {
