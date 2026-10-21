@@ -99,6 +99,17 @@ class SpikeDownloadService : Service() {
         }
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.i(TAG, "TASK_REMOVED")
+        // Return the interruption to Rust while this foreground service keeps
+        // the process alive. Rust saves paused, cancels the engine, then stops us.
+        if (!AndroidSpikePlugin.onTaskRemoved()) {
+            Log.w(TAG, "TASK_REMOVED_NO_ACTIVE_DOWNLOAD")
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         if (!timedOut) {
             stopForeground(STOP_FOREGROUND_REMOVE)
