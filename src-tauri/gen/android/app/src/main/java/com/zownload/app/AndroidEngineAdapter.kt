@@ -46,6 +46,8 @@ internal class AndroidEngineAdapter(
         request.addOption("-f", "bestaudio/best")
         request.addOption("--verbose")
         request.addOption("--no-mtime")
+        request.addOption("--continue")
+        request.addOption("--part")
         if (BuildConfig.DEBUG && rateLimit != null) request.addOption("--limit-rate", rateLimit)
         request.addOption("-o", output.absolutePath)
         return try {

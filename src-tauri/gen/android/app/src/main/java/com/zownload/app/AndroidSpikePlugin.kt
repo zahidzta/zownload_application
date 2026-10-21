@@ -26,6 +26,7 @@ class SmokeArgs {
 @InvokeArg
 class DownloadMp3Args {
     lateinit var url: String
+    lateinit var itemId: String
     var onProgress: Channel? = null
 }
 
@@ -106,10 +107,15 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
     fun downloadMp3(invoke: Invoke) {
         val args = invoke.parseArgs(DownloadMp3Args::class.java)
         val url = args.url
+        val itemId = args.itemId
         val parsed = Uri.parse(url)
         val host = parsed.host?.lowercase()
         if (parsed.scheme != "https" || host !in setOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be")) {
             invoke.reject("0C-06 requires a public HTTPS YouTube URL")
+            return
+        }
+        if (!Regex("[a-f0-9-]{36}").matches(itemId)) {
+            invoke.reject("Invalid Rust queue item ID")
             return
         }
         val id = UUID.randomUUID().toString()
@@ -148,10 +154,15 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
         // Tauri dispatches mobile commands on the main thread. Engine work and
         // the MediaStore copy must run on a worker so the WebView stays live.
         Thread {
-            val directory = File(activity.cacheDir, "zownload-0c-06/$id")
+            // The Rust item ID fixes the output path across process death.
+            // Android cannot run this finally block after SIGKILL, so yt-dlp's
+            // .part remains here until the user explicitly continues.
+            val directory = File(activity.cacheDir, "zownload-0c-06/$itemId")
             try {
                 if (finished.get()) return@Thread
-                if (!directory.mkdirs()) throw IllegalStateException("Cannot create private output directory")
+                if (!directory.isDirectory && !directory.mkdirs()) throw IllegalStateException("Cannot create private output directory")
+                val part = directory.listFiles()?.firstOrNull { it.name.endsWith(".part") }
+                if (part != null) Log.i("Zownload0C11", "RESUME_INPUT item=$itemId name=${part.name} bytes=${part.length()}")
                 val engine = AndroidEngineAdapter(activity.applicationContext)
                 var lastPercent = -1
                 val result = engine.downloadOne(
@@ -176,7 +187,8 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
                 (result.stderr + "\n" + result.stdout).lineSequence().filter { line ->
                     line.contains("yt-dlp version") || line.contains("JS runtimes:") ||
                         line.contains("Optional libraries:") || line.contains("[ExtractAudio]") ||
-                        line.contains("ffmpeg command line") || line.contains("Deleting original file")
+                        line.contains("ffmpeg command line") || line.contains("Deleting original file") ||
+                        line.contains("Resuming download at byte") || line.contains("[download] Destination:")
                 }.forEach { Log.i("Zownload0C06", "ENGINE $it") }
                 if (finished.get()) return@Thread
                 val mp3 = File(directory, "audio.mp3")

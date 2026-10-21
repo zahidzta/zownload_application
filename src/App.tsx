@@ -81,6 +81,20 @@ export default function App() {
     }
   }
 
+  async function continueOne(id: string) {
+    if (busy) return
+    setBusy(true)
+    try {
+      await call('resume_download', { id })
+      setMessage('MP3 published in Downloads after continuing the saved item.')
+    } catch (error) {
+      setMessage(`Continue failed: ${String(error)}`)
+    } finally {
+      setBusy(false)
+      void refreshQueue()
+    }
+  }
+
   const item = queue?.[0]
 
   return (
@@ -121,6 +135,11 @@ export default function App() {
           <div><dt>Item state</dt><dd>{item?.status === 'paused' ? 'Paused' : item?.status ?? '—'}</dd></div>
           <div><dt>Progress</dt><dd>{item?.progress.kind === 'single' ? `${item.progress.percent}%` : '—'}</dd></div>
         </dl>
+        {item?.status === 'paused' && (
+          <button type="button" disabled={busy} onClick={() => { void continueOne(item.id) }}>
+            Continue
+          </button>
+        )}
       </section>
     </main>
   )
