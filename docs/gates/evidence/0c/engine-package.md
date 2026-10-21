@@ -3,8 +3,9 @@
 Inspected on 2026-10-20 on Windows, without an Android device. This probe
 temporarily added the approved `0.18.1` `library` and `ffmpeg` Maven modules and
 compiled a minimal Kotlin analyze/download-one/cancel adapter. The dependency
-and adapter were removed from the branch after the hard redistribution gap
-below was confirmed. This is **not a completed 0C-04 integration**.
+and adapter were removed from the 0C-04 branch after the hard redistribution gap
+below was confirmed. This was **not a completed 0C-04 integration**; the separate
+0C-04B reintegration result is recorded below.
 
 ## Resolved artifacts and package proof
 
@@ -99,8 +100,38 @@ The local ignored logs are `work/android/0c-04-dependencies.log` and
 cache, not a guessed source tree. Archive inspection counted entries and
 SHA-256 values from those AAR bytes and checked APK entry hashes. The exact
 `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-package`
-command verifies the recorded hashes, native manifest, and original stop
-finding. Its legacy "Gate 0C BLOCKED" output describes the pre-waiver probe,
-not the current gate decision; it does not claim integration or redistribution
-readiness. Task 0C-04B will restore the dependency and temporary adapter and
-add a reintegration verification case before 0C-05.
+command verifies the recorded AAR hashes, native manifest, original stop
+finding, historical APK hash in this evidence, and native contents of the
+current APK. The original 0C-04 APK was replaced by the 0C-04B build, whose
+new hash is checked separately below. The original stop finding describes the
+pre-waiver probe, not the current gate decision or redistribution readiness.
+Task 0C-04B restored the dependency and temporary adapter, as recorded below.
+
+## 0C-04B reintegration — feasibility only
+
+On 2026-10-20, `task-0c-04b` restored the exact `0.18.1` `library` and
+`ffmpeg` Gradle dependencies; `common:0.18.1` resolved transitively. The
+temporary Kotlin adapter exposes analyze, one-entry MP3 download with progress
+and error callbacks, and cancellation. Its package interface owns the version
+and executable-path choices. The current bundled provider initializes the
+library and does not assume FFmpeg build flags or override the library's paths;
+a later traceable package can use another provider without rewriting the
+adapter. The adapter is not yet called through the Tauri bridge.
+
+The exact `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case
+engine-reintegration` command passed with pinned Node 24.22.0/npm 11.19.1,
+Corretto 21.0.11.10.1, Rust 1.99.1, and NDK r30. It ran the exact `npm run
+android:debug` build, checked the resolved Gradle tree for all three `0.18.1`
+modules, matched their AAR SHA-256 values against the 0C-04 table, confirmed
+the compiled adapter class, and matched all six APK native-library entry hashes
+and sizes against the 0C-04 native manifest. The APK contains only
+`arm64-v8a` native libraries and Zownload's Rust library. The local debug APK
+was **265,242,101 bytes**, SHA-256
+`c69165cbe39e758295aac8fbaec600c8c81b881e24bdd94731e8aca828df8bbf`.
+Logs remain local under `work/android/0c-04b-*.log`.
+
+This is **FEASIBILITY ONLY** compile/package evidence. No adapter method,
+engine executable, device download, or MediaStore flow has run on a device.
+The corresponding-source/build-input/notice gap is still an **OPEN RELEASE
+BLOCKER**. No Android APK or build may be published, uploaded, attached to a
+GitHub release, or shared with anyone until the blocker is resolved.

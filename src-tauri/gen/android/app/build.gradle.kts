@@ -72,6 +72,9 @@ rust {
 }
 
 dependencies {
+    val androidEngineVersion = "0.18.1"
+    implementation("io.github.junkfood02.youtubedl-android:library:$androidEngineVersion")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$androidEngineVersion")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
