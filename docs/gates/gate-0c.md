@@ -5,15 +5,18 @@
 - **Time box: 1–2 days total.** Sixteen roughly 30-minute task sessions were the original target (about eight hours of hands-on work, plus device/build waits). The owner-selected Option A adds an estimated 8–16 sessions for GPL inventory, pinned substitution, custom update/rollback, and release evidence; this estimate does not extend the two-day stop point. If that limit is reached without exit evidence, record the result and ask the owner whether to extend the spike; do not call the gate passed.
 - Source: `PROJECT.md:31-45,180-195,309-314,341-393,687-692,734-753,814-821`; current status and accepted Gate 0B evidence: `docs/STATE.md`. Gate 0B was accepted on 2026-10-20.
 - Strict deliverable: a minimal Tauri Android app and Kotlin plugin use local youtubedl-android with pinned upstream QuickJS 2026-06-04 and a matching yt-dlp/ejs pair to download a real YouTube MP3 into MediaStore Downloads on a physical `arm64-v8a` device. Prototype the foreground service, Home continuation, recents cancellation, interrupted queue recovery, WebView recreation, Android 15 timeout, direct pending MediaStore ZIP output, and a custom verified update/rollback path outside the tagged updater. Record GPL package/source and release evidence. No production UI, server, or production Android release.
-- Exit evidence: AC-30..35 on real hardware, command/log excerpts and media inspection, notification and process observations, SQLite-restored `paused` state, direct ZIP inspection, a custom verified update/rollback result, and GPL package/source evidence. Preserve Gate 0B's already-MP3 bitrate, unmeasured YouTube JS challenge, and FFmpeg HTTPS-input limits as limits; do not turn them into Android success claims.
+- Exit evidence: AC-30..35 on real hardware, command/log excerpts and media inspection, notification and process observations, SQLite-restored `paused` state, direct ZIP inspection, a custom verified update/rollback result, and an explicit open release item for the third-party native binary provenance gap. Preserve Gate 0B's already-MP3 bitrate, unmeasured YouTube JS challenge, and FFmpeg HTTPS-input limits as limits; do not turn them into Android success claims.
 - Ownership: Rust owns the one-item spike queue and its SQLite state; Kotlin contains the engine adapter, MediaStore bridge, and foreground service without a second queue or business rules (`PROJECT.md:381,383,386,392`). `shared/contract.ts` and `src-tauri/src/contract.rs` govern exchanged fields and types. The UI is disposable and reconstructs from `get_queue` plus events. Keep Rust small and comment Android-specific transitions.
-- The owner selected **Option A: youtubedl-android and a repo-wide GPL-3.0-or-later licence** (SPDX `GPL-3.0-or-later`) on 2026-10-20 and states they are the sole copyright holder. This is a planning decision only: task **0C-01B** must bring the pending repo-wide licence change and `PROJECT.md:372,388,627,753,820` edits to the owner for review before Android integration. Legal review before the first public release remains **OPEN**. See the [decision memo](evidence/0c/architecture-decision.md).
+- The owner selected **Option A: youtubedl-android and a repo-wide GPL-3.0-or-later licence** (SPDX `GPL-3.0-or-later`) on 2026-10-20 and states they are the sole copyright holder. Tasks **0C-01B/0C-01C** recorded the licence and `PROJECT.md` revisions; legal review before the first public release remains **OPEN**. See the [decision memo](evidence/0c/architecture-decision.md).
 - The foreground-service type is still marked **pending** in `PROJECT.md:193`. The 0C-01 `dataSync` proposal remains **OPEN**; obtain the owner's explicit decision before 0C-08.
+- **0C-04A owner decision, 2026-10-20:** 0C-04 is accepted for **FEASIBILITY ONLY**. The corresponding-source/build-input/notice gap for youtubedl-android `0.18.1` is an **OPEN RELEASE BLOCKER**, not a Gate 0C feasibility blocker. The owner waives the Gate 0C stop rule for this gap alone; AC-30..35 and every other gate requirement remain in force. Use the package only for feasibility work on the owner's own devices. No Android APK or build may be published, uploaded, attached to a GitHub release, or shared until the gap is resolved. Re-integrate the package and temporary adapter in 0C-04B before 0C-05.
 - Each task uses `task-<id>`, one session, its own verification, work commit, `docs/STATE.md` commit, and PR. Before writing library/framework code, consult its current documentation through context7. The named verification commands below are entrypoints **to implement in those tasks**, not commands run by this setup plan. `scripts/gate-0c/verify.ps1` must print at most a concise 50-line result or failure tail; keep full logs and media ignored under `work/android/`, and commit concise evidence under `docs/gates/evidence/0c/`.
 
 ## Stop rule
 
 **Any failed hard requirement stops Android implementation and requires an explicit architecture decision from the owner.** If Option A's device proof fails, record the exact command, pinned inputs, device/API/ABI, exit status, relevant log lines, and output inspection in `docs/STATE.md` and `docs/gates/evidence/0c/`; then stop and re-open the options in the [decision memo](evidence/0c/architecture-decision.md). Do not switch runtime, engine, storage API, service ownership, FFmpeg licence posture, or acceptance criteria as a workaround. A missing/broken test URL is recorded as fixture evidence and replaced only in a separate fixture task after establishing that it is a fixture failure. The two-day time box is also a stop point for owner review.
+
+The 2026-10-20 owner waiver applies **only** to the 0C-04 corresponding-source/build-input/notice gap. Carry that gap to the first release that includes Android; it does not change AC-30..35 or permit distribution of Android builds.
 
 ## Device and test preparation for the owner
 
@@ -75,30 +78,41 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-04 — Pinned youtubedl-android adapter
 
-- **2026-10-20 stop:** the published 0.18.1 AARs resolved and an adapter compiled, but [the package inventory](evidence/0c/engine-package.md) could not establish corresponding source, build inputs, and notices for the exact native binaries. The temporary dependency and adapter were removed. 0C-04 acceptance is **blocked**; 0C-05 and later Android integration remain closed pending 0C-04A.
+- **2026-10-20 finding and owner decision:** the published 0.18.1 AARs resolved and an adapter compiled, but [the package inventory](evidence/0c/engine-package.md) could not establish corresponding source, build inputs, and notices for the exact native binaries. The temporary dependency and adapter were removed. The owner accepted 0C-04 for **FEASIBILITY ONLY** in 0C-04A and moved this gap to an **OPEN RELEASE BLOCKER**; 0C-04B must restore integration before 0C-05.
 - Goal: after 0C-01B review, add the 0C-01 pinned youtubedl-android dependency and a minimal Kotlin analyze/download-one/cancel adapter with progress/error callbacks. Inventory the resolved AAR, transitive packages, native binaries, FFmpeg build flags, exact versions/hashes, licences, corresponding sources, build configuration, and notices needed for GPL distribution.
 - Files: `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `src-tauri/src/android_spike.rs`, `docs/gates/evidence/0c/engine-package.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:348-349,368,372-374,386,388,753`.
 - Device: **no** for compile/package audit; runtime is 0C-05/06.
 - Dependencies/parallelism: 0C-01, owner-reviewed 0C-01B, and 0C-03; independent of the later queue prototype.
-- Acceptance: pinned dependency resolves; arm64 packaging and adapter compile; actual GPL package/source inventory records the packaged yt-dlp, FFmpeg, native and transitive inputs plus source/build/notices gaps. Any missing hard redistribution input invokes the stop rule. No successful download is claimed here.
+- Acceptance: the recorded probe proves pinned dependency resolution, arm64 packaging, adapter compilation, and an actual GPL package/native inventory with the source/build/notices gap explicit. Accepted for feasibility only under the owner's 0C-04A waiver; no successful download or redistribution readiness is claimed. Re-integration belongs to 0C-04B.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-package`.
 
-### 0C-04A — Owner source-provenance and architecture decision
+### 0C-04A — Owner source-provenance decision (2026-10-20)
 
-- Goal: review the 0C-04 hard stop. Either obtain a verifiable corresponding-source/build/notices bundle for the exact packaged Python, FFmpeg, QuickJS, and native dependencies, or explicitly reopen the architecture options in the decision memo. Do not treat the AAR repository link or an unpinned Termux recipe as the missing source bundle.
-- Files: `docs/gates/evidence/0c/engine-package.md`, `docs/gates/evidence/0c/architecture-decision.md`, `docs/gates/gate-0c.md`, `docs/STATE.md`; no Android implementation until the decision resolves the hard stop.
+- Goal: record the owner's one-gap waiver so Gate 0C can prove technical feasibility on the owner's own devices while exact native corresponding source, build inputs, and notices remain an open release blocker.
+- Files: `docs/gates/evidence/0c/engine-package.md`, `docs/gates/gate-0c.md`, `docs/STATE.md`, `README.md`; documentation only.
 - Device: **no**.
-- Dependencies/parallelism: follows the failed 0C-04 package/source audit; gates a resumed 0C-04 and all later Android engine work.
-- Acceptance: the owner records an explicit decision and the corresponding-source path is demonstrably complete for Option A, or the gate tasks are revised for a different approved architecture.
+- Dependencies/parallelism: follows the 0C-04 package/source audit; 0C-04B follows this decision.
+- Acceptance: the one-gap waiver, non-distribution rule, release replacement plan, and unchanged AC-30..35 are recorded; no dependency or adapter is re-added in this task.
+- Exact verification command: `git diff --check`.
+
+### 0C-04B — Restore pinned engine package and temporary adapter (~30 minutes)
+
+- Goal: re-add the pinned youtubedl-android `0.18.1` `library` and `ffmpeg` dependencies (with resolved `common`) and restore the temporary Kotlin analyze/download-one/cancel adapter from the 0C-04 probe. Keep engine paths and versions behind one interface so later binary replacement does not rewrite the adapter; do not assume the bundled FFmpeg configuration.
+- Files: `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `src-tauri/src/android_spike.rs`, `scripts/gate-0c/verify.ps1`, `docs/gates/evidence/0c/engine-package.md`, `docs/STATE.md`.
+- Read: `PROJECT.md:348-349,372-374,386,388,753`.
+- Device: **no** (compile/package check only).
+- Dependencies/parallelism: 0C-04A; required before 0C-05.
+- Acceptance: the three resolved modules are pinned to `0.18.1`; the restored adapter and arm64-only APK compile; recorded artifact hashes match the 0C-04 inventory; a new verifier case reports feasibility-only status rather than the historical stop. The release blocker and no-distribution rule remain explicit. No device behavior or download is claimed.
+- Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-reintegration` (implement in 0C-04B; it must run `npm run android:debug` and check the resolved modules, hashes, and arm64 APK).
 
 ### 0C-05 — Pinned QuickJS and matching ejs on device
 
-- Goal: package the Gate 0B attested upstream QuickJS 2026-06-04 arm64 build as an Android-executable native artifact; replace the library's bundled older yt-dlp/ejs/QuickJS versions with the pinned, matching pair, pass the explicit runtime option, and run a device smoke probe with writable temporary files.
+- Goal: package the Gate 0B attested upstream QuickJS 2026-06-04 arm64 build as an Android-executable native artifact; replace the library's bundled older yt-dlp/ejs/QuickJS versions with the pinned, matching pair, pass the explicit runtime option, and run a device smoke probe with writable temporary files. Keep engine paths and versions behind one Kotlin interface; make no hard-coded assumption about the library's bundled FFmpeg configuration so release-time binaries can be replaced without rewriting the adapter.
 - Files: `scripts/gate-0c/package-quickjs.ps1`, `src-tauri/gen/android/app/build.gradle.kts`, `src-tauri/gen/android/app/src/main/java/**`, `.gitignore`, `docs/gates/evidence/0c/quickjs.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`; generated native output under ignored `work/android/` or the Android build tree.
 - Read: `PROJECT.md:348,354,370,373,753,814-821`.
 - Device: **physical arm64 required**.
-- Dependencies/parallelism: 0C-01 and 0C-04; independent of 0C-07 after adapter API stabilizes.
+- Dependencies/parallelism: 0C-01 and 0C-04B; independent of 0C-07 after adapter API stabilizes.
 - Acceptance: packaged QuickJS hash/version matches the pinned Android build, device process can execute it, the selected yt-dlp/ejs pair replaces the bundled versions without an active-job swap, yt-dlp reports the selected runtime and matching ejs, and writable temp/cache use is demonstrated. A normal YouTube result alone is insufficient proof of JS execution.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case quickjs-device`.
 
@@ -204,12 +218,13 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 
 ### 0C-16 — Gate evidence and owner checkpoint
 
-- Goal: review AC-30..35 and all Gate 0C hard requirements against exact logs, device details, media hashes/playback, ZIP contents, orphan-process check, and custom update/rollback findings. Add GPL release evidence: resolved package/source inventory, corresponding source and build inputs, third-party notices, and a legal-review-before-first-public-release open item; list any limit without claiming a pass.
+- Goal: review AC-30..35 and all Gate 0C hard requirements against exact logs, device details, media hashes/playback, ZIP contents, orphan-process check, and custom update/rollback findings. Record the GPL package/source inventory and the unresolved corresponding-source/build-input/notice gap as a release blocker. The evidence checklist must carry these pre-release items: **replace third-party native binaries with traceable ones**; provide corresponding source, build inputs and notices; complete legal review and full transitive dependency licence audit; measure release APK size. List any limit without claiming a pass.
+- Pre-release evidence checklist item: **[ ] Replace third-party native binaries with traceable ones** (minimal pinned arm64 FFmpeg + ffprobe without x264/x265, pinned QuickJS, and a traceable Python runtime with yt-dlp). Keep this item open at the feasibility checkpoint.
 - Files: `docs/gates/gate-0c.md`, `docs/gates/evidence/0c/checkpoint.md`, `scripts/gate-0c/verify.ps1`, `docs/STATE.md`.
 - Read: `PROJECT.md:687-692,734-753,814-821`.
 - Device: **no new device run**; requires the recorded physical-device evidence.
-- Dependencies/parallelism: 0C-01B and 0C-02..15; final and not parallel.
-- Acceptance: every hard requirement has linked passing evidence, GPL release evidence and remaining legal-review status are explicit, or the gate is stopped and the memo options are re-opened for the owner. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
+- Dependencies/parallelism: 0C-01B, 0C-02..15, and 0C-04B; final and not parallel.
+- Acceptance: every non-waived hard requirement has linked passing evidence; the exact 0C-04A release blocker, native-binary replacement plan, legal review, transitive audit, and release APK size remain explicit open pre-release items. Gate 0C may pass technical feasibility only; this does not authorize Android distribution. Any other failed hard requirement stops the gate. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case gate`.
 
 ## Thirty-minute risks and planned splits

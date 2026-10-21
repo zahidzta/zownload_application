@@ -62,7 +62,7 @@ AndroidX/Kotlin requests to the app's existing versions. A full transitive
 licence and notice audit remains open; the module-level GPL POM declarations
 do not describe every native package inside the Python and FFmpeg archives.
 
-## Corresponding-source and notice gap — hard stop
+## Corresponding-source and notice gap — RELEASE BLOCKER
 
 The tagged [FFmpeg](https://github.com/yausername/youtubedl-android/blob/d725d5c9a18c3a99a13ee0308bf78275dc310760/BUILD_FFMPEG.md)
 and [Python](https://github.com/yausername/youtubedl-android/blob/d725d5c9a18c3a99a13ee0308bf78275dc310760/BUILD_PYTHON.md)
@@ -77,12 +77,20 @@ source, build-configuration, and notices needed to distribute these exact
 native binaries are **not established**. The complete native file inventory
 records what must be traced; it is not a corresponding-source bundle.
 
-**Gate 0C stop rule invoked.** A missing hard GPL redistribution input fails
-0C-04 acceptance. Do not merge an engine dependency, proceed to 0C-05, or
-claim a downloadable or distributable Android build on this evidence. The
-owner must decide whether to obtain and verify complete corresponding source
-and notices for these exact binaries or reopen the [architecture options](architecture-decision.md).
-Legal review before a public release remains open.
+The original 0C-04 verdict was **Gate 0C stop rule invoked.** The owner decision
+below supersedes that stop for this gap alone.
+
+**Owner decision, 2026-10-20 (0C-04A): 0C-04 is accepted for FEASIBILITY ONLY.**
+The owner waives the Gate 0C stop rule for this corresponding-source/notice gap
+alone. The current youtubedl-android `0.18.1` package (`library`, `ffmpeg`, and
+`common`) may be re-integrated and used for Gate 0C feasibility work on the
+owner's own devices only. This does not waive any AC-30..35 requirement or
+establish redistribution readiness. The gap remains an **OPEN RELEASE BLOCKER**:
+no Android APK or build may be published, uploaded, attached to a GitHub
+release, or shared with anyone until it is resolved. Before the first release
+that includes Android, replace the third-party native binaries with traceable
+ones as recorded in `docs/STATE.md`, or obtain an owner-approved alternative.
+Legal review before the first public release remains open.
 
 ## Verification scope
 
@@ -91,5 +99,8 @@ The local ignored logs are `work/android/0c-04-dependencies.log` and
 cache, not a guessed source tree. Archive inspection counted entries and
 SHA-256 values from those AAR bytes and checked APK entry hashes. The exact
 `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case engine-package`
-command verifies the recorded hashes, native manifest, and explicit stop
-result; it does not claim the blocked integration is complete.
+command verifies the recorded hashes, native manifest, and original stop
+finding. Its legacy "Gate 0C BLOCKED" output describes the pre-waiver probe,
+not the current gate decision; it does not claim integration or redistribution
+readiness. Task 0C-04B will restore the dependency and temporary adapter and
+add a reintegration verification case before 0C-05.
