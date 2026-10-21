@@ -11,7 +11,8 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         android_spike::enqueue_download,
         android_spike::resume_download,
-        android_spike::get_queue
+        android_spike::get_queue,
+        android_spike::probe_mediastore_zip
     ]);
     builder
         .run(tauri::generate_context!())

@@ -4,7 +4,12 @@
 package com.zownload.app
 
 import android.app.Activity
+import android.content.ContentValues
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -14,6 +19,8 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Channel
 import app.tauri.plugin.Plugin
 import java.io.File
+import java.io.IOException
+import java.io.OutputStream
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -35,8 +42,139 @@ class CancelWorkArgs {
     lateinit var id: String
 }
 
+@InvokeArg
+class OpenZipArgs {
+    lateinit var name: String
+}
+
+@InvokeArg
+class ZipChunkArgs {
+    lateinit var id: String
+    lateinit var data: String
+}
+
+@InvokeArg
+class ZipIdArgs {
+    lateinit var id: String
+}
+
+private class PendingZip(
+    val id: String,
+    val uri: Uri,
+    val name: String,
+    val stream: OutputStream,
+    var bytes: Long = 0,
+)
+
 @TauriPlugin
 class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
+    // One transient output handle, not a Kotlin work queue. Rust owns the ZIP.
+    private var pendingZip: PendingZip? = null
+
+    private fun discardZip(row: PendingZip): Int {
+        try { row.stream.close() } catch (error: Exception) { Log.w("Zownload0C13", "ZIP_CLOSE_FAILED", error) }
+        val deleted = activity.contentResolver.delete(row.uri, null, null)
+        Log.i("Zownload0C13", "ZIP_DELETED uri=${row.uri} deleted=$deleted")
+        return deleted
+    }
+
+    @Command
+    @Synchronized
+    fun openZip(invoke: Invoke) {
+        try {
+            if (Build.VERSION.SDK_INT < 29) throw IOException("Pending Downloads rows require API 29")
+            if (pendingZip != null) throw IOException("A ZIP output handle is already open")
+            val name = invoke.parseArgs(OpenZipArgs::class.java).name
+            if (!Regex("Zownload-0C13-[a-f0-9-]{36}\\.zip").matches(name)) throw IOException("Invalid ZIP name")
+            val resolver = activity.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IOException("MediaStore refused the ZIP row")
+            try {
+                val stream = resolver.openOutputStream(uri, "w") ?: throw IOException("Cannot open ZIP row")
+                val row = PendingZip(UUID.randomUUID().toString(), uri, name, stream)
+                pendingZip = row
+                val reply = JSObject()
+                reply.put("id", row.id)
+                reply.put("uri", uri.toString())
+                Log.i("Zownload0C13", "ZIP_PENDING uri=$uri name=$name")
+                invoke.resolve(reply)
+            } catch (error: Exception) {
+                val deleted = resolver.delete(uri, null, null)
+                Log.e("Zownload0C13", "ZIP_OPEN_FAILED deleted=$deleted uri=$uri", error)
+                throw error
+            }
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    @Command
+    @Synchronized
+    fun writeZipChunk(invoke: Invoke) {
+        try {
+            val args = invoke.parseArgs(ZipChunkArgs::class.java)
+            val row = pendingZip ?: throw IOException("No pending ZIP row")
+            if (row.id != args.id) throw IOException("ZIP handle does not match")
+            val bytes = Base64.decode(args.data, Base64.DEFAULT)
+            if (bytes.isEmpty() || bytes.size > 16 * 1024) throw IOException("Invalid ZIP chunk size")
+            row.stream.write(bytes)
+            row.bytes += bytes.size
+            invoke.resolve(JSObject())
+        } catch (error: Exception) {
+            pendingZip?.let { row ->
+                pendingZip = null
+                try { discardZip(row) } catch (cleanup: Exception) { error.addSuppressed(cleanup) }
+            }
+            invoke.reject(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    @Command
+    @Synchronized
+    fun publishZip(invoke: Invoke) {
+        try {
+            val id = invoke.parseArgs(ZipIdArgs::class.java).id
+            val row = pendingZip ?: throw IOException("No pending ZIP row")
+            if (row.id != id) throw IOException("ZIP handle does not match")
+            row.stream.close()
+            val visible = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+            if (activity.contentResolver.update(row.uri, visible, null, null) != 1) throw IOException("ZIP publish failed")
+            pendingZip = null
+            val reply = JSObject()
+            reply.put("uri", row.uri.toString())
+            reply.put("name", row.name)
+            reply.put("bytes", row.bytes)
+            Log.i("Zownload0C13", "ZIP_PUBLISHED uri=${row.uri} name=${row.name} bytes=${row.bytes}")
+            invoke.resolve(reply)
+        } catch (error: Exception) {
+            pendingZip?.let { row ->
+                pendingZip = null
+                try { discardZip(row) } catch (cleanup: Exception) { error.addSuppressed(cleanup) }
+            }
+            invoke.reject(error.message ?: error.javaClass.simpleName)
+        }
+    }
+
+    @Command
+    @Synchronized
+    fun abortZip(invoke: Invoke) {
+        try {
+            val id = invoke.parseArgs(ZipIdArgs::class.java).id
+            val row = pendingZip ?: throw IOException("No pending ZIP row")
+            if (row.id != id) throw IOException("ZIP handle does not match")
+            pendingZip = null
+            if (discardZip(row) != 1) throw IOException("Pending ZIP row was not deleted")
+            invoke.resolve(JSObject())
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: error.javaClass.simpleName)
+        }
+    }
     companion object {
         private val timeoutCallback = AtomicReference<(() -> Unit)?>(null)
         private val taskRemovedCallback = AtomicReference<(() -> Unit)?>(null)

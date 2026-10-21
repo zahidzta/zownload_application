@@ -19,6 +19,8 @@ use uuid::Uuid;
 #[cfg(target_os = "android")]
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "android")]
+use std::io::{self, Write};
+#[cfg(target_os = "android")]
 use std::sync::Mutex;
 #[cfg(target_os = "android")]
 use tauri::{
@@ -206,6 +208,139 @@ struct DownloadMp3Response {
 #[derive(Serialize)]
 struct CancelWorkRequest<'a> {
     id: &'a str,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Deserialize)]
+struct ZipHandle {
+    id: String,
+    uri: String,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Deserialize, Serialize)]
+pub struct ZipProbeResponse {
+    uri: String,
+    name: String,
+    bytes: u64,
+}
+
+// ZipWriter only sees this bounded Write sink. The Kotlin side owns the
+// pending Android output stream, but Rust owns entry names, order and bytes.
+#[cfg(target_os = "android")]
+struct MediaStoreZipWriter<'a, R: Runtime> {
+    plugin: &'a PluginHandle<R>,
+    id: &'a str,
+    bytes: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+#[cfg(target_os = "android")]
+impl<R: Runtime> Write for MediaStoreZipWriter<'_, R> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        use base64::Engine as _;
+        let chunk = &bytes[..bytes.len().min(16 * 1024)];
+        if chunk.is_empty() {
+            return Ok(0);
+        }
+        self.plugin
+            .run_mobile_plugin::<serde_json::Value>(
+                "writeZipChunk",
+                serde_json::json!({
+                    "id": self.id,
+                    "data": base64::engine::general_purpose::STANDARD.encode(chunk)
+                }),
+            )
+            .map_err(io::Error::other)?;
+        self.bytes
+            .fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::Relaxed);
+        Ok(chunk.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn probe_mediastore_zip<R: Runtime>(
+    app: AppHandle<R>,
+    fail: bool,
+) -> Result<ZipProbeResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || probe_mediastore_zip_blocking(app, fail))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[cfg(target_os = "android")]
+fn probe_mediastore_zip_blocking<R: Runtime>(
+    app: AppHandle<R>,
+    fail: bool,
+) -> Result<ZipProbeResponse, String> {
+    let plugin = app.state::<AndroidSpike<R>>();
+    let name = format!("Zownload-0C13-{}.zip", Uuid::new_v4());
+    let handle: ZipHandle = plugin
+        .0
+        .run_mobile_plugin("openZip", serde_json::json!({ "name": name }))
+        .map_err(|error| error.to_string())?;
+    eprintln!("Zownload0C13 ZIP_PENDING uri={} name={name}", handle.uri);
+
+    // Give the separate test app time to query while IS_PENDING=1. Only the
+    // successful probe needs this host-observation window.
+    std::thread::sleep(std::time::Duration::from_secs(if fail { 2 } else { 20 }));
+    let result = (|| -> Result<ZipProbeResponse, String> {
+        let byte_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let sink = MediaStoreZipWriter {
+            plugin: &plugin.0,
+            id: &handle.id,
+            bytes: byte_count.clone(),
+        };
+        let mut archive = zip::ZipWriter::new_stream(sink);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        archive
+            .start_file("manifest.txt", options)
+            .map_err(|error| error.to_string())?;
+        archive
+            .write_all(b"Zownload Gate 0C-13\nRust owns ZIP entries and order.\n")
+            .map_err(|error| error.to_string())?;
+        archive
+            .start_file("payload.bin", options)
+            .map_err(|error| error.to_string())?;
+        let pattern: Vec<u8> = (0..=255).collect();
+        for _ in 0..1024 {
+            archive
+                .write_all(&pattern)
+                .map_err(|error| error.to_string())?;
+        }
+        if fail {
+            return Err("Injected ZIP failure before archive close".into());
+        }
+        archive.finish().map_err(|error| error.to_string())?;
+        let published: ZipProbeResponse = plugin
+            .0
+            .run_mobile_plugin("publishZip", serde_json::json!({ "id": handle.id }))
+            .map_err(|error| error.to_string())?;
+        if published.uri != handle.uri
+            || published.name != name
+            || published.bytes != byte_count.load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err("Published ZIP metadata differs from Rust output".into());
+        }
+        eprintln!(
+            "Zownload0C13 ZIP_PUBLISHED uri={} name={} bytes={}",
+            published.uri, published.name, published.bytes
+        );
+        Ok(published)
+    })();
+    if let Err(error) = &result {
+        let cleanup = plugin.0.run_mobile_plugin::<serde_json::Value>(
+            "abortZip",
+            serde_json::json!({ "id": handle.id }),
+        );
+        eprintln!("Zownload0C13 ZIP_ABORT error={error} cleanup={cleanup:?}");
+    }
+    result
 }
 
 #[cfg(target_os = "android")]
