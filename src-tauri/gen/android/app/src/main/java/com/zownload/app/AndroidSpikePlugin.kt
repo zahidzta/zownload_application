@@ -11,6 +11,7 @@ import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
+import app.tauri.plugin.Channel
 import app.tauri.plugin.Plugin
 import java.io.File
 import java.util.UUID
@@ -25,12 +26,15 @@ class SmokeArgs {
 @InvokeArg
 class DownloadMp3Args {
     lateinit var url: String
+    var onProgress: Channel? = null
 }
 
 @TauriPlugin
 class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
     companion object {
         private val timeoutCallback = AtomicReference<(() -> Unit)?>(null)
+        // Instrumentation can slow a real transfer so Home remains observable.
+        @Volatile internal var testRateLimit: String? = null
 
         fun onForegroundTimeout() {
             timeoutCallback.getAndSet(null)?.invoke()
@@ -66,7 +70,8 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
     fun downloadMp3(invoke: Invoke) {
-        val url = invoke.parseArgs(DownloadMp3Args::class.java).url
+        val args = invoke.parseArgs(DownloadMp3Args::class.java)
+        val url = args.url
         val parsed = Uri.parse(url)
         val host = parsed.host?.lowercase()
         if (parsed.scheme != "https" || host !in setOf("youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be")) {
@@ -101,11 +106,24 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
                 if (finished.get()) return@Thread
                 if (!directory.mkdirs()) throw IllegalStateException("Cannot create private output directory")
                 val engine = AndroidEngineAdapter(activity.applicationContext)
+                var lastPercent = -1
                 val result = engine.downloadOne(
                     url,
                     File(directory, "audio.%(ext)s"),
                     id,
-                    { percent, _, _ -> if (percent >= 100f) Log.i("Zownload0C06", "download reached 100%") },
+                    testRateLimit,
+                    { percent, _, _ ->
+                        if (percent.isFinite() && percent >= 0f && percent <= 100f) {
+                            val whole = percent.toInt()
+                            if (whole > lastPercent) {
+                                lastPercent = whole
+                                val update = JSObject()
+                                update.put("percent", whole.toDouble())
+                                args.onProgress?.send(update)
+                                Log.i("Zownload0C09", "ENGINE_PROGRESS percent=$whole")
+                            }
+                        }
+                    },
                     { error -> Log.e("Zownload0C06", "Engine failure", error) },
                 )
                 (result.stderr + "\n" + result.stdout).lineSequence().filter { line ->
