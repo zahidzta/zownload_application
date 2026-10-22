@@ -11,6 +11,7 @@ const vite = await createServer({ server: { middlewareMode: true, hmr: false }, 
 after(() => vite.close())
 const { useShellStore } = await vite.ssrLoadModule('/src/state/shell.ts')
 const { Header, HeaderView } = await vite.ssrLoadModule('/src/components/Header.tsx')
+const { default: App } = await vite.ssrLoadModule('/src/App.tsx')
 const { t } = await vite.ssrLoadModule('/src/i18n.ts')
 
 function resetShell() {
@@ -49,6 +50,16 @@ test('header keeps logo, name, language, and settings in the approved order', ()
   assert.match(buttons[1], /aria-label="Settings"/)
   assert.match(html, /<span aria-hidden="true"[^>]*>EN<\/span>/)
   assert.doesNotMatch(html, /role="button"|<div[^>]*onClick=/)
+})
+
+test('the running app mounts the header above the temporary bridge probe', () => {
+  resetShell()
+  const html = renderToStaticMarkup(h(App))
+
+  assert.ok(html.indexOf('class="sticky top-0') < html.indexOf('<main class="spike"'))
+  assert.match(html, /aria-label="Switch to Spanish"/)
+  assert.match(html, /aria-label="Settings"/)
+  assert.match(html, /Gate 0C/)
 })
 
 test('language action synchronously changes header names and rendered shell copy', () => {

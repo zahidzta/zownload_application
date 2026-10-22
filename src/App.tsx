@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { call, on, type QueueItem } from '../shared/contract'
+import { Header } from './components/Header'
 
 export default function App() {
   const [url, setUrl] = useState('')
@@ -98,7 +99,9 @@ export default function App() {
   const item = queue?.[0]
 
   return (
-    <main className="spike">
+    <>
+      <Header />
+      <main className="spike">
       <header>
         <span className="eyebrow">Gate 0C · Android spike</span>
         <h1>Zownload</h1>
@@ -141,6 +144,7 @@ export default function App() {
           </button>
         )}
       </section>
-    </main>
+      </main>
+    </>
   )
 }
