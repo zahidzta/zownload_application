@@ -2,12 +2,135 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip', 'update-rollback')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip', 'update-rollback', 'android15-timeout')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'android15-timeout') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        if (-not $env:ANDROID_SERIAL) { throw 'Set ANDROID_SERIAL to a physical Android 15+ arm64 device.' }
+        if (-not $env:ZOWNLOAD_ANDROID_LONG_URL) { throw 'Set ZOWNLOAD_ANDROID_LONG_URL to the approved rights-cleared long YouTube single.' }
+        $url = [uri]$env:ZOWNLOAD_ANDROID_LONG_URL
+        if ($url.Scheme -ne 'https' -or $url.Host -notin @('www.youtube.com', 'youtu.be')) {
+            throw 'ZOWNLOAD_ANDROID_LONG_URL must be an HTTPS YouTube single.'
+        }
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        if (-not (Test-Path -LiteralPath $adb)) { throw "adb is missing: $adb" }
+        $env:ANDROID_HOME = $sdk
+        $serial = $env:ANDROID_SERIAL
+        $state = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $state -ne 'device') { throw "Device is not connected: $state" }
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        $virtual = (& $adb -s $serial shell getprop ro.kernel.qemu | Out-String).Trim()
+        if ([int]$api -lt 35 -or $abi -ne 'arm64-v8a' -or $virtual -eq '1') {
+            throw "Requires physical Android 15+ arm64; found $model API $api $abi qemu=$virtual"
+        }
+        $logs = Join-Path $root 'work/android/0c-15'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $buildLog = Join-Path $logs 'android-build.log'
+        Push-Location $root
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android build failed:`n$((Get-Content $buildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        if (-not (Test-Path -LiteralPath $apk)) { throw 'Android debug APK was not produced.' }
+        $testBuildLog = Join-Path $logs 'android-test-build.log'
+        Push-Location (Join-Path $root 'src-tauri/gen/android')
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File $testBuildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android test build failed:`n$((Get-Content $testBuildLog | Select-Object -Last 50) -join "`n")" }
+        } finally { Pop-Location }
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        if (-not (Test-Path -LiteralPath $testApk)) { throw 'Android instrumentation APK was not produced.' }
+        foreach ($package in @($apk, $testApk)) {
+            $installed = (& $adb -s $serial install -r $package 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $installed.Contains('Success')) {
+                throw "Could not install $(Split-Path $package -Leaf): $installed"
+            }
+        }
+        $cleared = (& $adb -s $serial shell pm clear com.zownload.app | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $cleared -ne 'Success') { throw "Could not clear prior spike queue: $cleared" }
+        & $adb -s $serial shell pm grant com.zownload.app android.permission.POST_NOTIFICATIONS | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not grant test notification permission.' }
+        & $adb -s $serial logcat -c | Out-Null
+        $setting = 'data_sync_fgs_timeout_duration'
+        $original = (& $adb -s $serial shell device_config get activity_manager $setting | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { throw 'Could not read original dataSync timeout setting.' }
+        $restore = $false
+        try {
+            # Official Android test override; start the countdown only after Home.
+            $restore = $true
+            & $adb -s $serial shell device_config put activity_manager $setting 15000 | Out-Null
+            $configured = (& $adb -s $serial shell device_config get activity_manager $setting | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or $configured -ne '15000') { throw "Timeout override did not apply: $configured" }
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($url.AbsoluteUri))
+            $testLog = Join-Path $logs 'device-test.log'
+            $testErr = Join-Path $logs 'device-test-error.log'
+            $args = @('-s', $serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+                'com.zownload.app.ForegroundTimeoutDeviceTest#timeoutPausesRustAndPreservesPartialMedia',
+                '-e', 'youtubeUrlB64', $encoded,
+                'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner')
+            $instrument = Start-Process -FilePath $adb -ArgumentList $args -PassThru `
+                -RedirectStandardOutput $testLog -RedirectStandardError $testErr -WindowStyle Hidden
+            $null = $instrument.WaitForExit(300000)
+            if (-not $instrument.HasExited) {
+                $instrument.Kill()
+                throw 'Android 15 timeout instrumentation exceeded five minutes.'
+            }
+            $testReport = Get-Content -LiteralPath $testLog -Raw
+            if (-not $testReport.Contains('OK (1 test)') -or -not $testReport.Contains('INSTRUMENTATION_CODE: -1')) {
+                throw "Android 15 timeout instrumentation failed:`n$((Get-Content $testLog | Select-Object -Last 50) -join "`n")"
+            }
+            $deviceLog = Join-Path $logs 'device-logcat.log'
+            & $adb -s $serial logcat -d -s 'Zownload0C15:I' 'Zownload0C08:I' 'RustStdoutStderr:I' '*:S' | Out-File $deviceLog
+            $report = Get-Content -LiteralPath $deviceLog -Raw
+            foreach ($term in @('TIMEOUT_ACTIVE', 'SERVICE_TIMEOUT', 'TIMEOUT_CALLBACK_RETURNED_TO_RUST',
+                    'RUST_TIMEOUT_CALLBACK', 'SERVICE_STOPPED timedOut=true', 'TIMEOUT_PART_PRESERVED',
+                    'TIMEOUT_PAUSED', 'TIMEOUT_REOPENED')) {
+                if (-not $report.Contains($term)) { throw "Device log lacks proof: $term" }
+            }
+            if ($report.Contains('TIMEOUT_CANCEL_FAILED') -or $report.Contains('FATAL EXCEPTION')) {
+                throw 'Device log reports timeout cancellation failure or process crash.'
+            }
+        } finally {
+            if ($restore) {
+                if ($original -eq 'null') {
+                    & $adb -s $serial shell device_config delete activity_manager $setting | Out-Null
+                } else {
+                    & $adb -s $serial shell device_config put activity_manager $setting $original | Out-Null
+                }
+                $restored = (& $adb -s $serial shell device_config get activity_manager $setting | Out-String).Trim()
+                if ($LASTEXITCODE -ne 0 -or $restored -ne $original) {
+                    throw "Could not restore original timeout setting: before=$original after=$restored"
+                }
+            }
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "0C-15 android15-timeout: PASS; $model API $api $abi serial $serial."
+        Write-Output "Official dataSync override 15000 ms restored to '$original'; SQLite paused, explanatory notification, .part preserved, reopened queue verified."
+        Write-Output "APK SHA-256: $apkHash; local feasibility only; Android distribution remains blocked."
+        Get-Content $deviceLog | Where-Object { $_ -match 'TIMEOUT_ACTIVE|SERVICE_TIMEOUT|RUST_TIMEOUT_CALLBACK|SERVICE_STOPPED|TIMEOUT_PART_PRESERVED|TIMEOUT_PAUSED|TIMEOUT_REOPENED' } | Select-Object -Last 12
+        exit 0
+    } catch {
+        Write-Error "0C-15 android15-timeout: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'update-rollback') {
     try {
