@@ -1,7 +1,10 @@
 # Zownload state
 
 - **Current checkpoint (2026-10-21):** The owner accepted Gate 0C for **LOCAL TECHNICAL FEASIBILITY ONLY**. AC-30..35 evidence on two physical arm64 devices, probe limits, and custom update/rollback are in the [Gate 0C checkpoint](gates/evidence/0c/checkpoint.md). Gate 0A was accepted on 2026-10-18 and Gate 0B on 2026-10-20.
-- **Current work:** Phase 1 planning only. **Next task: 1A-01 — Stage 1A app-shell task plan**, in a fresh session on `task-1a-01`. Phase 1 execution is not authorized by this checkpoint.
+- **Current work:** Phase 1 setup plan completed in `task-1a-01`: [Gate 1A task plan](gates/gate-1a.md) and [1B/1C outline](gates/phase-1-outline.md). **Next task: 1A-02 — English/Spanish catalog and key parity**, in a fresh session on `task-1a-02`, **only after the owner approves this setup plan**. Phase 1 execution is not authorized yet.
+- **1A decisions before dependent UI work:** `PROJECT.md` requires Queue/History on the desktop left and a settings button after language; indexed desktop images place Queue/History on the right and indexed main images omit settings. Settings, populated History, error notifications, mobile analysis, and several state variants lack an indexed design. See Gate 1A's decision register. No layout/design choice has been made.
+- **1B/1C planning question:** interactive component tests would add Vitest, Testing Library, and a DOM test environment to `package.json`; owner approval is required before adding those dependencies. Gate 1A uses existing Node/Vite/React tools for focused checks.
+- **Open MP3 product behavior:** Gate 0B showed yt-dlp leaves an already-MP3 128 kbps source at 128 kbps even when 320 kbps is requested ([single evidence](gates/evidence/0b/mp3-singles.txt), [playlist evidence](gates/evidence/0b/mp3-playlist.txt)). Whether requested bitrate less than or equal to an MP3 source should also force re-encoding remains an owner decision; Phase 1 must not silently choose a rule.
 
 ## RELEASE BLOCKER — Android distribution
 
