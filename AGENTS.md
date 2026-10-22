@@ -20,6 +20,8 @@ Before anything else, read docs/STATE.md and the current gate file.
 - Work on one `task-<id>` branch per task. After verification, commit and open a PR with `gh pr create`. Never merge, force-push, or create releases; the owner does that.
 - For CI failures use `gh run list --limit 5` and `gh run view <id> --log-failed | tail -50`. Never print full logs.
 
+Stage mode (when the prompt says so): commit each task on the current stage branch; do not create task branches or PRs; never push or merge. Record completion in docs/STATE.md as "Completed <id>: ...", and never delete the "Completed <id>" lines of the current gate (move older gates' details to docs/gates/evidence/).
+
 ### Execute Without Asking
 You may autonomously:
 - Read and analyze project files.
