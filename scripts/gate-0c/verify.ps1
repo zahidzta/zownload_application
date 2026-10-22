@@ -2,12 +2,87 @@
 # SPDX-FileCopyrightText: 2026 zahidzta
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip', 'update-rollback', 'android15-timeout')]
+    [ValidateSet('library-audit', 'engine-package', 'engine-reintegration', 'quickjs-device', 'youtube-mp3', 'foreground-service', 'home', 'recents', 'process-death', 'webview-recreate', 'mediastore-zip', 'update-rollback', 'android15-timeout', 'gate')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($Case -eq 'gate') {
+    try {
+        $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $evidenceDir = Join-Path $root 'docs/gates/evidence/0c'
+        $checkpoint = Get-Content (Join-Path $evidenceDir 'checkpoint.md') -Raw
+        $gate = Get-Content (Join-Path $root 'docs/gates/gate-0c.md') -Raw
+        $state = Get-Content (Join-Path $root 'docs/STATE.md') -Raw
+
+        # This is a retrospective evidence check. Device tests remain in their task records.
+        $records = @(
+            @{ File = 'library-audit.md'; Markers = @('## JS runtime and yt-dlp/ejs pair', '## Update and rollback') },
+            @{ File = 'architecture-decision.md'; Markers = @('Owner selected Option A', 'Legal review') },
+            @{ File = 'licence-compat.md'; Markers = @('GPL-3.0-or-later', '17/17 direct dependencies') },
+            @{ File = 'engine-package.md'; Markers = @('OPEN RELEASE BLOCKER', '579b5fb480892b1abc2b218c2089699d52759cc8d7ba256bf876453f0365faef') },
+            @{ File = 'quickjs.md'; Markers = @('ZOWNLOAD_QUICKJS_EXEC_OK', 'JS runtimes: quickjs-2026-06-04') },
+            @{ File = 'youtube-mp3.md'; Markers = @('PUBLISHED uri=content://media/external/downloads/9623', '3a8e6ff5c2d2ae91216dfd4747ea4b9223d0545b25146683ff99a3c814ec1cda', 'played') },
+            @{ File = 'queue.md'; Markers = @('SQLite', '2/2 tests') },
+            @{ File = 'service.md'; Markers = @('SERVICE_STARTED type=dataSync', 'SERVICE_STOPPED') },
+            @{ File = 'home.md'; Markers = @('HOME_TEST_OK', 'elapsedMs=180372', 'notification=true home=true') },
+            @{ File = 'recents.md'; Markers = @('TASK_REMOVED', 'REOPENED_PAUSED', 'workerExited=true') },
+            @{ File = 'process-death.md'; Markers = @('REOPENED_PAUSED', 'CONTINUED_PART', 'idleMs=5000') },
+            @{ File = 'webview.md'; Markers = @('RECREATED', 'LIVE_EVENT', 'children=17471') },
+            @{ File = 'zip.md'; Markers = @('visible=false', 'deleted=1', '009c0141328d975b3a696bf3135f16d07966bbc56dd558815415e653909ca2d6') },
+            @{ File = 'update-rollback.md'; Markers = @('ACTIVE_JOB_REJECTED', 'BAD_CANDIDATE_REJECTED', 'ROLLBACK_OK', 'RECOVERY_OK') },
+            @{ File = 'timeout.md'; Markers = @('onTimeout(startId=1, fgsType=1)', 'data_sync_fgs_timeout_duration', 'null') }
+        )
+        foreach ($record in $records) {
+            $path = Join-Path $evidenceDir $record.File
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing evidence file: $($record.File)" }
+            if (-not $checkpoint.Contains("($($record.File))")) {
+                throw "Checkpoint does not link $($record.File)"
+            }
+            $contents = Get-Content -LiteralPath $path -Raw
+            foreach ($marker in $record.Markers) {
+                if (-not $contents.Contains($marker)) {
+                    throw "Missing $($record.File) observation: $marker"
+                }
+            }
+        }
+        foreach ($criterion in 30..35) {
+            if ($checkpoint -notmatch "\| \*\*AC-$criterion[^\r\n]*\*\* \| \*\*Pass:") {
+                throw "AC-$criterion has no reviewed pass row"
+            }
+        }
+        $manifest = @(Import-Csv (Join-Path $evidenceDir 'engine-package-native.tsv') -Delimiter "`t")
+        if ($manifest.Count -ne 361 -or
+            @($manifest | Where-Object { $_.sha256 -notmatch '^[a-f0-9]{64}$' }).Count) {
+            throw 'The 361-row native inventory is missing or invalid.'
+        }
+        foreach ($required in @(
+            'Owner acceptance is **PENDING**',
+            'OPEN RELEASE BLOCKER',
+            'No Android APK or build may be published',
+            '- [ ] **Replace third-party native binaries with traceable ones:**',
+            '- [ ] Provide corresponding source',
+            '- [ ] Complete legal review',
+            '- [ ] Complete the full transitive dependency',
+            '- [ ] Measure the **release** Android APK size'
+        )) {
+            if (-not $checkpoint.Contains($required)) { throw "Missing checkpoint decision: $required" }
+        }
+        if (-not $gate.Contains('[checkpoint record](evidence/0c/checkpoint.md)') -or
+            -not $gate.Contains('Owner acceptance is **PENDING**') -or
+            -not $state.Contains('RELEASE BLOCKER') -or
+            -not $state.Contains('No Android APK or build is published')) {
+            throw 'Gate or state does not carry the pending checkpoint and release blocker.'
+        }
+        Write-Output '0C-16 gate: PASS (15 linked evidence records, AC-30..35, 361 native entries, open release items; owner acceptance pending)'
+        exit 0
+    } catch {
+        Write-Error "0C-16 gate: FAIL: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if ($Case -eq 'android15-timeout') {
     try {

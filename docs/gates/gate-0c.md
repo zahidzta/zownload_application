@@ -227,6 +227,31 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 - Acceptance: every non-waived hard requirement has linked passing evidence; the exact 0C-04A release blocker, native-binary replacement plan, legal review, transitive audit, and release APK size remain explicit open pre-release items. Gate 0C may pass technical feasibility only; this does not authorize Android distribution. Any other failed hard requirement stops the gate. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case gate`.
 
+## 0C-16 checkpoint prepared for owner review
+
+The [checkpoint record](evidence/0c/checkpoint.md) reviews AC-30..35 and the
+other Gate 0C hard requirements against the committed physical-device evidence.
+The local `-Case gate` command checks the linked records, required observations,
+native manifest, and open decisions; it does not repeat device tests or verify
+ignored local logs independently. The recorded result supports **local technical
+feasibility only**. Owner acceptance is **PENDING**, and Phase 1 remains closed.
+
+The 0C-04A waiver applies solely to the youtubedl-android `0.18.1` native
+corresponding-source/build-input/notice gap. That gap is an **OPEN RELEASE
+BLOCKER**. No Android APK or build may be published, uploaded, attached to a
+GitHub release, or shared until it is resolved. The checkpoint carries these
+open pre-release evidence items:
+
+- [ ] Replace third-party native binaries with traceable minimal pinned arm64
+  FFmpeg **and ffprobe** without x264/x265, pinned QuickJS, and a traceable
+  Python runtime with yt-dlp.
+- [ ] Provide corresponding source, exact build inputs/configuration, patches
+  and notices for the Android native binaries and packaged dependencies.
+- [ ] Complete legal review before the first public release.
+- [ ] Complete the full transitive dependency licence and notice audit before
+  the first release.
+- [ ] Measure the release APK size after binary replacement.
+
 ## Thirty-minute risks and planned splits
 
 - **0C-04/05:** dependency resolution, native library audit or QuickJS packaging may exceed one session. Split 0C-04 into dependency/package audit and adapter compile; split 0C-05 into packaged hash/build and device runtime proof. Do not claim a runtime pass from compilation.
