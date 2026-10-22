@@ -6,6 +6,7 @@
 - Source: `PROJECT.md:31-45,180-195,309-314,341-393,687-692,734-753,814-821`; current status and accepted Gate 0B evidence: `docs/STATE.md`. Gate 0B was accepted on 2026-10-20.
 - Strict deliverable: a minimal Tauri Android app and Kotlin plugin use local youtubedl-android with pinned upstream QuickJS 2026-06-04 and a matching yt-dlp/ejs pair to download a real YouTube MP3 into MediaStore Downloads on a physical `arm64-v8a` device. Prototype the foreground service, Home continuation, recents cancellation, interrupted queue recovery, WebView recreation, Android 15 timeout, direct pending MediaStore ZIP output, and a custom verified update/rollback path outside the tagged updater. Record GPL package/source and release evidence. No production UI, server, or production Android release.
 - Exit evidence: AC-30..35 on real hardware, command/log excerpts and media inspection, notification and process observations, SQLite-restored `paused` state, direct ZIP inspection, a custom verified update/rollback result, and an explicit open release item for the third-party native binary provenance gap. Preserve Gate 0B's already-MP3 bitrate, unmeasured YouTube JS challenge, and FFmpeg HTTPS-input limits as limits; do not turn them into Android success claims.
+- Owner accepted Gate 0C on 2026-10-21 for **local technical feasibility only**; Android distribution and Phase 1 execution are not authorized by this checkpoint.
 - Ownership: Rust owns the one-item spike queue and its SQLite state; Kotlin contains the engine adapter, MediaStore bridge, and foreground service without a second queue or business rules (`PROJECT.md:381,383,386,392`). `shared/contract.ts` and `src-tauri/src/contract.rs` govern exchanged fields and types. The UI is disposable and reconstructs from `get_queue` plus events. Keep Rust small and comment Android-specific transitions.
 - The owner selected **Option A: youtubedl-android and a repo-wide GPL-3.0-or-later licence** (SPDX `GPL-3.0-or-later`) on 2026-10-20 and states they are the sole copyright holder. Tasks **0C-01B/0C-01C** recorded the licence and `PROJECT.md` revisions; legal review before the first public release remains **OPEN**. See the [decision memo](evidence/0c/architecture-decision.md).
 - The owner approved the 0C-01 `dataSync` foreground-service type proposal for 0C-08 on 2026-10-21. `PROJECT.md:193` records the selected type; Android 15 timeout behavior remains for 0C-15 device proof.
@@ -227,14 +228,14 @@ If documentation/source cannot support a hard prerequisite, record the gap and i
 - Acceptance: every non-waived hard requirement has linked passing evidence; the exact 0C-04A release blocker, native-binary replacement plan, legal review, transitive audit, and release APK size remain explicit open pre-release items. Gate 0C may pass technical feasibility only; this does not authorize Android distribution. Any other failed hard requirement stops the gate. Passing local evidence prepares the checkpoint; only explicit owner acceptance opens Phase 1.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-0c/verify.ps1 -Case gate`.
 
-## 0C-16 checkpoint prepared for owner review
+## Gate 0C checkpoint and owner acceptance
 
 The [checkpoint record](evidence/0c/checkpoint.md) reviews AC-30..35 and the
 other Gate 0C hard requirements against the committed physical-device evidence.
 The local `-Case gate` command checks the linked records, required observations,
 native manifest, and open decisions; it does not repeat device tests or verify
 ignored local logs independently. The recorded result supports **local technical
-feasibility only**. Owner acceptance is **PENDING**, and Phase 1 remains closed.
+feasibility only**. The owner accepted that scope on 2026-10-21; Phase 1 planning is next, while execution remains unauthorized.
 
 The 0C-04A waiver applies solely to the youtubedl-android `0.18.1` native
 corresponding-source/build-input/notice gap. That gap is an **OPEN RELEASE

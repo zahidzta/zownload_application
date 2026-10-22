@@ -1,6 +1,6 @@
 # Zownload — Technical Specification
 
-Repository state: Gate 0A accepted by the owner on 2026-10-18. Work is limited to Gate 0B — Real CLI and licensing proof; its builds and real CLI capabilities are not yet verified.
+Repository state: Gate 0C accepted by the owner on 2026-10-21 for local technical feasibility only. Current work is Phase 1 planning; Phase 1 execution and Android distribution are not authorized.
 
 ## 0. How to read this document
 
@@ -12,7 +12,7 @@ Repository state: Gate 0A accepted by the owner on 2026-10-18. Work is limited t
 | `[PROPOSAL]` | Suggested by the assistant and not rejected, but not explicitly approved. Treat as the default; the owner may change it. Includes everything in the contract files unless noted. |
 | `[PENDING]` | Undecided or unknown. Needs an owner decision or a technical spike. Do not silently pick an answer; ask or document the assumption. |
 
-**Current repository state:** Gate 0A is accepted by the owner (2026-10-18). Work is now limited to **Gate 0B — Real CLI and licensing proof**; its builds and real CLI capabilities are not yet verified. The repository contains:
+**Current repository state:** Gate 0C is accepted by the owner (2026-10-21) for **local technical feasibility only**. Current work is **Phase 1 planning**; Phase 1 execution and Android distribution are not authorized. The repository contains:
 
 - `shared/contract.ts` — TypeScript side of the UI ↔ engine contract.
 - `src-tauri/src/contract.rs` — Rust mirror of the same contract.
