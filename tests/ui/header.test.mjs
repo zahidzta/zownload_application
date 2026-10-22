@@ -52,14 +52,14 @@ test('header keeps logo, name, language, and settings in the approved order', ()
   assert.doesNotMatch(html, /role="button"|<div[^>]*onClick=/)
 })
 
-test('the running app mounts the header above the temporary bridge probe', () => {
+test('the running app mounts the header above the desktop shell', () => {
   resetShell()
   const html = renderToStaticMarkup(h(App))
 
-  assert.ok(html.indexOf('class="sticky top-0') < html.indexOf('<main class="spike"'))
+  assert.ok(html.indexOf('class="sticky top-0') < html.indexOf('<main '))
   assert.match(html, /aria-label="Switch to Spanish"/)
   assert.match(html, /aria-label="Settings"/)
-  assert.match(html, /Gate 0C/)
+  assert.match(html, /No active downloads/)
 })
 
 test('language action synchronously changes header names and rendered shell copy', () => {
