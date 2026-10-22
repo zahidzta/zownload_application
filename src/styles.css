@@ -2,63 +2,119 @@
 /* SPDX-FileCopyrightText: 2026 zahidzta */
 @import 'tailwindcss';
 
+/* Tailwind v4 exposes these same values as utilities and CSS variables. */
+@theme {
+  --color-canvas: #0a0a0a;
+  --color-card: #0a0a0a;
+  --color-field: #171717;
+  --color-border: #262626;
+  --color-primary: #155dfc;
+  --color-selection: #0d1623;
+  --color-selection-border: #2b7fff;
+  --color-accent-text: #50a2ff;
+  --color-text-strong: #f5f5f5;
+  --color-text: #a1a1a1;
+  --color-text-muted: #737373;
+  --color-focus: #50a2ff;
+
+  --spacing-compact: 0.5rem;
+  --spacing-control-gap: 0.625rem;
+  --spacing-stack: 1rem;
+  --spacing-section: 1.5rem;
+  --spacing-card: 1.875rem;
+  --spacing-shell: 2.5rem;
+
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+  --shadow-card: none;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.25rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-card-title: 1.125rem;
+  --text-card-title--line-height: 1.5rem;
+  --text-app-title: 1.5rem;
+  --text-app-title--line-height: 2rem;
+}
+
 :root {
-  font-family: system-ui, sans-serif;
-  color: #17212b;
-  background: #f3f5f7;
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  color: var(--color-text);
+  background: var(--color-canvas);
+  color-scheme: dark;
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
 }
 
 * { box-sizing: border-box; }
-
 body { margin: 0; }
+input, button { font: inherit; }
 
+:where(button, input, select, textarea, a):focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The Gate 0C bridge probe remains in place until 1A-07 replaces its screen. */
 .spike {
   width: min(100%, 36rem);
   margin: 0 auto;
-  padding: max(2rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
+  padding: max(var(--spacing-section), env(safe-area-inset-top)) var(--spacing-stack)
+    max(var(--spacing-section), env(safe-area-inset-bottom));
 }
 
-header { margin-bottom: 1.5rem; }
-.eyebrow { color: #35526b; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-h1 { margin: .35rem 0; font-size: 2rem; }
-h2 { margin: 0; font-size: 1.1rem; }
-p { line-height: 1.5; }
+.spike header { margin-bottom: var(--spacing-section); }
+.spike .eyebrow {
+  color: var(--color-accent-text);
+  font-size: var(--text-small);
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.spike h1 { margin: var(--spacing-compact) 0; color: var(--color-text-strong); font-size: var(--text-app-title); }
+.spike h2 { margin: 0; color: var(--color-text-strong); font-size: var(--text-card-title); }
+.spike p { line-height: 1.5; }
 
-.panel {
+.spike .panel {
   display: grid;
-  gap: .85rem;
-  margin-top: 1rem;
-  padding: 1.25rem;
-  border: 1px solid #d5dce3;
-  border-radius: .75rem;
-  background: #fff;
+  gap: var(--spacing-stack);
+  margin-top: var(--spacing-stack);
+  padding: var(--spacing-section);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
 }
 
-label { font-weight: 700; }
-input, button { font: inherit; }
-input {
+.spike label { font-weight: 700; }
+.spike input {
   width: 100%;
-  padding: .75rem;
-  border: 1px solid #81909f;
-  border-radius: .4rem;
+  padding: var(--spacing-control-gap) var(--spacing-stack);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-field);
+  color: var(--color-text-strong);
 }
-button {
+.spike input::placeholder { color: var(--color-text); }
+.spike button {
   min-height: 2.75rem;
-  padding: .6rem .85rem;
+  padding: var(--spacing-control-gap) var(--spacing-stack);
   border: 0;
-  border-radius: .4rem;
-  background: #164f79;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-text-strong);
   font-weight: 700;
   cursor: pointer;
 }
-button:disabled { opacity: .55; cursor: not-allowed; }
-button:focus-visible, input:focus-visible { outline: 3px solid #ea9a37; outline-offset: 2px; }
-.secondary { background: #e7eef4; color: #164f79; }
-.status-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
-.status { margin: 0; overflow-wrap: anywhere; }
-dl { display: grid; gap: .5rem; margin: 0; }
-dl div { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid #e5e9ed; padding-top: .5rem; }
-dt { color: #4b5966; }
-dd { margin: 0; text-align: right; }
-.identifier { overflow-wrap: anywhere; }
+.spike button:disabled { opacity: .55; cursor: not-allowed; }
+.spike .secondary { border: 1px solid var(--color-border); background: var(--color-card); color: var(--color-text); }
+.spike .status-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-control-gap); }
+.spike .status { margin: 0; overflow-wrap: anywhere; }
+.spike dl { display: grid; gap: var(--spacing-compact); margin: 0; }
+.spike dl div { display: flex; justify-content: space-between; gap: var(--spacing-stack); border-top: 1px solid var(--color-border); padding-top: var(--spacing-compact); }
+.spike dt { color: var(--color-text); }
+.spike dd { margin: 0; color: var(--color-text-strong); text-align: right; }
+.spike .identifier { overflow-wrap: anywhere; }
