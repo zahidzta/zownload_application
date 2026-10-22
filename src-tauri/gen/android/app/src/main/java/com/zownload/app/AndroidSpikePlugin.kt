@@ -258,6 +258,7 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
         }
         val id = UUID.randomUUID().toString()
         val finished = AtomicBoolean(false)
+        val timedOut = AtomicBoolean(false)
         val workerExited = java.util.concurrent.CountDownLatch(1)
         val workerHandle = id to workerExited
         // Reserve the engine before starting a worker, closing the gap in
@@ -273,6 +274,8 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
         // queue state and timeout decision remain in Rust.
         val onTimeout: () -> Unit = {
             if (finished.compareAndSet(false, true)) {
+                // Keep yt-dlp's .part for the Rust-owned paused item's Continue.
+                timedOut.set(true)
                 val reply = JSObject()
                 reply.put("timedOut", true)
                 invoke.resolve(reply)
@@ -355,7 +358,11 @@ class AndroidSpikePlugin(private val activity: Activity) : Plugin(activity) {
             } finally {
                 timeoutCallback.compareAndSet(onTimeout, null)
                 taskRemovedCallback.compareAndSet(onTaskRemoved, null)
-                directory.deleteRecursively()
+                if (timedOut.get()) {
+                    Log.i("Zownload0C15", "TIMEOUT_PART_PRESERVED item=$itemId")
+                } else {
+                    directory.deleteRecursively()
+                }
                 workerExited.countDown()
                 activeWorker.compareAndSet(workerHandle, null)
                 VerifiedYtDlpUpdate.endJob()

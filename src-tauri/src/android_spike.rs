@@ -553,22 +553,31 @@ fn run_download_blocking<R: Runtime>(app: AppHandle<R>, item: QueueItem) -> Resu
                     return Err("Download paused after removal from recents".into());
                 }
             }
+            if result.as_ref().is_ok_and(|response| response.timed_out) {
+                // The Android service must stop within seconds. Save the queue
+                // checkpoint as soon as its callback reaches Rust; the service
+                // independently calls stopSelf even if this write fails.
+                let paused = with_queue(&queue, |store| {
+                    store.checkpoint(&item.id, ItemStatus::Paused, None, None)
+                });
+                let stopped: Result<serde_json::Value, PluginInvokeError> = plugin
+                    .0
+                    .run_mobile_plugin("stopWorkService", serde_json::json!({}));
+                if let Err(error) = stopped {
+                    eprintln!("Zownload0C08 RUST_TIMEOUT_STOP_ERROR {error}");
+                }
+                if let Ok(ref paused) = paused {
+                    emit_item(&app, paused);
+                    eprintln!("Zownload0C08 RUST_TIMEOUT_CALLBACK item={}", item.id);
+                }
+                paused?;
+                return Err("Foreground service timed out; open Zownload to continue".into());
+            }
             let stopped: Result<serde_json::Value, PluginInvokeError> = plugin
                 .0
                 .run_mobile_plugin("stopWorkService", serde_json::json!({}));
             eprintln!("Zownload0C08 RUST_SERVICE_STOP_REQUESTED item={}", item.id);
             match (result, stopped) {
-                (Ok(response), stop_result) if response.timed_out => {
-                    if let Err(error) = stop_result {
-                        eprintln!("Zownload0C08 RUST_TIMEOUT_STOP_ERROR {error}");
-                    }
-                    eprintln!("Zownload0C08 RUST_TIMEOUT_CALLBACK item={}", item.id);
-                    let paused = with_queue(&queue, |store| {
-                        store.checkpoint(&item.id, ItemStatus::Paused, None, None)
-                    })?;
-                    emit_item(&app, &paused);
-                    return Err("Foreground service timed out; open Zownload to continue".into());
-                }
                 (Ok(response), Ok(_))
                     if response.id.as_deref().is_some_and(|id| !id.is_empty())
                         && response
