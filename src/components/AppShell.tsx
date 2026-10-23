@@ -29,23 +29,23 @@ export function AppShellView({ locale, children }: AppShellProps & { locale: Loc
     <Page
         title={t(locale, 'input.title')}
         headingClassName="sr-only"
-        className="mx-auto grid w-full max-w-[86.25rem] grid-cols-1 gap-card px-section pt-shell lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:px-0"
+        className="mx-auto grid w-full max-w-[86.25rem] grid-cols-1 gap-section px-shell-inline pt-card pb-shell lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-card lg:pt-shell xl:px-0"
       >
-        <div className="min-w-0 lg:col-start-1">{children}</div>
-        <div className="flex min-w-0 flex-col gap-5 lg:col-start-2">
+        <div className="app-shell-main min-w-0 lg:col-start-1">{children}</div>
+        <div className="flex min-w-0 flex-col gap-stack lg:col-start-2 lg:gap-5">
           <Card
             title={t(locale, 'queue.title')}
-            className="min-h-[6.375rem] rounded-card border border-border bg-card p-5"
+            className="rounded-card border border-border bg-card p-4 lg:min-h-[6.375rem] lg:p-5"
             headingClassName="text-card-title font-medium text-text"
           >
             <p className="mt-2 mb-0 text-body text-text">{t(locale, 'queue.empty')}</p>
           </Card>
           <Card
             title={t(locale, 'history.title')}
-            className="min-h-[7.625rem] rounded-card border border-border bg-card p-5"
+            className="rounded-card border border-border bg-card p-4 lg:min-h-[7.625rem] lg:p-5"
             headingClassName="text-card-title font-medium text-text"
           >
-            <p className="mt-section mb-0 text-body text-text">{t(locale, 'history.empty')}</p>
+            <p className="mt-stack mb-0 text-body text-text lg:mt-section">{t(locale, 'history.empty')}</p>
           </Card>
         </div>
     </Page>
