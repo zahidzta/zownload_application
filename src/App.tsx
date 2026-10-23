@@ -40,11 +40,12 @@ interface AppViewProps {
 export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, flowStore = appFlowStore }: AppViewProps) {
   const step = useStore(flowStore, (state) => state.step)
   const result = useStore(flowStore, (state) => state.result)
+  const queueItems = useStore(flowStore, (state) => state.queueItems)
   return (
     <>
       <HeaderView locale={locale} onToggleLocale={onToggleLocale} onOpenSettings={onOpenSettings} />
       <div hidden={page !== 'main'}>
-        <AppShellView locale={locale}>
+        <AppShellView locale={locale} queueItems={queueItems}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
           ) : result?.kind === 'playlist' ? (
