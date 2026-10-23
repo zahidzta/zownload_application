@@ -126,7 +126,7 @@ yt-dlp is powerful but is a command-line tool that needs extra binaries (ffmpeg,
 | FR-22 | Card footer, **playlist**: a combo box with only **Max quality** and **Min quality** on the left, a Download button on the right. | `[CONFIRMED]` |
 | FR-23 | For a playlist, a second card **below** the download card lists the names of the elements. | `[CONFIRMED]` |
 | FR-24 | An arrow above the download card returns to the Input state. | `[CONFIRMED]` |
-| FR-25 | Single-element qualities depend on the chosen format: mp4 → available video heights (e.g. 1080p); mp3 → fixed **output** bitrate presets (320, 256, 192, 128 kbps). MP3 always downloads the best source audio before encoding to the selected output bitrate. | `[CONFIRMED]` |
+| FR-25 | Single-element qualities depend on the chosen format: mp4 → available video heights (e.g. 1080p); mp3 → fixed **requested maximum** bitrate presets (320, 256, 192, 128 kbps). MP3 always uses the best source audio: copy an MP3 source at or below the selected bitrate, reencode a higher-bitrate MP3 source down to it, or encode a non-MP3 source to it. | `[CONFIRMED]` |
 | FR-26 | After pressing Download, the item appears in the Queue card and the main area returns to a cleared Input state. | `[CONFIRMED]` |
 
 ### Queue card
@@ -316,8 +316,8 @@ Explicitly **out of v1** `[CONFIRMED]`: `.rpm`, Flatpak, Snap, Microsoft Store/M
 
 | ID | Rule | Status |
 |---|---|---|
-| BR-01 | **Playlist quality matrix.** mp4+Max: best video + best audio. mp4+Min: **min video + max audio**. mp3+Max: best source audio encoded at 320 kbps. mp3+Min: best source audio encoded at 128 kbps (smallest MP3 preset). Playlists only offer Max/Min. | `[CONFIRMED]` |
-| BR-02 | Single mp4: user chooses an available video height. Single mp3: user chooses an output bitrate from 320/256/192/128 kbps; the engine always downloads the best source audio before encoding. | `[CONFIRMED]` |
+| BR-01 | **Playlist quality matrix.** mp4+Max: best video + best audio. mp4+Min: **min video + max audio**. mp3+Max: 320 kbps requested maximum; mp3+Min: 128 kbps requested maximum (smallest MP3 preset). Both use the best source audio and follow BR-02's copy/reencode rule. Playlists only offer Max/Min. | `[CONFIRMED]` |
+| BR-02 | Single mp4: user chooses an available video height. Single mp3: user chooses a requested maximum of 320/256/192/128 kbps. For any MP3 request, use the best source audio: copy an MP3 source at or below the selected bitrate; reencode a higher-bitrate MP3 source down to it; encode a non-MP3 source to it. | `[CONFIRMED]` |
 | BR-03 | Zip off → sequential download; next element starts when the previous one ends; file named after the element. | `[CONFIRMED]` |
 | BR-04 | A failed playlist element never aborts the playlist; failures are counted and summarized. | `[CONFIRMED]` |
 | BR-05 | Pause is implemented by killing the yt-dlp process during `downloading`; resume continues from the partial file. Pause is unavailable during ffmpeg `postProcessing` and ZIP `packaging`. | `[CONFIRMED]` |
@@ -384,7 +384,7 @@ Explicitly **out of v1** `[CONFIRMED]`: `.rpm`, Flatpak, Snap, Microsoft Store/M
 | D-21 | Incremental roadmap with mandatory owner-approved checkpoints: Gate 0A reproducible scaffold/toolchains → Gate 0B CLI/licensing proof → Gate 0C Android spike → mock UI → Windows vertical slices → Windows release → Linux/macOS → production Android → hardening. No stage begins before the previous checkpoint passes. | `[CONFIRMED]` | See Appendix A |
 | D-22 | v1 user installers are exactly those in section 8.6: Windows NSIS `.exe` + WiX `.msi`; macOS `.dmg` for arm64 and x64; Linux `.AppImage` + `.deb`; Android one `arm64-v8a` `.apk`. CI also publishes updater metadata/signatures and macOS `.app.tar.gz`. No other formats. Pin updater `2.13.0`. | `[CONFIRMED]` | NSIS is the default Windows path; MSI supports managed installs; other formats add unsupported test/release surface |
 | D-23 | **Android work ownership: option A.** Rust owns the queue and is the single source of truth (same code as desktop). Kotlin does only two things: (a) the `AndroidEngine` adapter around youtubedl-android (analyze, download one entry with progress callbacks, cancel) and (b) a foreground service that keeps the process alive and shows the notification, with **no business logic**. Three rules: **1)** Rust owns the queue and the truth; **2)** the queue is persisted to SQLite at durable checkpoints and restored at start, with interrupted items restored as `paused`; **3)** the UI is disposable and always rebuilds its state from `get_queue` + events. Home keeps the service running; removing the app from recents cancels work and stops it. Rejected: option B (queue owned by a Kotlin service with its own database) | `[CONFIRMED]` | One implementation of the business rules, no second queue in Kotlin, and a small Kotlin surface. The Android spike validates Home/background behavior and orderly cancellation on removal from recents |
-| D-24 | MP3 quality means **output bitrate**, not source-stream bitrate. Singles expose 320/256/192/128 kbps and always use the best source. Playlist Max uses 320 kbps; Min uses 128 kbps for the smallest output. | `[CONFIRMED]` | Predictable cross-site behaviour and honest UI terminology |
+| D-24 | MP3 quality means a **requested maximum** bitrate. Singles expose 320/256/192/128 kbps and always use the best source. Playlist Max requests 320 kbps; Min requests 128 kbps. Copy an MP3 source at or below the selection; reencode a higher-bitrate MP3 source down to it; encode a non-MP3 source to it. | `[CONFIRMED]` | Gate 0B showed yt-dlp copies an already-MP3 source below the requested bitrate; the UI must not promise exact output bitrate |
 | D-25 | Zownload source code uses **GPL-3.0-or-later**. Desktop FFmpeg remains LGPL-compatible as decided in Gate 0B: build without `--enable-gpl` and `--enable-nonfree`, pin exact source, preserve licence/notices, publish corresponding source and build configuration with each release, and validate required codecs. Android Option A uses GPL-3.0 youtubedl-android and its GPL-configured FFmpeg, subject to full package/source and transitive-licence audit. | `[CONFIRMED]` | The desktop LGPL build rule remains in force, although the GPL repository licence no longer requires it; any change to that rule is an open owner decision. Legal review before the first public release is open |
 | D-26 | Toolchains are selected and frozen in Gate 0A, not guessed in advance: start from then-current stable Tauri/Rust/Node/JDK/NDK/SDK, record exact versions, commit lockfiles/wrappers, and make CI use the same versions before feature work begins. | `[CONFIRMED]` | Reproducible builds without baking stale versions into planning before the scaffold exists |
 | D-27 | Metadata mapping is fixed by FR-58 and validated against real MP3/MP4 outputs in Gate 0B. | `[CONFIRMED]` | Avoids platform/player-specific surprises after UI development |
@@ -547,7 +547,7 @@ Failed queue items are removed only after this row is committed. The UI loads no
 
 ### Core types (from the contract)
 - `Format`: `"mp3" | "mp4"`.
-- `Quality`: `{type:"max"} | {type:"min"} | {type:"video", height} | {type:"audio", bitrate}`. Playlist uses only max/min; single uses video (mp4) or audio (mp3).
+- `Quality`: `{type:"max"} | {type:"min"} | {type:"video", height} | {type:"audio", bitrate}`. Playlist uses only max/min; single uses video (mp4) or audio (mp3 requested maximum).
 - `DownloadRequest { url, format, quality, isPlaylist }`.
 - `ItemStatus`: `analyzing | queued | downloading | postProcessing | paused | packaging | done | failed`. `done`/`failed` are transient.
 - `Progress`: single `{percent}` or playlist `{done, failed, total, currentTitle, currentPercent}`.
@@ -559,7 +559,7 @@ Authoritative definitions: `shared/contract.ts` and `src-tauri/src/contract.rs`.
 ### Commands (UI → Rust)
 | Command | Args | Returns | Notes |
 |---|---|---|---|
-| `analyze_url` | `{ url }` | `AnalyzeResult` | Returns `videoHeights` and fixed `audioOutputBitrates` for singles; the UI picks by format |
+| `analyze_url` | `{ url }` | `AnalyzeResult` | Returns `videoHeights` and fixed `audioOutputBitrates` requested maxima for singles; the UI picks by format |
 | `enqueue_download` | `{ request: DownloadRequest }` | queue item id (string) | Also used for redownload |
 | `pause_download` | `{ id }` | void | |
 | `resume_download` | `{ id }` | void | |
@@ -583,7 +583,7 @@ Authoritative definitions: `shared/contract.ts` and `src-tauri/src/contract.rs`.
 | `error-notifications:changed` | `null` | UI refetches `get_error_notifications` |
 
 ### `AnalyzeResult`
-- `single`: `url, title, author, thumbnail|null, durationSec, site, videoHeights[], audioOutputBitrates[]`; MP3 presets are `[320,256,192,128]` and mean output bitrate.
+- `single`: `url, title, author, thumbnail|null, durationSec, site, videoHeights[], audioOutputBitrates[], estimates?`; MP3 presets `[320,256,192,128]` are requested maxima. Optional `estimates` entries have `{format:"mp3",quality:{type:"audio",bitrate},estimatedBytes}` or `{format:"mp4",quality:{type:"video",height},estimatedBytes}`; show an approximate size only for a matching engine-backed entry, otherwise hide it. Source-MP3 copying makes a bitrate-only size calculation unreliable.
 - `playlist`: `url, title, author, thumbnail|null, site, itemCount, itemTitles[]`
 
 ### Typed helpers
@@ -663,7 +663,7 @@ Derived from the confirmed requirements; refine with the owner.
 
 **Downloads**
 - AC-11: mp3/mp4 files open in common players and contain the FR-58 mapping: title; artist/creator/uploader fallback; playlist title as album only for playlist entries; JPEG-compatible cover art.
-- AC-12: Playlist mp4 Max = best video + best audio; mp4 Min = lowest video + best audio; mp3 Max = best source encoded at 320 kbps; mp3 Min = best source encoded at 128 kbps. Single MP3 exposes 320/256/192/128 kbps output presets.
+- AC-12: Playlist mp4 Max = best video + best audio; mp4 Min = lowest video + best audio; mp3 Max = best source with 320 kbps requested maximum; mp3 Min = best source with 128 kbps requested maximum. Single MP3 exposes 320/256/192/128 kbps requested maxima. MP3 sources at or below the selection are copied; higher-bitrate MP3 and non-MP3 sources are encoded to the selection.
 - AC-13: Zip on → one `.zip` with the playlist's files, built using at most the partial ZIP plus one temporary media file; zip off → individual files named after each element, downloaded sequentially.
 - AC-14: One failing element does not stop the playlist.
 - AC-15: Desktop files use Downloads by default or the folder chosen in Settings. Android files always appear in public Downloads through MediaStore and no folder selector is shown.
@@ -707,7 +707,7 @@ Derived from the confirmed requirements; refine with the owner.
 | 10 | Developer information content (name, links, license/contact). | Owner | Placeholder |
 | 11 | ~~Project/ffmpeg licensing.~~ **Resolved:** Zownload GPL-3.0-or-later; retain the Gate 0B LGPL-compatible desktop FFmpeg build without GPL/nonfree flags and publish notices, exact source and build configuration (D-25). **Open:** review whether to retain that desktop build rule despite the GPL repository licence; complete Android GPL package/source and transitive-licence audit and legal review before first release. | Gate 0B desktop evidence; Gate 0C Android evidence and release review | — |
 | 12 | ~~Metadata mapping.~~ **Resolved:** title, artist/creator/uploader fallback, playlist title as album, best thumbnail converted to JPEG as needed (FR-58). | Gate 0B verification | — |
-| 13 | ~~Meaning of MP3 quality.~~ **Resolved:** MP3 always uses the best source; single presets are 320/256/192/128 kbps, playlist Max = 320 and Min = 128 (D-24). Commands still require CLI validation. | CLI test | As defined in D-24 |
+| 13 | ~~Meaning of MP3 quality.~~ **Resolved:** MP3 always uses the best source; single requested maxima are 320/256/192/128 kbps, playlist Max = 320 and Min = 128. Copy MP3 at or below the selection; encode higher-bitrate MP3 and non-MP3 sources to the selection (D-24). Production commands still require validation. | Gate 0B evidence; production engine verification | As defined in D-24 |
 | 14 | ~~Video URL containing a playlist parameter.~~ **Resolved:** treat as single; only pure playlist URLs expand playlists (D-28). | — | — |
 | 15 | Mp4 audio compatibility: re-encode non-AAC audio to AAC (BR-13). | Gate 0B CLI test | Yes, when needed |
 | 16 | ~~Disk-full and permission-denied errors.~~ **Resolved:** typed codes and persistent notifications (FR-57, BR-20). Still pending: whether to split geo/age restrictions and expose per-entry playlist failure details. | Owner/later design | Keep grouped restrictions and counters only for v1 |

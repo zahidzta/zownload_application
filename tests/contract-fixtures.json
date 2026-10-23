@@ -12,5 +12,20 @@
     "total": 5,
     "currentTitle": "Example",
     "currentPercent": 42.5
+  },
+  "singleAnalyzeResult": {
+    "kind": "single",
+    "url": "https://example.com/media",
+    "title": "Example",
+    "author": "Uploader",
+    "thumbnail": null,
+    "durationSec": 60,
+    "site": "Example",
+    "videoHeights": [720],
+    "audioOutputBitrates": [320, 256, 192, 128],
+    "estimates": [
+      { "format": "mp3", "quality": { "type": "audio", "bitrate": 320 }, "estimatedBytes": 2400000 },
+      { "format": "mp4", "quality": { "type": "video", "height": 720 }, "estimatedBytes": 8000000 }
+    ]
   }
 }
