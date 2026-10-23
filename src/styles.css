@@ -9,6 +9,7 @@
   --color-field: #171717;
   --color-border: #262626;
   --color-primary: #155dfc;
+  --color-primary-disabled: #1e4785;
   --color-selection: #0d1623;
   --color-selection-border: #2b7fff;
   --color-accent-text: #50a2ff;
@@ -57,11 +58,6 @@ body {
   padding-block-end: env(safe-area-inset-bottom);
 }
 input, button { font: inherit; }
-
-/* The static input slot follows the mobile card height until 1B adds its form. */
-@media (max-width: 63.999rem) {
-  .app-shell-main > section { min-height: 16.25rem; }
-}
 
 :where(button, input, select, textarea, a):focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus);
