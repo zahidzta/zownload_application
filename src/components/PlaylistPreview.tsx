@@ -6,7 +6,6 @@ import { useStore } from 'zustand'
 import type { AnalyzeResult, Quality } from '../../shared/contract'
 import { t, type Locale } from '../i18n'
 import type { DownloadFlowStore } from './InputCard'
-import { Card } from './ui/Card'
 
 type PlaylistResult = Extract<AnalyzeResult, { kind: 'playlist' }>
 
@@ -21,6 +20,7 @@ export function PlaylistPreview({ locale, result, flowStore }: PlaylistPreviewPr
   const titleId = useId()
   const qualityId = useId()
   const listId = useId()
+  const listHeadingId = useId()
   const countLabel = `${result.itemCount} ${t(locale, 'download.itemCount')}`
 
   return (
@@ -88,10 +88,9 @@ export function PlaylistPreview({ locale, result, flowStore }: PlaylistPreviewPr
           </div>
         </div>
       </section>
-      <Card title={t(locale, 'download.itemsInList')}
-        className="mt-6 min-w-0 rounded-card border border-border bg-card p-5 lg:p-7"
-        headingClassName="text-small font-medium uppercase text-text">
-        <div role="region" aria-label={t(locale, 'download.itemsInList')} aria-describedby={listId} tabIndex={0}
+      <div className="mt-6 min-w-0 rounded-card border border-border bg-card p-5 lg:p-7">
+        <h2 id={listHeadingId} className="text-small font-medium uppercase text-text">{t(locale, 'download.itemsInList')}</h2>
+        <div role="region" aria-labelledby={listHeadingId} aria-describedby={listId} tabIndex={0}
           className="mt-4 max-h-[22rem] overflow-y-auto overscroll-contain rounded-control focus-visible:outline-3 lg:max-h-[26rem]">
           <p id={listId} className="sr-only">{countLabel}</p>
           <ol className="m-0 list-decimal space-y-1 pl-8 text-body marker:text-text-muted">
@@ -100,7 +99,7 @@ export function PlaylistPreview({ locale, result, flowStore }: PlaylistPreviewPr
             ))}
           </ol>
         </div>
-      </Card>
+      </div>
     </>
   )
 }
