@@ -57,7 +57,7 @@ body {
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
   padding-block-end: env(safe-area-inset-bottom);
 }
-input, button { font: inherit; }
+input, button, select { font: inherit; }
 
 :where(button, input, select, textarea, a):focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus);
