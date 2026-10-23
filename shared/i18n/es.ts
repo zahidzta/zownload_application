@@ -24,7 +24,7 @@ export const es = {
   },
   input: {
     title: 'Descargar',
-    urlLabel: 'URL de video o lista de reproducción',
+    urlLabel: 'Introduce la URL',
     analyze: 'Analizar',
     urlPlaceholder: 'https://...',
     formatLabel: 'Formato',

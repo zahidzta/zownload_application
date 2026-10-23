@@ -30,12 +30,14 @@ test('desktop shell places the main slot before Queue and History in the right c
   assert.doesNotMatch(html, /Gate 0C|Refresh from Rust|Start one item/)
 })
 
-test('running app uses a static main card and the shell localizes empty cards', () => {
+test('running app uses the Input form and the shell localizes empty cards', () => {
   const appHtml = renderToStaticMarkup(h(App))
   const html = renderToStaticMarkup(h(AppShellView, { locale: 'es' }, h('section', null, 'Main slot')))
 
   assert.match(appHtml, /<h2[^>]*>Download<\/h2>/)
-  assert.doesNotMatch(appHtml, /Gate 0C|<form\b/)
+  assert.match(appHtml, /<form\b/)
+  assert.match(appHtml, /Enter URL/)
+  assert.doesNotMatch(appHtml, /Gate 0C/)
   assert.match(html, /<h1[^>]*>Descargar<\/h1>/)
   assert.match(html, /<h2[^>]*>Cola<\/h2>/)
   assert.match(html, /No hay descargas activas/)

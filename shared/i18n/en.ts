@@ -32,7 +32,7 @@ export const en = {
   },
   input: {
     title: 'Download',
-    urlLabel: 'Video or playlist URL',
+    urlLabel: 'Enter URL',
     analyze: 'Analyze',
     urlPlaceholder: 'https://...',
     formatLabel: 'Format',
