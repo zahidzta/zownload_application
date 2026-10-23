@@ -148,3 +148,22 @@ then writes the pinned native and raw-resource inputs under ignored
 job runs these commands before its debug build and does not upload the APK or
 native output. On Windows, use an Ubuntu 24.04 build environment for the
 QuickJS ELF; pass its local path to the same PowerShell packaging command.
+
+## 1B-03 interactive test harness (2026-10-22)
+
+From the repository root, install the approved, exact dev dependency versions:
+
+```powershell
+npm install --save-dev --save-exact vitest@5.0.5 @testing-library/react@16.3.3 @testing-library/user-event@14.6.8 jsdom@29.0.1
+```
+
+The command added 72 packages and reported zero vulnerabilities. It ran locally
+with Node `24.14.0` and npm `11.21.0`, so npm warned that they differ from the
+repository's Node `24.22.0` and npm `11.19.1` pins. jsdom `29.0.1` accepts both
+the local Node version and the pinned CI version. The exact versions are recorded
+in `package.json` and `package-lock.json`; clean checkouts use `npm ci`.
+
+`npm run test:ui` runs only `tests/interactive/**/*.test.ts` and `.test.tsx` in
+jsdom with Testing Library cleanup after each test. Keep the existing `node
+--test --test-concurrency=1` suite separate; its Vite SSR tests remain under
+`tests/ui/*.test.mjs`.
