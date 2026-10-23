@@ -3,7 +3,7 @@
 
 # Gate 1A checkpoint — 2026-10-22
 
-**Status:** 1A-02 through 1A-09 are integrated, 1A-10 verification passed, and the owner accepted the 1A-09 Settings treatment by saying the UI looks good and the header and Back button work. **Gate 1A as a whole awaits explicit owner acceptance.** No 1B planning or execution is authorized by this record. Scope and exit criteria: [Gate 1A](../../gate-1a.md) and [PROJECT.md Appendix A](../../../../PROJECT.md).
+**Status:** 1A-02 through 1A-09 are integrated, 1A-10 verification passed, and the owner explicitly accepted the Gate 1A results on 2026-10-22. This satisfies the owner-acceptance condition for 1B planning; 1B implementation still requires review of the [Gate 1B task plan](../../gate-1b.md). Scope and exit criteria: [Gate 1A](../../gate-1a.md) and [PROJECT.md Appendix A](../../../../PROJECT.md).
 
 ## Focused verification
 
@@ -27,5 +27,5 @@ powershell -NoProfile -Command 'node --test; if ($LASTEXITCODE -ne 0) { exit $LA
 ## Decisions, limits, and exit
 
 - The owner chose Queue/History on the **right** for desktop, resolving the conflict with `PROJECT.md:107-108` in favor of the [confirmed desktop image](../../../design/desktop/main-input.png). The owner chose Settings to the right of language, resolving the header image omission against `PROJECT.md:102,651`. The owner approved one Settings card with Back and has now accepted its visual treatment. These directions are recorded in [STATE](../../../STATE.md); no authority file or confirmed image was changed.
-- 1A supplies a shell, not the Input controls, live queue, history entries, Settings controls, notifications, or download engine. Missing mobile analysis and later Settings/error/progress states remain [1B/1C design decisions](../../phase-1-outline.md). Already-MP3 bitrate behavior, interactive test dependencies, exact Spanish copy, final logo/icon, accessibility baseline, developer-info content, and error grouping remain owner questions for the affected later stage. None was silently resolved here.
-- **Exit status: ready for owner checkpoint review.** The user's 1A-09 visual approval is recorded, but it did not explicitly accept this complete Gate 1A evidence. Per [Appendix A's delivery rule](../../../../PROJECT.md), the owner must explicitly accept Gate 1A before task **1B-01 — prepare the Gate 1B task plan and decision review** begins.
+- 1A supplies a shell, not the Input controls, live queue, history entries, Settings controls, notifications, or download engine. Missing mobile analysis and later Settings/error/progress states were [1B/1C design decisions](../../phase-1-outline.md) at this checkpoint. Already-MP3 bitrate behavior, interactive test dependencies, exact Spanish copy, final logo/icon, accessibility baseline, developer-info content, and error grouping were owner questions at 1A exit; the subsequent [1B plan](../../gate-1b.md) records the decisions made for that stage.
+- **Exit status: accepted by the owner on 2026-10-22.** The owner explicitly approved the 1A results, allowing task **1B-01 — prepare the Gate 1B task plan and decision review** to begin under [Appendix A's delivery rule](../../../../PROJECT.md).
