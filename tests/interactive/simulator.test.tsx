@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import { afterEach, expect, test, vi } from 'vitest'
+import type { DownloadRequest, QueueItem } from '../../shared/contract'
 import { analysisUrls } from '../../src/transport/fixtures'
-import { createSimulatorTransport } from '../../src/transport/simulator'
+import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -83,4 +84,105 @@ test('unknown inputs stay typed, and a caller cannot mutate stored fixture array
   const second = await transport.call('analyze_url', { url: analysisUrls.playlist })
   if (second.kind !== 'playlist') throw new Error('Expected playlist')
   expect(second.itemTitles[0]).toBe('SINGULARITY - Painterly Space Adventure')
+})
+
+test('enqueue returns distinct ids and ordered queued snapshots for single and playlist requests', async () => {
+  const fetchSpy = vi.fn(() => { throw new Error('Unexpected network request') })
+  vi.stubGlobal('fetch', fetchSpy)
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock })
+  const events: QueueItem[] = []
+  await transport.on('queue:item-updated', item => { events.push(item) })
+  const single: DownloadRequest = {
+    url: analysisUrls.single, format: 'mp4', quality: { type: 'video', height: 720 }, isPlaylist: false,
+  }
+  const playlist: DownloadRequest = {
+    url: analysisUrls.playlist, format: 'mp3', quality: { type: 'max' }, isPlaylist: true,
+  }
+
+  const firstId = await transport.call('enqueue_download', { request: single })
+  const secondId = await transport.call('enqueue_download', { request: playlist })
+  expect(firstId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/)
+  expect(secondId).not.toBe(firstId)
+
+  const queue = await transport.call('get_queue', {})
+  expect(queue).toEqual([
+    {
+      id: firstId, request: single, title: '10號風...', thumbnail: expect.stringMatching(/^data:image\/svg\+xml/),
+      status: 'queued', progress: { kind: 'single', percent: 0 }, error: null,
+    },
+    {
+      id: secondId, request: playlist, title: 'Official Blender Open Movies',
+      thumbnail: expect.stringMatching(/^data:image\/svg\+xml/), status: 'queued',
+      progress: { kind: 'playlist', done: 0, failed: 0, total: 17, currentTitle: null, currentPercent: 0 },
+      error: null,
+    },
+  ])
+  expect(events).toEqual([])
+  clock.advanceBy(0)
+  expect(events).toEqual(queue)
+  expect(fetchSpy).not.toHaveBeenCalled()
+
+  // Queue reads and event payloads must not let the UI change simulator state.
+  queue[0].request.url = 'changed by caller'
+  events[1].title = 'changed by listener'
+  expect((await transport.call('get_queue', {}))[0].request.url).toBe(analysisUrls.single)
+  expect((await transport.call('get_queue', {}))[1].title).toBe('Official Blender Open Movies')
+})
+
+test('queue subscriptions can be removed independently and repeatedly', async () => {
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock })
+  const first = vi.fn()
+  const second = vi.fn()
+  const unsubscribeFirst = await transport.on('queue:item-updated', first)
+  const unsubscribeSecond = await transport.on('queue:item-updated', second)
+  const request: DownloadRequest = {
+    url: analysisUrls.single, format: 'mp3', quality: { type: 'audio', bitrate: 128 }, isPlaylist: false,
+  }
+
+  await transport.call('enqueue_download', { request })
+  clock.advanceBy(0)
+  expect(first).toHaveBeenCalledTimes(1)
+  expect(second).toHaveBeenCalledTimes(1)
+
+  unsubscribeFirst()
+  unsubscribeFirst()
+  await transport.call('enqueue_download', { request })
+  clock.advanceBy(0)
+  expect(first).toHaveBeenCalledTimes(1)
+  expect(second).toHaveBeenCalledTimes(2)
+
+  unsubscribeSecond()
+  await transport.call('enqueue_download', { request })
+  clock.advanceBy(0)
+  expect(second).toHaveBeenCalledTimes(2)
+  expect(await transport.call('get_queue', {})).toHaveLength(3)
+
+  const removeOneCopy = await transport.on('queue:item-updated', first)
+  const removeOtherCopy = await transport.on('queue:item-updated', first)
+  await transport.call('enqueue_download', { request })
+  clock.advanceBy(0)
+  expect(first).toHaveBeenCalledTimes(3)
+  removeOneCopy()
+  await transport.call('enqueue_download', { request })
+  clock.advanceBy(0)
+  expect(first).toHaveBeenCalledTimes(4)
+  removeOtherCopy()
+})
+
+test('enqueue rejects invalid or mismatched requests without creating a queue item', async () => {
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock })
+  const listener = vi.fn()
+  await transport.on('queue:item-updated', listener)
+  await expect(transport.call('enqueue_download', { request: {
+    url: analysisUrls.invalid, format: 'mp4', quality: { type: 'video', height: 720 }, isPlaylist: false,
+  } })).rejects.toMatchObject({ code: 'invalid_url' })
+  await expect(transport.call('enqueue_download', { request: {
+    url: analysisUrls.single, format: 'mp4', quality: { type: 'audio', bitrate: 128 }, isPlaylist: false,
+  } })).rejects.toMatchObject({ code: 'unknown', detail: expect.stringContaining('Synthetic offline scenario:') })
+  clock.advanceBy(0)
+  expect(listener).not.toHaveBeenCalled()
+  expect(await transport.call('get_queue', {})).toEqual([])
 })
