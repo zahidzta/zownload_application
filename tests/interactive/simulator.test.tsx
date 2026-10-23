@@ -8,7 +8,7 @@ import { createManualSimulatorClock, createSimulatorTransport } from '../../src/
 
 afterEach(() => vi.unstubAllGlobals())
 
-test('observed short video has contract-shaped metadata and an inline thumbnail', async () => {
+test('observed short video has contract-shaped metadata and a bundled thumbnail', async () => {
   const fetchSpy = vi.fn(() => { throw new Error('Unexpected network request') })
   vi.stubGlobal('fetch', fetchSpy)
 
@@ -24,7 +24,7 @@ test('observed short video has contract-shaped metadata and an inline thumbnail'
     videoHeights: [720, 360, 144],
     audioOutputBitrates: [320, 256, 192, 128],
   })
-  expect(result.thumbnail).toMatch(/^data:image\/svg\+xml/)
+  expect(result.thumbnail).toMatch(/single-video-thumbnail.*\.jpg/)
   expect(result).not.toHaveProperty('estimates')
   expect(fetchSpy).not.toHaveBeenCalled()
 })
@@ -108,7 +108,7 @@ test('enqueue returns distinct ids and ordered queued snapshots for single and p
   const queue = await transport.call('get_queue', {})
   expect(queue).toEqual([
     {
-      id: firstId, request: single, title: '10號風...', thumbnail: expect.stringMatching(/^data:image\/svg\+xml/),
+      id: firstId, request: single, title: '10號風...', thumbnail: expect.stringMatching(/single-video-thumbnail.*\.jpg/),
       status: 'queued', progress: { kind: 'single', percent: 0 }, error: null,
     },
     {

@@ -19,13 +19,13 @@ export type AnalysisScenario =
   | { type: 'result'; url: string; result: AnalyzeResult }
   | { type: 'error'; url: string; error: AppError }
 
-/** Small inline SVGs keep the previews offline and avoid bundling borrowed artwork. */
+/** Other scenarios use inline SVGs; all preview images stay offline. */
 function mockThumbnail(label: string, color: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><rect width="320" height="180" fill="${color}"/><circle cx="160" cy="90" r="32" fill="#ffffff" fill-opacity=".2"/><path d="m151 72 28 18-28 18z" fill="#ffffff"/><text x="160" y="151" fill="#ffffff" text-anchor="middle" font-family="sans-serif" font-size="17">${label}</text></svg>`
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
-/** Metadata below is from the saved 0B-13 JSON, apart from inline mock images. */
+/** Metadata below is from the saved 0B-13 JSON; the single image is a licensed local still. */
 export const offlineAnalysisScenarios = {
   single: {
     type: 'result',
@@ -35,7 +35,7 @@ export const offlineAnalysisScenarios = {
       url: analysisUrls.single,
       title: '10號風...',
       author: 'vgocyl',
-      thumbnail: mockThumbnail('Single video', '#34475d'),
+      thumbnail: '/fixtures/single-video-thumbnail.jpg',
       durationSec: 15,
       site: 'YouTube',
       videoHeights: [720, 360, 144],
