@@ -50,7 +50,7 @@ test('single MP3 preview shows metadata, four requested maxima, and sends the se
   expect(screen.getByText('vgocyl')).toBeTruthy()
   expect(screen.getByLabelText('Duration: 0:15')).toBeTruthy()
   expect(screen.getByLabelText('Site: YouTube')).toBeTruthy()
-  expect(title.closest('section')?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml/)
+  expect(title.closest('section')?.querySelector('img')?.getAttribute('src')).toMatch(/single-video-thumbnail.*\.jpg/)
 
   const quality = screen.getByRole('combobox', { name: /Quality.*Requested maximum/ }) as HTMLSelectElement
   expect(Array.from(quality.options, (option) => option.value)).toEqual(['320', '256', '192', '128'])

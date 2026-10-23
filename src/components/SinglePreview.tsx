@@ -120,7 +120,7 @@ export function SinglePreview({ locale, result, flowStore }: SinglePreviewProps)
             type="button"
             onClick={() => { void enqueue() }}
             disabled={enqueuing || !selectedQuality}
-            className="inline-flex min-h-11 w-fit min-w-32 items-center justify-center gap-2 rounded-control bg-primary px-4 text-body font-semibold text-white disabled:cursor-not-allowed disabled:bg-primary-disabled disabled:text-text-muted lg:min-h-12 lg:min-w-[10.75rem] lg:px-5"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control bg-primary px-4 text-body font-semibold text-white disabled:cursor-not-allowed disabled:bg-primary-disabled disabled:text-text-muted lg:min-h-12 lg:w-fit lg:min-w-[10.75rem] lg:px-5"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 fill-none stroke-current stroke-2">
               <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 16v4h16v-4" strokeLinecap="round" strokeLinejoin="round" />
