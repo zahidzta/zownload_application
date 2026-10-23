@@ -5,7 +5,7 @@
 
 ## Scope and authority
 
-The owner accepted the [Gate 1A checkpoint](evidence/1a/checkpoint.md) on 2026-10-22. This `1B-01` document plans the next stage; it does not authorize 1B implementation or accept the later 1B checkpoint. [Appendix A](../../PROJECT.md) requires a tested, reviewed, explicitly accepted checkpoint before 1C.
+The owner accepted the [Gate 1A checkpoint](evidence/1a/checkpoint.md) on 2026-10-22 and approved this Gate 1B plan on 2026-10-22. This plan does not accept the later 1B checkpoint. [Appendix A](../../PROJECT.md) requires a tested, reviewed, explicitly accepted checkpoint before 1C.
 
 Read only the indexed `PROJECT.md` ranges named for each task below. The governing 1B ranges are `87-95,98-131,236-253,315-320,387,548-597,630-635,650-655,660-661,666,694-718,734-745,755-761`; locate them through [PROJECT-INDEX](../PROJECT-INDEX.md). `shared/contract.ts` and `src-tauri/src/contract.rs` govern fields and types; the indexed [design images](../design/README.md) govern represented visuals. Existing 1A tokens, shell, i18n, and `AppTransport` are the starting point. The desktop Queue/History placement and Settings header treatment remain as accepted in 1A.
 
@@ -17,8 +17,8 @@ Each task uses its own `task-<id>` branch and session. After its exact check pas
 
 1. **Mobile analyzing — decided.** On 2026-10-22 the owner chose to adapt the confirmed [`mobile/main-input.png`](../design/mobile/main-input.png) layout and [`desktop/analysis-input.png`](../design/desktop/analysis-input.png) loading treatment. There is no separate mobile analyzing image. Review the composed state in the running app before accepting `1B-07`.
 2. **Interactive tests — approved.** On 2026-10-22 the owner approved Vitest, Testing Library, and a DOM test environment for 1B/1C. `1B-03` may add pinned dev dependencies (`vitest`, `@testing-library/react`, `@testing-library/user-event`, `jsdom`) and a `test:ui` script. Record exact install commands and versions in `docs/toolchain.md`. Keep existing Node tests. Separate DOM tests from existing Vite SSR tests to avoid the concurrent optimizer warnings recorded at 1A.
-3. **Already-MP3 source — decided, authority reconciliation needed.** The owner chose this exact rule on 2026-10-22: when the best source is MP3 at or below the selected bitrate, copy it; when above, reencode down to the selected bitrate. Non-MP3 sources encode to the selected bitrate. The UI must describe 320/256/192/128 kbps as requested maxima rather than guaranteed output bitrates. This conflicts with `PROJECT.md:129,319-320,387,586,666` and comments in the contract that currently promise exact output bitrate. Reconcile those authority texts in `1B-02` before quality UI; no mock file is used as evidence of real encoding behavior.
-4. **Single quality size estimate — contract review required.** The confirmed desktop/mobile single images show an approximate file size (for example, `~8.8MB`) within the quality selector. `AnalyzeResult.single` provides heights, bitrate presets, and duration, but no per-quality byte estimate. The owner requested a contract-change review before deciding how this appears. Proposed additive TypeScript shape for review:
+3. **Already-MP3 source — decided and reconciled in 1B-02.** The owner chose this exact rule on 2026-10-22: when the best source is MP3 at or below the selected bitrate, copy it; when above, reencode down to the selected bitrate. Non-MP3 sources encode to the selected bitrate. The UI must describe 320/256/192/128 kbps as requested maxima rather than guaranteed output bitrates. `1B-02` reconciles the conflicting `PROJECT.md` lines and contract comments before quality UI; no mock file is used as evidence of real encoding behavior.
+4. **Single quality size estimate — approved for 1B-02.** The confirmed desktop/mobile single images show an approximate file size (for example, `~8.8MB`) within the quality selector. The owner approved the following additive TypeScript shape on 2026-10-22:
 
    ```ts
    estimates?: Array<
@@ -27,7 +27,7 @@ Each task uses its own `task-<id>` branch and session. After its exact check pas
    >
    ```
 
-   `estimates` belongs only to `AnalyzeResult.single`; an absent matching entry means “unknown” and the UI hides the size. Both contract files and `PROJECT.md` require a separately approved, mirrored amendment and contract check. Estimates must come from defensible engine metadata, not invented UI constants; source-MP3 copying makes a bitrate-only calculation unreliable. **Do not edit either contract or implement the size display on this planning decision alone.** The owner must approve this exact shape or direct omission before `1B-02` changes the authorities and before `1B-08` renders the single preview.
+   `estimates` belongs only to `AnalyzeResult.single`; an absent matching entry means “unknown” and the UI hides the size. The owner authorized the mirrored amendment to both contracts and `PROJECT.md` in `1B-02`. Estimates must come from defensible engine metadata, not invented UI constants; source-MP3 copying makes a bitrate-only calculation unreliable.
 5. **Other visual gaps.** The red error state has a behavior rule (`PROJECT.md:117`) but no indexed image. Create it consistently with the confirmed Input layout and tokens, then seek owner visual judgement. Single/playlist references contain populated History examples; those rows remain a 1C deliverable and do not authorize early History behavior.
 
 ## Verification commands
@@ -42,12 +42,12 @@ The browser visual review is additional evidence, not a substitute for V1/V2. Ke
 
 ## Tasks
 
-### 1B-02 — Size contract decision and MP3 authority alignment — OWNER-REVIEW, HELD
+### 1B-02 — Size contract decision and MP3 authority alignment — OWNER-REVIEW
 
-- Goal: after the owner reviews the proposed estimate field and explicitly approves its exact shape or directs omission, reconcile the confirmed MP3 copy rule and selected size policy in the authorities. Mirror the MP3 wording in both contracts; add the estimate field to both only if approved. This task changes contract declarations and comments, not a Rust engine implementation.
-- Files: `PROJECT.md`, `shared/contract.ts`, `src-tauri/src/contract.rs`, relevant contract-check fixtures, `docs/STATE.md`; adding the estimate field requires explicit owner approval.
+- Goal: after the owner's 2026-10-22 approval of the exact estimate shape, reconcile the confirmed MP3 copy rule and selected size policy in the authorities. Mirror the MP3 wording and approved estimate field in both contracts. This task changes contract declarations and comments, not a Rust engine implementation.
+- Files: `PROJECT.md`, `shared/contract.ts`, `src-tauri/src/contract.rs`, relevant contract-check fixtures, `docs/STATE.md`; the owner approved the estimate field above.
 - Read: `PROJECT.md:121-130,315-320,359-393,548-597,650-666,694-714,755-761`.
-- Dependencies: owner approval of this plan **and** explicit size-estimate decision. Acceptance: field names/types mirror, MP3 text consistently states the requested-maximum rule, the line index remains accurate, and no implementation code or engine behavior is claimed. Exact verification: **V0**. Stop after owner review.
+- Dependencies: owner approval of this plan **and** explicit size-estimate decision, both recorded above. Acceptance: field names/types mirror, MP3 text consistently states the requested-maximum rule, the line index remains accurate, and no implementation code or engine behavior is claimed. Exact verification: **V0**. Stop after owner review.
 
 ### 1B-03 — Interactive test harness — AUTOMATABLE
 

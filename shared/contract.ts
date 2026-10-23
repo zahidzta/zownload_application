@@ -24,9 +24,11 @@ export type Format = "mp3" | "mp4";
  * Quality choice.
  *  - Playlist: only "max" | "min".
  *      mp4 max = best video + best audio      mp4 min = worst video + best audio
- *      mp3 max = best source + 320 kbps MP3   mp3 min = best source + 128 kbps MP3
- *  - Single:   "video" (mp4, height in px) or "audio" (MP3 output bitrate).
- *    Single MP3 always uses the best source audio. On redownload, if the exact
+ *      mp3 max = 320 kbps requested maximum   mp3 min = 128 kbps requested maximum
+ *  - Single:   "video" (mp4, height in px) or "audio" (MP3 requested maximum kbps).
+ *    MP3 uses the best source audio. Copy an MP3 source at or below the selected
+ *    bitrate; reencode a higher-bitrate MP3 source down to the selected bitrate;
+ *    encode a non-MP3 source to the selected bitrate. On redownload, if the exact
  *    video quality no longer exists, the engine uses the closest lower one.
  */
 export type Quality =
@@ -55,7 +57,11 @@ export type AnalyzeResult =
       durationSec: number;
       site: string; // e.g. "YouTube"
       videoHeights: number[]; // for the mp4 combo box, e.g. [1080, 720, 480]
-      audioOutputBitrates: number[]; // fixed MP3 output presets: [320, 256, 192, 128]
+      audioOutputBitrates: number[]; // fixed MP3 requested maxima: [320, 256, 192, 128]
+      estimates?: Array<
+        | { format: "mp3"; quality: { type: "audio"; bitrate: number }; estimatedBytes: number }
+        | { format: "mp4"; quality: { type: "video"; height: number }; estimatedBytes: number }
+      >; // optional engine-backed estimates; a missing match means unknown
     }
   | {
       kind: "playlist";

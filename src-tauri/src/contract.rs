@@ -58,9 +58,10 @@ pub enum Format {
     Mp4,
 }
 
-/// Playlist: only Max | Min. Single: Video (mp4) or Audio (MP3 output bitrate).
-/// Single MP3 always uses the best source audio. Playlist MP3 Max uses the best
-/// source + 320 kbps output; Min uses the best source + 128 kbps output.
+/// Playlist: only Max | Min. Single: Video (mp4) or Audio (MP3 requested maximum).
+/// MP3 always uses the best source audio. Copy an MP3 source at or below the
+/// selected bitrate; reencode a higher-bitrate MP3 source down to it; encode
+/// a non-MP3 source to it. Playlist Max requests 320 kbps; Min requests 128 kbps.
 /// Serialized as {"type":"max"} / {"type":"video","height":720} ...
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(
@@ -86,6 +87,45 @@ pub struct DownloadRequest {
 
 // ───────────────────────── Analyze ─────────────────────────
 
+// These narrow quality types keep each estimate's format paired with its
+// matching quality variant in the JSON contract.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum AudioEstimateQuality {
+    Audio { bitrate: u32 },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum VideoEstimateQuality {
+    Video { height: u32 },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(
+    tag = "format",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum SingleEstimate {
+    Mp3 {
+        quality: AudioEstimateQuality,
+        estimated_bytes: u64,
+    },
+    Mp4 {
+        quality: VideoEstimateQuality,
+        estimated_bytes: u64,
+    },
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(
     tag = "kind",
@@ -102,6 +142,8 @@ pub enum AnalyzeResult {
         site: String,
         video_heights: Vec<u32>,
         audio_output_bitrates: Vec<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        estimates: Option<Vec<SingleEstimate>>,
     },
     Playlist {
         url: String,
@@ -290,6 +332,8 @@ mod tests {
             .expect("download request fixture should match the Rust contract");
         let progress: Progress = serde_json::from_value(fixture["playlistProgress"].clone())
             .expect("playlist progress fixture should match the Rust contract");
+        let single: AnalyzeResult = serde_json::from_value(fixture["singleAnalyzeResult"].clone())
+            .expect("single result fixture should match the Rust contract");
 
         assert_eq!(request.format, Format::Mp3);
         assert_eq!(request.quality, Quality::Audio { bitrate: 320 });
@@ -310,5 +354,28 @@ mod tests {
             }
             Progress::Single { .. } => panic!("fixture should be playlist progress"),
         }
+        let single_json = serde_json::to_value(single).expect("single result should serialize");
+        assert_eq!(single_json, fixture["singleAnalyzeResult"]);
+    }
+
+    #[test]
+    fn single_estimates_are_optional_and_format_matches_quality() {
+        let mut single: serde_json::Value =
+            serde_json::from_str(include_str!("../../tests/contract-fixtures.json"))
+                .expect("shared fixture should be valid JSON");
+        let single = &mut single["singleAnalyzeResult"];
+
+        single.as_object_mut().unwrap().remove("estimates");
+        let without_estimates: AnalyzeResult = serde_json::from_value(single.clone())
+            .expect("an absent estimate field should deserialize");
+        let round_trip = serde_json::to_value(without_estimates).unwrap();
+        assert!(round_trip.get("estimates").is_none());
+
+        single["estimates"] = serde_json::json!([{
+            "format": "mp3",
+            "quality": { "type": "video", "height": 720 },
+            "estimatedBytes": 8000000
+        }]);
+        assert!(serde_json::from_value::<AnalyzeResult>(single.clone()).is_err());
     }
 }

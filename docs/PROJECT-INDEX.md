@@ -57,7 +57,7 @@ Ranges are inclusive and refer to the current 827-line `PROJECT.md`. Read the ra
 | 14. Manifest/queue/errors/types | 511-554 | Engine manifest, durable queue, error notifications, core types. |
 | 15. Interfaces/API | 555-597 | Contract authority, commands/events, results and gaps. |
 | 15. Commands/events | 559-584 | UI-to-Rust commands and Rust-to-UI events. |
-| 15. Results/helpers/gaps | 585-597 | Analyze result fields, typed wrappers, pending API gaps. |
+| 15. Results/helpers/gaps | 585-597 | Analyze result fields including optional single-quality estimates, typed wrappers, pending API gaps. |
 | 16. Error handling | 598-617 | Typed errors, persistent notifications and update fallback. |
 | 17. Security | 618-629 | Process/URL/file controls, update trust, privacy and license. |
 | 18. Testing | 630-645 | CLI, mock, Rust/UI, CI, install and Android test strategy. |
