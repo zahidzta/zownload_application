@@ -5,14 +5,25 @@ import type { ReactNode } from 'react'
 import type { QueueItem } from '../../shared/contract'
 import type { Locale } from '../i18n'
 import { Header } from './Header'
-import { Card } from './ui/Card'
 import { Page } from './ui/Page'
 import { t } from '../i18n'
 import { useShellStore } from '../state/shell'
+import { QueueCard } from './QueueCard'
+import { HistoryCard } from './HistoryCard'
+import type { HistoryEntry } from '../../shared/contract'
 
 interface AppShellProps {
   children: ReactNode
   queueItems?: QueueItem[]
+  queueActionId?: string | null
+  onPause?: (id: string) => void
+  onResume?: (id: string) => void
+  onCancel?: (id: string) => void
+  historyEntries?: HistoryEntry[]
+  historyActionId?: number | 'clear' | null
+  onRedownload?: (id: number) => void
+  onDeleteHistory?: (id: number) => void
+  onClearHistory?: () => void
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -26,7 +37,8 @@ export function AppShell({ children }: AppShellProps) {
   )
 }
 
-export function AppShellView({ locale, children, queueItems = [] }: AppShellProps & { locale: Locale }) {
+export function AppShellView({ locale, children, queueItems = [], queueActionId, onPause, onResume, onCancel,
+  historyEntries = [], historyActionId, onRedownload, onDeleteHistory, onClearHistory }: AppShellProps & { locale: Locale }) {
   return (
     <Page
         title={t(locale, 'input.title')}
@@ -35,31 +47,10 @@ export function AppShellView({ locale, children, queueItems = [] }: AppShellProp
       >
         <div className="app-shell-main min-w-0 lg:col-start-1">{children}</div>
         <div className="flex min-w-0 flex-col gap-stack lg:col-start-2 lg:gap-5">
-          <Card
-            title={t(locale, 'queue.title')}
-            className="rounded-card border border-border bg-card p-4 lg:min-h-[6.375rem] lg:p-5"
-            headingClassName="text-card-title font-medium text-text"
-          >
-            {queueItems.length === 0 ? (
-              <p className="mt-2 mb-0 text-body text-text">{t(locale, 'queue.empty')}</p>
-            ) : (
-              <ul className="mt-3 mb-0 space-y-2 p-0">
-                {queueItems.map((item) => (
-                  <li key={item.id} className="min-w-0 list-none rounded-control border border-border bg-field p-3">
-                    <p className="m-0 min-w-0 wrap-break-word text-body font-medium text-text-strong">{item.title ?? item.request.url}</p>
-                    <p className="mt-1 mb-0 text-small text-text">{t(locale, 'queue.queued')}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-          <Card
-            title={t(locale, 'history.title')}
-            className="rounded-card border border-border bg-card p-4 lg:min-h-[7.625rem] lg:p-5"
-            headingClassName="text-card-title font-medium text-text"
-          >
-            <p className="mt-stack mb-0 text-body text-text lg:mt-section">{t(locale, 'history.empty')}</p>
-          </Card>
+          <QueueCard locale={locale} items={queueItems} busyId={queueActionId}
+            onPause={onPause} onResume={onResume} onCancel={onCancel} />
+          <HistoryCard locale={locale} entries={historyEntries} busyId={historyActionId}
+            onRedownload={onRedownload} onDelete={onDeleteHistory} onClear={onClearHistory} />
         </div>
     </Page>
   )

@@ -52,7 +52,11 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
   const step = useStore(flowStore, (state) => state.step)
   const result = useStore(flowStore, (state) => state.result)
   const queueItems = useStore(flowStore, (state) => state.queueItems)
+  const queueActionId = useStore(flowStore, (state) => state.queueActionId)
+  const historyEntries = useStore(flowStore, (state) => state.historyEntries)
+  const historyActionId = useStore(flowStore, (state) => state.historyActionId)
   const syncError = useStore(flowStore, (state) => state.syncError)
+  const actionError = useStore(flowStore, (state) => state.actionError)
   useEffect(() => {
     return flowStore.getState().connectActivity()
   }, [flowStore])
@@ -70,7 +74,21 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
             </div>
           </div>
         )}
-        <AppShellView locale={locale} queueItems={queueItems}>
+        {actionError && (
+          <div className="mx-auto w-full max-w-[86.25rem] px-shell-inline pt-card xl:px-0">
+            <p role="alert" className="rounded-control border border-danger bg-card p-4 text-small text-danger">
+              {t(locale, 'activity.actionError')}
+            </p>
+          </div>
+        )}
+        <AppShellView locale={locale} queueItems={queueItems} queueActionId={queueActionId}
+          historyEntries={historyEntries} historyActionId={historyActionId}
+          onPause={(id) => { void flowStore.getState().pauseQueueItem(id) }}
+          onResume={(id) => { void flowStore.getState().resumeQueueItem(id) }}
+          onCancel={(id) => { void flowStore.getState().cancelQueueItem(id) }}
+          onRedownload={(id) => { void flowStore.getState().redownload(id) }}
+          onDeleteHistory={(id) => { void flowStore.getState().deleteHistoryEntry(id) }}
+          onClearHistory={() => { void flowStore.getState().clearHistory() }}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
           ) : result?.kind === 'playlist' ? (

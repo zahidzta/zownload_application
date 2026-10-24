@@ -17,6 +17,8 @@
   --color-text: #a1a1a1;
   --color-text-muted: #737373;
   --color-focus: #50a2ff;
+  --color-progress-end: #00cfd8;
+  --color-danger: #ff4560;
 
   --spacing-compact: 0.5rem;
   --spacing-control-gap: 0.625rem;
@@ -62,4 +64,8 @@ input, button, select { font: inherit; }
 :where(button, input, select, textarea, a):focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus);
   outline-offset: var(--focus-ring-offset);
+}
+
+.queue-progress > div {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-progress-end));
 }
