@@ -3,7 +3,7 @@
 
 # Gate 1C checkpoint — 2026-10-24
 
-**Status:** Tasks 1C-02 through 1C-10 are integrated. On 2026-10-24, the owner approved the pending Queue, History, notification, Settings, and responsive visual results and requested 1C-11. This checkpoint records the Gate 1C evidence for owner review. Acceptance of the **full 1C checkpoint** remains pending under [Appendix A](../../../../PROJECT.md); Stage 2A is gated on that separate acceptance.
+**Status:** The owner explicitly accepted the **full Gate 1C checkpoint** on 2026-10-24 and directed the Stage 2A plan. Tasks 1C-02 through 1C-10 were integrated, and the owner approved their pending Queue, History, notification, Settings, and responsive visual results before requesting 1C-11. This checkpoint records the accepted Gate 1C evidence under [Appendix A](../../../../PROJECT.md).
 
 ## Acceptance evidence
 
@@ -41,4 +41,4 @@ powershell -NoProfile -Command 'npm run build; if ($LASTEXITCODE -ne 0) { exit $
 
 ## Exit and carried limits
 
-Gate 1C proves the offline mock UI and replaceable mock-store recovery. It does not verify Rust command handlers, SQLite persistence, real media output, process pause/kill, `.part` continuation, engine progress, or a real updater. Stage 2A must implement Rust-owned SQLite migrations and repositories for settings, history, queue, and error notifications; contract commands/events; restart recovery and ordering/uniqueness/serialization tests; and UI operation against that persistence boundary. Later stages own actual download lifecycle and media output. The Android distribution blocker, legal review, and other release conditions remain open in [STATE](../../../STATE.md). No Stage 2A work starts before the owner explicitly accepts this checkpoint.
+Gate 1C proves the offline mock UI and replaceable mock-store recovery. It does not verify Rust command handlers, SQLite persistence, real media output, process pause/kill, `.part` continuation, engine progress, or a real updater. Stage 2A must implement Rust-owned SQLite migrations and repositories for settings, history, queue, and error notifications; contract commands/events; restart recovery and ordering/uniqueness/serialization tests; and UI operation against that persistence boundary. Later stages own actual download lifecycle and media output. The Android distribution blocker, legal review, and other release conditions remain open in [STATE](../../../STATE.md). The owner accepted this checkpoint before Stage 2A planning began.
