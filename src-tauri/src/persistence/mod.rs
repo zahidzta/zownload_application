@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 mod migrations;
+pub mod settings;
 
 use rusqlite::Connection;
 use std::{fmt, fs, path::Path};
