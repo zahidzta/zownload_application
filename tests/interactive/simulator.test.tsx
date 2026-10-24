@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { DownloadRequest, QueueItem } from '../../shared/contract'
 import { analysisUrls, selectPlaylistThumbnail } from '../../src/transport/fixtures'
 import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
+import { createMemoryMockStorage } from '../../src/transport/mockStorage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -252,4 +253,76 @@ test('playlist reaches packaging and removal cancels scheduled progress and subs
   clock.advanceBy(10000)
   expect(removed).toEqual([id])
   await expect(transport.call('resume_download', { id })).rejects.toMatchObject({ code: 'not_found' })
+})
+
+test('terminal persistence precedes queue removal, and repeated requests replace history in newest order', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const transport = createSimulatorTransport({ clock, storage, outcomes: { [analysisUrls.playlist]: 'partial' } })
+  const events: string[] = []
+  await transport.on('history:changed', () => events.push('history'))
+  await transport.on('error-notifications:changed', () => events.push('notification'))
+  await transport.on('queue:item-removed', () => events.push('removed'))
+  const playlist: DownloadRequest = {
+    url: analysisUrls.playlist, format: 'mp4', quality: { type: 'max' }, isPlaylist: true,
+  }
+  const single: DownloadRequest = {
+    url: analysisUrls.single, format: 'mp4', quality: { type: 'video', height: 720 }, isPlaylist: false,
+  }
+  const firstId = await transport.call('enqueue_download', { request: playlist })
+  clock.advanceBy(8000)
+  expect(events).toEqual(['history', 'notification', 'removed'])
+  expect(await transport.call('get_queue', {})).toEqual([])
+  expect(await transport.call('get_history', {})).toMatchObject([{ request: playlist }])
+  expect(await transport.call('get_error_notifications', {})).toMatchObject([{ id: firstId }])
+
+  await transport.call('enqueue_download', { request: single })
+  clock.advanceBy(7000)
+  await transport.call('enqueue_download', { request: playlist })
+  clock.advanceBy(8000)
+  const history = await transport.call('get_history', {})
+  expect(history).toHaveLength(2)
+  expect(history.map((entry) => entry.request)).toEqual([playlist, single])
+  expect(history[0].id).toBeGreaterThan(history[1].id)
+  expect((await createSimulatorTransport({ storage }).call('get_history', {}))).toEqual(history)
+  await transport.call('delete_history_entry', { id: history[1].id })
+  await transport.call('dismiss_error_notification', { id: firstId })
+  const reloaded = createSimulatorTransport({ storage })
+  expect(await reloaded.call('get_history', {})).toHaveLength(1)
+  expect(await reloaded.call('get_error_notifications', {})).toHaveLength(1)
+  await reloaded.call('clear_history', {})
+  expect(await createSimulatorTransport({ storage }).call('get_history', {})).toEqual([])
+})
+
+test('all-failed playlist writes a notification without history, while equal titles may have distinct rows', async () => {
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock, outcomes: { [analysisUrls.playlist]: 'failed' } })
+  const playlist: DownloadRequest = {
+    url: analysisUrls.playlist, format: 'mp3', quality: { type: 'max' }, isPlaylist: true,
+  }
+  await transport.call('enqueue_download', { request: playlist })
+  clock.advanceBy(7000)
+  expect(await transport.call('get_history', {})).toEqual([])
+  expect(await transport.call('get_error_notifications', {})).toHaveLength(1)
+  expect(await transport.call('get_queue', {})).toEqual([])
+
+  const successClock = createManualSimulatorClock()
+  const success = createSimulatorTransport({ clock: successClock })
+  const first = { ...playlist, quality: { type: 'max' } as const }
+  const second = { ...playlist, quality: { type: 'min' } as const }
+  await success.call('enqueue_download', { request: first })
+  await success.call('enqueue_download', { request: second })
+  successClock.advanceBy(8000)
+  const history = await success.call('get_history', {})
+  expect(history).toHaveLength(2)
+  expect(history[0].title).toBe(history[1].title)
+  expect(history[0].id).not.toBe(history[1].id)
+})
+
+test('redownload uses the closest lower available video height', async () => {
+  const transport = createSimulatorTransport({ availableVideoHeights: { [analysisUrls.single]: [360, 144] } })
+  await transport.call('enqueue_download', { request: {
+    url: analysisUrls.single, format: 'mp4', quality: { type: 'video', height: 720 }, isPlaylist: false,
+  } })
+  expect((await transport.call('get_queue', {}))[0].request.quality).toEqual({ type: 'video', height: 360 })
 })

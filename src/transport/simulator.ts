@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-import type { AnalyzeResult, AppError, Commands, DownloadRequest, QueueItem } from '../../shared/contract'
+import type { AnalyzeResult, AppError, Commands, DownloadRequest, ErrorNotification, HistoryEntry, QueueItem, Settings } from '../../shared/contract'
 import { analysisUrls, offlineAnalysisScenarios, type AnalysisScenario } from './fixtures'
+import { createMemoryMockStorage, defaultMockSettings, type MockStorage } from './mockStorage'
 import type { AppTransport } from './types'
 
 const youtubeHosts = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com'])
@@ -145,16 +146,77 @@ function requestMatchesResult(request: DownloadRequest, result: AnalyzeResult): 
   return request.quality.type === 'audio' && result.audioOutputBitrates.includes(request.quality.bitrate)
 }
 
+function requestKey(request: DownloadRequest): string {
+  const quality = request.quality
+  return JSON.stringify([request.url, request.format, request.isPlaylist, quality.type,
+    quality.type === 'audio' ? quality.bitrate : quality.type === 'video' ? quality.height : null])
+}
+
+export type MockOutcome = 'success' | 'partial' | 'failed'
+
 /** Offline queue lifecycle. The clock owns every transition, including event delivery. */
-export function createSimulatorTransport({ clock = systemClock }: { clock?: SimulatorClock } = {}): AppTransport {
-  const queue: QueueItem[] = []
+export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {} }: {
+  clock?: SimulatorClock
+  storage?: MockStorage
+  outcomes?: Record<string, MockOutcome>
+  availableVideoHeights?: Record<string, number[]>
+} = {}): AppTransport {
+  const saved = storage.load()
+  const queue: QueueItem[] = saved?.queue.map(copyQueueItem) ?? []
+  const history: HistoryEntry[] = saved?.history ?? []
+  const notifications: ErrorNotification[] = saved?.notifications ?? []
+  let settings: Settings = saved?.settings ?? { ...defaultMockSettings }
   const queueListeners = new Set<{ handler: (item: QueueItem) => void }>()
   const removalListeners = new Set<{ handler: (id: string) => void }>()
+  const historyListeners = new Set<{ handler: () => void }>()
+  const notificationListeners = new Set<{ handler: () => void }>()
   const scheduled = new Map<string, () => void>()
-  let nextQueueId = 1
+  let nextQueueId = saved?.nextQueueId ?? 1
+  let nextHistoryId = saved?.nextHistoryId ?? 1
+
+  function persist() {
+    storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId })
+  }
+
+  function emitChanged(listeners: Set<{ handler: () => void }>) {
+    for (const listener of [...listeners]) listener.handler()
+  }
 
   function emit(item: QueueItem) {
+    persist()
     for (const listener of [...queueListeners]) listener.handler(copyQueueItem(item))
+  }
+
+  function remove(item: QueueItem) {
+    scheduled.get(item.id)?.()
+    scheduled.delete(item.id)
+    queue.splice(queue.indexOf(item), 1)
+    persist()
+    for (const listener of [...removalListeners]) listener.handler(item.id)
+  }
+
+  function finish(item: QueueItem) {
+    const outcome = outcomes[item.request.url] ?? 'success'
+    const hasSuccess = outcome !== 'failed'
+    const hasFailure = outcome !== 'success'
+    if (hasSuccess) {
+      const key = requestKey(item.request)
+      const oldIndex = history.findIndex((entry) => requestKey(entry.request) === key)
+      if (oldIndex >= 0) history.splice(oldIndex, 1)
+      history.unshift({ id: nextHistoryId++, request: { ...item.request, quality: { ...item.request.quality } }, title: item.title })
+      persist()
+      emitChanged(historyListeners)
+    }
+    if (hasFailure) {
+      const error = syntheticError('unknown', outcome === 'partial' ? 'One playlist entry failed.' : 'Download failed.')
+      notifications.unshift({ id: item.id, title: item.title, error })
+      item.error = error
+      persist()
+      emitChanged(notificationListeners)
+    }
+    item.status = hasSuccess ? 'done' : 'failed'
+    emit(item)
+    remove(item)
   }
 
   function scheduleNext(item: QueueItem, callback: () => void, delayMs: number) {
@@ -174,22 +236,36 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
         scheduleNext(item, () => {
           item.status = 'postProcessing'
           emit(item)
+          scheduleNext(item, () => finish(item), 1000)
         }, 1000)
       } else scheduleNext(item, () => advance(item), 1000)
       return
     }
     const progress = item.progress
-    progress.done = Math.min(progress.total, progress.done + Math.max(1, Math.ceil(progress.total / 4)))
-    progress.currentPercent = progress.done === progress.total ? 100 : 25
-    progress.currentTitle = progress.done === progress.total ? null : `Synthetic playlist item ${progress.done + 1}`
+    const processed = progress.done + progress.failed
+    const batch = Math.min(progress.total - processed, Math.max(1, Math.ceil(progress.total / 4)))
+    const outcome = outcomes[item.request.url] ?? 'success'
+    if (outcome === 'failed') progress.failed += batch
+    else if (outcome === 'partial' && processed + batch === progress.total) {
+      progress.done += batch - 1
+      progress.failed++
+    } else progress.done += batch
+    const complete = progress.done + progress.failed === progress.total
+    progress.currentPercent = complete ? 100 : 25
+    progress.currentTitle = complete ? null : `Synthetic playlist item ${progress.done + progress.failed + 1}`
     emit(item)
-    if (progress.done === progress.total) {
+    if (complete) {
+      if (outcome === 'failed') {
+        scheduleNext(item, () => finish(item), 1000)
+        return
+      }
       scheduleNext(item, () => {
         item.status = 'postProcessing'
         emit(item)
         scheduleNext(item, () => {
           item.status = 'packaging'
           emit(item)
+          scheduleNext(item, () => finish(item), 1000)
         }, 1000)
       }, 1000)
     } else scheduleNext(item, () => advance(item), 1000)
@@ -215,7 +291,16 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
         const url = request.url.trim()
         const scenario = scenarioFor(url)
         if (scenario.type === 'error') throw { ...scenario.error }
-        if (!requestMatchesResult(request, scenario.result)) {
+        const acceptedRequest: DownloadRequest = { ...request, url, quality: { ...request.quality } }
+        if (scenario.result.kind === 'single' && request.format === 'mp4' && request.quality.type === 'video') {
+          const requestedHeight = request.quality.height
+          const heights = availableVideoHeights[url] ?? scenario.result.videoHeights
+          if (!heights.includes(requestedHeight)) {
+            const lower = heights.filter((height) => height < requestedHeight).sort((a, b) => b - a)[0]
+            if (lower !== undefined) acceptedRequest.quality = { type: 'video', height: lower }
+          }
+        }
+        if (!requestMatchesResult(acceptedRequest, scenario.result)) {
           throw syntheticError('unknown', 'Download quality or playlist flag does not match the analyzed item.')
         }
 
@@ -223,7 +308,7 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
         const id = `00000000-0000-4000-8000-${(nextQueueId++).toString(16).padStart(12, '0')}`
         const item: QueueItem = {
           id,
-          request: { ...request, url, quality: { ...request.quality } },
+          request: acceptedRequest,
           title: scenario.result.title,
           thumbnail: scenario.result.thumbnail,
           status: 'queued',
@@ -233,12 +318,46 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
           error: null,
         }
         queue.push(item)
+        persist()
         clock.schedule(() => { if (queue.includes(item)) emit(item) }, 0)
         scheduleNext(item, () => start(item), 1000)
         return id as Commands[K]['result']
       }
 
       if (command === 'get_queue') return queue.map(copyQueueItem) as Commands[K]['result']
+
+      if (command === 'get_history') {
+        return history.map((entry) => ({ ...entry, request: { ...entry.request, quality: { ...entry.request.quality } } })) as Commands[K]['result']
+      }
+      if (command === 'delete_history_entry') {
+        const { id } = args as Commands['delete_history_entry']['args']
+        const index = history.findIndex((entry) => entry.id === id)
+        if (index < 0) throw syntheticError('not_found', `History entry ${id} is missing.`)
+        history.splice(index, 1)
+        persist()
+        emitChanged(historyListeners)
+        return undefined as Commands[K]['result']
+      }
+      if (command === 'clear_history') {
+        if (history.length) {
+          history.length = 0
+          persist()
+          emitChanged(historyListeners)
+        }
+        return undefined as Commands[K]['result']
+      }
+      if (command === 'get_error_notifications') {
+        return notifications.map((note) => ({ ...note, error: { ...note.error } })) as Commands[K]['result']
+      }
+      if (command === 'dismiss_error_notification') {
+        const { id } = args as Commands['dismiss_error_notification']['args']
+        const index = notifications.findIndex((note) => note.id === id)
+        if (index < 0) throw syntheticError('not_found', `Error notification ${id} is missing.`)
+        notifications.splice(index, 1)
+        persist()
+        emitChanged(notificationListeners)
+        return undefined as Commands[K]['result']
+      }
 
       if (command === 'pause_download' || command === 'resume_download' || command === 'remove_download') {
         const { id } = args as Commands['pause_download']['args']
@@ -257,6 +376,7 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
           scheduled.get(id)?.()
           scheduled.delete(id)
           queue.splice(queue.indexOf(item), 1)
+          persist()
           clock.schedule(() => {
             for (const listener of [...removalListeners]) listener.handler(id)
           }, 0)
@@ -276,6 +396,16 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
         const listener = { handler: handler as (id: string) => void }
         removalListeners.add(listener)
         return () => { removalListeners.delete(listener) }
+      }
+      if (name === 'history:changed') {
+        const listener = { handler: handler as () => void }
+        historyListeners.add(listener)
+        return () => { historyListeners.delete(listener) }
+      }
+      if (name === 'error-notifications:changed') {
+        const listener = { handler: handler as () => void }
+        notificationListeners.add(listener)
+        return () => { notificationListeners.delete(listener) }
       }
       return () => {}
     },
