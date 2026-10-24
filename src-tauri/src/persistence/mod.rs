@@ -3,6 +3,7 @@
 
 pub mod history;
 mod migrations;
+pub mod notifications;
 pub mod queue;
 pub mod settings;
 
@@ -21,6 +22,7 @@ pub enum Error {
     UnsupportedSchema(i64),
     InvalidStoredValue(&'static str),
     InvalidInput(&'static str),
+    NotFound(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -36,6 +38,7 @@ impl fmt::Display for Error {
             }
             Self::InvalidStoredValue(field) => write!(f, "invalid stored {field}"),
             Self::InvalidInput(field) => write!(f, "invalid {field}"),
+            Self::NotFound(item) => write!(f, "{item} not found"),
         }
     }
 }

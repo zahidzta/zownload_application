@@ -3,7 +3,30 @@
 
 use super::{Database, Error, Result};
 use crate::contract::{DownloadRequest, Format, HistoryEntry, Quality};
-use rusqlite::params;
+use rusqlite::{params, Transaction};
+
+pub(super) fn record_in_transaction(
+    transaction: &Transaction<'_>,
+    request: &DownloadRequest,
+    title: Option<&str>,
+) -> Result<i64> {
+    let format = match request.format {
+        Format::Mp3 => "mp3",
+        Format::Mp4 => "mp4",
+    };
+    let quality = serde_json::to_string(&request.quality)?;
+    let is_playlist = i64::from(request.is_playlist);
+    // A repeated exact request receives a fresh id, which moves it to the top.
+    transaction.execute(
+        "DELETE FROM history WHERE url = ?1 AND format = ?2 AND is_playlist = ?3 AND quality = ?4",
+        params![request.url, format, is_playlist, quality],
+    )?;
+    transaction.execute(
+        "INSERT INTO history (url, format, is_playlist, quality, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![request.url, format, is_playlist, quality, title],
+    )?;
+    Ok(transaction.last_insert_rowid())
+}
 
 impl Database {
     pub fn get_history(&self) -> Result<Vec<HistoryEntry>> {
@@ -53,23 +76,8 @@ impl Database {
         request: &DownloadRequest,
         title: Option<&str>,
     ) -> Result<i64> {
-        let format = match request.format {
-            Format::Mp3 => "mp3",
-            Format::Mp4 => "mp4",
-        };
-        let quality = serde_json::to_string(&request.quality)?;
-        let is_playlist = i64::from(request.is_playlist);
         let transaction = self.connection.transaction()?;
-        // A repeated exact request receives a fresh id, which moves it to the top.
-        transaction.execute(
-            "DELETE FROM history WHERE url = ?1 AND format = ?2 AND is_playlist = ?3 AND quality = ?4",
-            params![request.url, format, is_playlist, quality],
-        )?;
-        transaction.execute(
-            "INSERT INTO history (url, format, is_playlist, quality, title) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![request.url, format, is_playlist, quality, title],
-        )?;
-        let id = transaction.last_insert_rowid();
+        let id = record_in_transaction(&transaction, request, title)?;
         transaction.commit()?;
         Ok(id)
     }
