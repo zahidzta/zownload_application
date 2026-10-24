@@ -6,7 +6,9 @@ pub mod contract;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(android_spike::init());
+    let builder = tauri::Builder::default()
+        .plugin(android_spike::init())
+        .plugin(tauri_plugin_dialog::init());
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         android_spike::enqueue_download,
