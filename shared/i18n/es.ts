@@ -67,6 +67,10 @@ export const es = {
   history: {
     title: 'Historial',
     empty: 'Aún no hay historial',
+    playlist: 'Lista de reproducción',
+    redownload: 'Volver a descargar',
+    delete: 'Eliminar del historial: {title}',
+    clear: 'Borrar historial',
   },
   activity: {
     syncError: 'No se pudo cargar la actividad de descargas. Inténtalo de nuevo.',

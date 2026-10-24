@@ -75,6 +75,10 @@ export const en = {
   history: {
     title: 'History',
     empty: 'No history yet',
+    playlist: 'Playlist',
+    redownload: 'Redownload',
+    delete: 'Delete from history: {title}',
+    clear: 'Clear history',
   },
   activity: {
     syncError: 'Could not load download activity. Try again.',

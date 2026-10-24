@@ -5,11 +5,12 @@ import type { ReactNode } from 'react'
 import type { QueueItem } from '../../shared/contract'
 import type { Locale } from '../i18n'
 import { Header } from './Header'
-import { Card } from './ui/Card'
 import { Page } from './ui/Page'
 import { t } from '../i18n'
 import { useShellStore } from '../state/shell'
 import { QueueCard } from './QueueCard'
+import { HistoryCard } from './HistoryCard'
+import type { HistoryEntry } from '../../shared/contract'
 
 interface AppShellProps {
   children: ReactNode
@@ -18,6 +19,11 @@ interface AppShellProps {
   onPause?: (id: string) => void
   onResume?: (id: string) => void
   onCancel?: (id: string) => void
+  historyEntries?: HistoryEntry[]
+  historyActionId?: number | 'clear' | null
+  onRedownload?: (id: number) => void
+  onDeleteHistory?: (id: number) => void
+  onClearHistory?: () => void
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -31,7 +37,8 @@ export function AppShell({ children }: AppShellProps) {
   )
 }
 
-export function AppShellView({ locale, children, queueItems = [], queueActionId, onPause, onResume, onCancel }: AppShellProps & { locale: Locale }) {
+export function AppShellView({ locale, children, queueItems = [], queueActionId, onPause, onResume, onCancel,
+  historyEntries = [], historyActionId, onRedownload, onDeleteHistory, onClearHistory }: AppShellProps & { locale: Locale }) {
   return (
     <Page
         title={t(locale, 'input.title')}
@@ -42,13 +49,8 @@ export function AppShellView({ locale, children, queueItems = [], queueActionId,
         <div className="flex min-w-0 flex-col gap-stack lg:col-start-2 lg:gap-5">
           <QueueCard locale={locale} items={queueItems} busyId={queueActionId}
             onPause={onPause} onResume={onResume} onCancel={onCancel} />
-          <Card
-            title={t(locale, 'history.title')}
-            className="rounded-card border border-border bg-card p-4 lg:min-h-[7.625rem] lg:p-5"
-            headingClassName="text-card-title font-medium text-text"
-          >
-            <p className="mt-stack mb-0 text-body text-text lg:mt-section">{t(locale, 'history.empty')}</p>
-          </Card>
+          <HistoryCard locale={locale} entries={historyEntries} busyId={historyActionId}
+            onRedownload={onRedownload} onDelete={onDeleteHistory} onClear={onClearHistory} />
         </div>
     </Page>
   )
