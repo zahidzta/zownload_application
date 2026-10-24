@@ -21,12 +21,21 @@ export interface DownloadFlowState {
   notifications: ErrorNotification[]
   settings: Settings | null
   syncError: AppError | null
+  actionError: AppError | null
+  queueActionId: string | null
+  historyActionId: number | 'clear' | null
   setUrl: (url: string) => void
   setFormat: (format: Format) => void
   analyze: () => Promise<void>
   selectQuality: (quality: Quality) => void
   back: () => void
   enqueue: () => Promise<string | null>
+  pauseQueueItem: (id: string) => Promise<void>
+  resumeQueueItem: (id: string) => Promise<void>
+  cancelQueueItem: (id: string) => Promise<void>
+  deleteHistoryEntry: (id: number) => Promise<void>
+  clearHistory: () => Promise<void>
+  redownload: (id: number) => Promise<string | null>
   refreshQueue: () => Promise<void>
   refreshHistory: () => Promise<void>
   refreshNotifications: () => Promise<void>
@@ -96,6 +105,9 @@ export function createDownloadFlowStore(transport: AppTransport) {
     notifications: [],
     settings: null,
     syncError: null,
+    actionError: null,
+    queueActionId: null,
+    historyActionId: null,
     setUrl(url) {
       if (get().enqueuing || get().url === url) return
       analysisVersion++
@@ -165,6 +177,75 @@ export function createDownloadFlowStore(transport: AppTransport) {
       await get().refreshQueue()
       return id
     },
+    async pauseQueueItem(id) {
+      if (get().queueActionId || !get().queueItems.some((item) => item.id === id && item.status === 'downloading')) return
+      set({ queueActionId: id, actionError: null })
+      try {
+        await transport.call('pause_download', { id })
+      } catch (reason) {
+        set({ queueActionId: null, actionError: appError(reason) })
+      }
+    },
+    async resumeQueueItem(id) {
+      if (get().queueActionId || !get().queueItems.some((item) => item.id === id && item.status === 'paused')) return
+      set({ queueActionId: id, actionError: null })
+      try {
+        await transport.call('resume_download', { id })
+      } catch (reason) {
+        set({ queueActionId: null, actionError: appError(reason) })
+      }
+    },
+    async cancelQueueItem(id) {
+      if (get().queueActionId || !get().queueItems.some((item) => item.id === id)) return
+      set({ queueActionId: id, actionError: null })
+      try {
+        await transport.call('remove_download', { id })
+      } catch (reason) {
+        set({ queueActionId: null, actionError: appError(reason) })
+      }
+    },
+    async deleteHistoryEntry(id) {
+      if (get().historyActionId !== null || !get().historyEntries.some((entry) => entry.id === id)) return
+      set({ historyActionId: id, actionError: null })
+      try {
+        await transport.call('delete_history_entry', { id })
+        await get().refreshHistory()
+      } catch (reason) {
+        set({ actionError: appError(reason) })
+      } finally {
+        set({ historyActionId: null })
+      }
+    },
+    async clearHistory() {
+      if (get().historyActionId !== null || get().historyEntries.length === 0) return
+      set({ historyActionId: 'clear', actionError: null })
+      try {
+        await transport.call('clear_history', {})
+        await get().refreshHistory()
+      } catch (reason) {
+        set({ actionError: appError(reason) })
+      } finally {
+        set({ historyActionId: null })
+      }
+    },
+    async redownload(id) {
+      const entry = get().historyEntries.find((candidate) => candidate.id === id)
+      if (get().historyActionId !== null || !entry) return null
+      set({ historyActionId: id, actionError: null })
+      try {
+        const queueId = await transport.call('enqueue_download', { request: {
+          ...entry.request, quality: { ...entry.request.quality },
+        } })
+        // The accepted job remains accepted if the follow-up snapshot fails.
+        await get().refreshQueue()
+        return queueId
+      } catch (reason) {
+        set({ actionError: appError(reason) })
+        return null
+      } finally {
+        set({ historyActionId: null })
+      }
+    },
     async refreshQueue() {
       const read = ++queueRead
       const epoch = queueEpoch
@@ -228,16 +309,16 @@ export function createDownloadFlowStore(transport: AppTransport) {
               queueEpoch++
               set((state) => {
                 const index = state.queueItems.findIndex((old) => old.id === item.id)
-                if (index < 0) return { queueItems: [...state.queueItems, item] }
+                if (index < 0) return { queueItems: [...state.queueItems, item], queueActionId: state.queueActionId === item.id ? null : state.queueActionId }
                 const queueItems = [...state.queueItems]
                 queueItems[index] = item
-                return { queueItems }
+                return { queueItems, queueActionId: state.queueActionId === item.id ? null : state.queueActionId }
               })
             }))
             offs.push(await transport.on('queue:item-removed', (id) => {
               if (version !== connectionVersion) return
               queueEpoch++
-              set((state) => ({ queueItems: state.queueItems.filter((item) => item.id !== id) }))
+              set((state) => ({ queueItems: state.queueItems.filter((item) => item.id !== id), queueActionId: state.queueActionId === id ? null : state.queueActionId }))
             }))
             offs.push(await transport.on('history:changed', () => {
               if (version !== connectionVersion) return

@@ -58,7 +58,19 @@ export const en = {
   queue: {
     title: 'Queue',
     empty: 'No active downloads',
+    analyzing: 'Analyzing',
     queued: 'Queued',
+    downloading: 'Downloading',
+    postProcessing: 'Processing media',
+    paused: 'Paused',
+    packaging: 'Packaging playlist',
+    done: 'Complete',
+    failed: 'Failed',
+    stop: 'Stop',
+    continue: 'Continue',
+    cancel: 'Cancel',
+    progressFor: 'Download progress for {title}',
+    failureSummary: '{done} correct, {failed} failed',
   },
   history: {
     title: 'History',
@@ -66,6 +78,7 @@ export const en = {
   },
   activity: {
     syncError: 'Could not load download activity. Try again.',
+    actionError: 'Could not complete that action. Try again.',
     retry: 'Retry loading activity',
   },
   settings: {

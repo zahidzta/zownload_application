@@ -50,7 +50,19 @@ export const es = {
   queue: {
     title: 'Cola',
     empty: 'No hay descargas activas',
+    analyzing: 'Analizando',
     queued: 'En cola',
+    downloading: 'Descargando',
+    postProcessing: 'Procesando archivo',
+    paused: 'Pausado',
+    packaging: 'Empaquetando lista',
+    done: 'Completado',
+    failed: 'Fallido',
+    stop: 'Detener',
+    continue: 'Continuar',
+    cancel: 'Cancelar',
+    progressFor: 'Progreso de descarga de {title}',
+    failureSummary: '{done} correctos, {failed} fallidos',
   },
   history: {
     title: 'Historial',
@@ -58,6 +70,7 @@ export const es = {
   },
   activity: {
     syncError: 'No se pudo cargar la actividad de descargas. Inténtalo de nuevo.',
+    actionError: 'No se pudo completar la acción. Inténtalo de nuevo.',
     retry: 'Reintentar la carga de actividad',
   },
   settings: {
