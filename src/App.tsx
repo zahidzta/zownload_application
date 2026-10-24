@@ -12,10 +12,19 @@ import { useShellStore } from './state/shell'
 import type { ShellPage } from './state/shell'
 import { createDownloadFlowStore } from './state/downloadFlow'
 import { createSimulatorTransport } from './transport/simulator'
+import { createBrowserMockStorage, createMemoryMockStorage } from './transport/mockStorage'
 import type { AppTransport } from './transport/types'
 import { useStore } from 'zustand'
 
-const simulatorTransport = createSimulatorTransport()
+function runningMockStorage() {
+  try {
+    return typeof window === 'undefined' ? createMemoryMockStorage() : createBrowserMockStorage(window.localStorage)
+  } catch {
+    return createMemoryMockStorage()
+  }
+}
+
+const simulatorTransport = createSimulatorTransport({ storage: runningMockStorage() })
 // The running mock pauses analysis briefly so its loading state can be inspected.
 const appTransport: AppTransport = {
   async call(command, args) {

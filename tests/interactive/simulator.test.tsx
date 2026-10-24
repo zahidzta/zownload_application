@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { DownloadRequest, QueueItem } from '../../shared/contract'
 import { analysisUrls, selectPlaylistThumbnail } from '../../src/transport/fixtures'
 import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
-import { createMemoryMockStorage } from '../../src/transport/mockStorage'
+import { createBrowserMockStorage, createMemoryMockStorage } from '../../src/transport/mockStorage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -325,4 +325,49 @@ test('redownload uses the closest lower available video height', async () => {
     url: analysisUrls.single, format: 'mp4', quality: { type: 'video', height: 720 }, isPlaylist: false,
   } })
   expect((await transport.call('get_queue', {}))[0].request.quality).toEqual({ type: 'video', height: 360 })
+})
+
+test('settings, update result, and interrupted queue survive transport recreation without auto-resume', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const first = createSimulatorTransport({ clock, storage })
+  const settings = { language: 'es' as const, zipPlaylists: true, downloadDir: 'C:/Downloads/Zownload' }
+  await first.call('set_settings', { settings })
+  const fetched = await first.call('get_settings', {})
+  fetched.downloadDir = 'changed by caller'
+  expect(await first.call('get_settings', {})).toEqual(settings)
+  expect(await first.call('engine_check_update', {})).toMatchObject({ updateAvailable: true })
+  expect(await first.call('engine_update', {})).toMatchObject({ updateAvailable: false })
+  const id = await first.call('enqueue_download', { request: {
+    url: analysisUrls.single, format: 'mp3', quality: { type: 'audio', bitrate: 128 }, isPlaylist: false,
+  } })
+  clock.advanceBy(3000)
+  const progress = (await first.call('get_queue', {}))[0].progress
+  const restartClock = createManualSimulatorClock()
+  const restarted = createSimulatorTransport({ clock: restartClock, storage })
+  expect(await restarted.call('get_settings', {})).toEqual(settings)
+  expect(await restarted.call('engine_check_update', {})).toMatchObject({ updateAvailable: false })
+  expect((await restarted.call('get_queue', {}))[0]).toMatchObject({ id, status: 'paused', progress })
+  restartClock.advanceBy(10000)
+  expect((await restarted.call('get_queue', {}))[0]).toMatchObject({ status: 'paused', progress })
+  await restarted.call('resume_download', { id })
+  restartClock.advanceBy(0)
+  expect((await restarted.call('get_queue', {}))[0]).toMatchObject({ status: 'downloading', progress })
+  restartClock.advanceBy(1000)
+  expect((await restarted.call('get_queue', {}))[0].progress).toEqual({ kind: 'single', percent: 75 })
+})
+
+test('browser-backed mock storage round-trips and failed update stays typed', async () => {
+  const entries = new Map<string, string>()
+  const browserStorage = {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => { entries.set(key, value) },
+  } as Storage
+  const storage = createBrowserMockStorage(browserStorage, 'isolated-test')
+  const first = createSimulatorTransport({ storage, engineUpdateFails: true })
+  await first.call('set_settings', { settings: { language: 'es', zipPlaylists: false, downloadDir: null } })
+  await expect(first.call('engine_update', {})).rejects.toMatchObject({ code: 'no_internet' })
+  const reloaded = createSimulatorTransport({ storage })
+  expect(await reloaded.call('get_settings', {})).toEqual({ language: 'es', zipPlaylists: false, downloadDir: null })
+  expect(await reloaded.call('engine_check_update', {})).toMatchObject({ updateAvailable: true })
 })

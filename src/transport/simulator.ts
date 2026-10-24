@@ -155,11 +155,12 @@ function requestKey(request: DownloadRequest): string {
 export type MockOutcome = 'success' | 'partial' | 'failed'
 
 /** Offline queue lifecycle. The clock owns every transition, including event delivery. */
-export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {} }: {
+export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {}, engineUpdateFails = false }: {
   clock?: SimulatorClock
   storage?: MockStorage
   outcomes?: Record<string, MockOutcome>
   availableVideoHeights?: Record<string, number[]>
+  engineUpdateFails?: boolean
 } = {}): AppTransport {
   const saved = storage.load()
   const queue: QueueItem[] = saved?.queue.map(copyQueueItem) ?? []
@@ -173,9 +174,17 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
   const scheduled = new Map<string, () => void>()
   let nextQueueId = saved?.nextQueueId ?? 1
   let nextHistoryId = saved?.nextHistoryId ?? 1
+  let engineVersion = saved?.engineVersion ?? '2026.10.01'
+  const latestEngineVersion = '2026.10.23'
 
   function persist() {
-    storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId })
+    storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId, engineVersion })
+  }
+
+  // A recreated transport models a process restart: interrupted work waits for Continue.
+  if (queue.some((item) => item.status !== 'paused')) {
+    for (const item of queue) item.status = 'paused'
+    persist()
   }
 
   function emitChanged(listeners: Set<{ handler: () => void }>) {
@@ -348,6 +357,28 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
       }
       if (command === 'get_error_notifications') {
         return notifications.map((note) => ({ ...note, error: { ...note.error } })) as Commands[K]['result']
+      }
+      if (command === 'get_settings') return { ...settings } as Commands[K]['result']
+      if (command === 'set_settings') {
+        const next = (args as Commands['set_settings']['args']).settings
+        if ((next.language !== 'en' && next.language !== 'es') || typeof next.zipPlaylists !== 'boolean' ||
+            (next.downloadDir !== null && typeof next.downloadDir !== 'string')) {
+          throw syntheticError('unknown', 'Invalid mock settings.')
+        }
+        settings = { ...next }
+        persist()
+        return undefined as Commands[K]['result']
+      }
+      if (command === 'engine_check_update' || command === 'engine_update') {
+        if (command === 'engine_update') {
+          if (engineUpdateFails) throw syntheticError('no_internet', 'Mock engine update failed.')
+          engineVersion = latestEngineVersion
+          persist()
+        }
+        return {
+          current: engineVersion, latest: latestEngineVersion,
+          updateAvailable: engineVersion !== latestEngineVersion,
+        } as Commands[K]['result']
       }
       if (command === 'dismiss_error_notification') {
         const { id } = args as Commands['dismiss_error_notification']['args']

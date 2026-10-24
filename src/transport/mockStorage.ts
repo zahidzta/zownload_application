@@ -11,6 +11,7 @@ export interface MockSnapshot {
   settings: Settings
   nextQueueId: number
   nextHistoryId: number
+  engineVersion?: string
 }
 
 export interface MockStorage {
