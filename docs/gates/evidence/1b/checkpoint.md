@@ -3,7 +3,7 @@
 
 # Gate 1B checkpoint — 2026-10-23
 
-**Status:** 1B-02 through 1B-11 are integrated. The owner approved the pending 1B visual changes on 2026-10-23. This checkpoint records the review and verification for 1B-12; explicit owner acceptance of the **1B checkpoint** is still required before 1C under [Appendix A](../../../../PROJECT.md) and the [Gate 1B plan](../../gate-1b.md).
+**Status:** 1B-02 through 1B-11 are integrated. The owner approved the pending 1B visual changes on 2026-10-23. This checkpoint records the review and verification for 1B-12. The owner explicitly accepted the **1B checkpoint** on 2026-10-23 and directed the [Gate 1C plan](../../gate-1c.md), satisfying the [Appendix A](../../../../PROJECT.md) handoff.
 
 ## Acceptance evidence
 
@@ -43,4 +43,4 @@ powershell -NoProfile -Command 'npm run build; if ($LASTEXITCODE -ne 0) { exit $
 
 ## Exit and carried limits
 
-Gate 1B supplies an offline mock flow through accepted enqueue and a minimal queued row. Queue progress and controls, terminal removal, history, redownload, settings controls, notifications, and restart persistence belong to 1C. Real engine output and source-bitrate behavior remain for later production stages. The Android distribution blocker and other release conditions in [STATE](../../../STATE.md) remain open. No 1C planning or implementation begins until the owner explicitly accepts this checkpoint.
+Gate 1B supplies an offline mock flow through accepted enqueue and a minimal queued row. Queue progress and controls, terminal removal, history, redownload, settings controls, notifications, and mock restart behavior belong to 1C. Real engine output, SQLite persistence, and source-bitrate behavior remain for later production stages. The Android distribution blocker and other release conditions in [STATE](../../../STATE.md) remain open. The owner accepted this checkpoint on 2026-10-23 before 1C planning began.
