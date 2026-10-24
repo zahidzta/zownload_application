@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'jsdom',
+    // Running these DOM-heavy files together can exceed the per-test timeout on Windows.
+    fileParallelism: false,
     include: ['tests/interactive/**/*.test.ts', 'tests/interactive/**/*.test.tsx'],
     setupFiles: ['tests/interactive/setup.ts'],
   },

@@ -6,7 +6,7 @@ import { useStore } from 'zustand'
 import type { Locale } from '../i18n'
 import { t } from '../i18n'
 import type { DownloadFlowStore } from './InputCard'
-import { Button } from './ui/Button'
+import { Button, IconButton } from './ui/Button'
 import { Card } from './ui/Card'
 import { Page } from './ui/Page'
 
@@ -62,11 +62,14 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
     <Page title={t(locale, 'settings.title')} headingClassName="sr-only"
       className="mx-auto w-full max-w-[86.25rem] px-shell-inline pt-card pb-shell lg:pt-shell xl:px-0">
       <Card title={t(locale, 'settings.title')}
-        className="w-full max-w-[42rem] rounded-card border border-border bg-card p-4 lg:p-card"
-        headingClassName="text-card-title font-medium text-text-strong">
-        <Button ref={backButton} label={t(locale, 'navigation.back')} onClick={onBack}
-          className="mt-section rounded-control px-stack text-accent-text" />
-        <div className="mt-section space-y-section border-t border-border pt-section">
+        className="mx-auto grid w-full max-w-[42rem] grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-x-2 rounded-card border border-border bg-card p-4 lg:p-card"
+        headingClassName="col-start-2 row-start-1 text-card-title font-medium text-text-strong">
+        <IconButton ref={backButton} label={t(locale, 'navigation.back')} onClick={onBack}
+          icon={<svg viewBox="0 0 24 24" className="size-5 fill-none stroke-current stroke-2">
+            <path d="m12 5-7 7 7 7M5 12h14" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>}
+          className="col-start-1 row-start-1 rounded-control text-text hover:text-text-strong" />
+        <div className="col-span-2 mt-section space-y-section border-t border-border pt-section">
           {actionError && <p role="alert" className="text-small text-danger">{t(locale, 'activity.actionError')}</p>}
           <div className="flex flex-col gap-compact">
             <label htmlFor="settings-language" className="font-medium text-text-strong">{t(locale, 'settings.language')}</label>

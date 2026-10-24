@@ -31,6 +31,7 @@ test('Settings choices persist, picker cancellation leaves the path alone, and l
   const view = render(<View />)
   const back = screen.getByRole('button', { name: 'Back to downloads' })
   expect(document.activeElement).toBe(back)
+  expect(back.querySelector('svg path')?.getAttribute('d')).toBe('m12 5-7 7 7 7M5 12h14')
   await waitFor(() => expect(screen.getByRole('combobox', { name: 'Language' }).hasAttribute('disabled')).toBe(false))
 
   await user.click(screen.getByRole('button', { name: 'Choose folder' }))
