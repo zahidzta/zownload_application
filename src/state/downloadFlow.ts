@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import { createStore } from 'zustand/vanilla'
-import type { AnalyzeResult, AppError, ErrorCode, Format, Quality, QueueItem } from '../../shared/contract'
-import type { AppTransport } from '../transport/types'
+import type { AnalyzeResult, AppError, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings } from '../../shared/contract'
+import type { AppTransport, Unsubscribe } from '../transport/types'
 
 export type DownloadStep = 'input' | 'download'
 
@@ -17,12 +17,22 @@ export interface DownloadFlowState {
   selectedQuality: Quality | null
   enqueuing: boolean
   queueItems: QueueItem[]
+  historyEntries: HistoryEntry[]
+  notifications: ErrorNotification[]
+  settings: Settings | null
+  syncError: AppError | null
   setUrl: (url: string) => void
   setFormat: (format: Format) => void
   analyze: () => Promise<void>
   selectQuality: (quality: Quality) => void
   back: () => void
   enqueue: () => Promise<string | null>
+  refreshQueue: () => Promise<void>
+  refreshHistory: () => Promise<void>
+  refreshNotifications: () => Promise<void>
+  refreshSettings: () => Promise<void>
+  retryActivity: () => Promise<void>
+  connectActivity: () => Unsubscribe
 }
 
 const errorCodes: ReadonlySet<ErrorCode> = new Set([
@@ -61,6 +71,16 @@ function qualityIsAvailable(result: AnalyzeResult, format: Format, quality: Qual
 /** One store per injected transport keeps the UI and offline tests isolated. */
 export function createDownloadFlowStore(transport: AppTransport) {
   let analysisVersion = 0
+  let connectionUsers = 0
+  let connectionVersion = 0
+  let disconnectors: Unsubscribe[] = []
+  let queueEpoch = 0
+  let historyEpoch = 0
+  let notificationEpoch = 0
+  let queueRead = 0
+  let historyRead = 0
+  let notificationRead = 0
+  let settingsRead = 0
 
   return createStore<DownloadFlowState>()((set, get) => ({
     step: 'input',
@@ -72,6 +92,10 @@ export function createDownloadFlowStore(transport: AppTransport) {
     selectedQuality: null,
     enqueuing: false,
     queueItems: [],
+    historyEntries: [],
+    notifications: [],
+    settings: null,
+    syncError: null,
     setUrl(url) {
       if (get().enqueuing || get().url === url) return
       analysisVersion++
@@ -137,14 +161,120 @@ export function createDownloadFlowStore(transport: AppTransport) {
         })
         return null
       }
-      // The accepted request clears Input before fetching the transport's real queue snapshot.
-      // A snapshot failure must not turn a successful enqueue into a false rejection.
-      try {
-        set({ queueItems: await transport.call('get_queue', {}) })
-      } catch {
-        // Queue synchronization and its error UI belong to 1C.
-      }
+      // Acceptance is final even if the follow-up queue read needs a retry.
+      await get().refreshQueue()
       return id
+    },
+    async refreshQueue() {
+      const read = ++queueRead
+      const epoch = queueEpoch
+      try {
+        const items = await transport.call('get_queue', {})
+        if (read !== queueRead) return
+        if (epoch !== queueEpoch) return get().refreshQueue()
+        set({ queueItems: items })
+      } catch (reason) {
+        if (read === queueRead) set({ syncError: appError(reason) })
+      }
+    },
+    async refreshHistory() {
+      const read = ++historyRead
+      const epoch = historyEpoch
+      try {
+        const entries = await transport.call('get_history', {})
+        if (read !== historyRead) return
+        if (epoch !== historyEpoch) return get().refreshHistory()
+        set({ historyEntries: entries })
+      } catch (reason) {
+        if (read === historyRead) set({ syncError: appError(reason) })
+      }
+    },
+    async refreshNotifications() {
+      const read = ++notificationRead
+      const epoch = notificationEpoch
+      try {
+        const notes = await transport.call('get_error_notifications', {})
+        if (read !== notificationRead) return
+        if (epoch !== notificationEpoch) return get().refreshNotifications()
+        set({ notifications: notes })
+      } catch (reason) {
+        if (read === notificationRead) set({ syncError: appError(reason) })
+      }
+    },
+    async refreshSettings() {
+      const read = ++settingsRead
+      try {
+        const settings = await transport.call('get_settings', {})
+        if (read === settingsRead) set({ settings: { ...settings } })
+      } catch (reason) {
+        if (read === settingsRead) set({ syncError: appError(reason) })
+      }
+    },
+    async retryActivity() {
+      set({ syncError: null })
+      await Promise.all([
+        get().refreshQueue(), get().refreshHistory(), get().refreshNotifications(), get().refreshSettings(),
+      ])
+    },
+    connectActivity() {
+      connectionUsers++
+      if (connectionUsers === 1) {
+        const version = ++connectionVersion
+        void (async () => {
+          const offs: Unsubscribe[] = []
+          try {
+            offs.push(await transport.on('queue:item-updated', (item) => {
+              if (version !== connectionVersion) return
+              queueEpoch++
+              set((state) => {
+                const index = state.queueItems.findIndex((old) => old.id === item.id)
+                if (index < 0) return { queueItems: [...state.queueItems, item] }
+                const queueItems = [...state.queueItems]
+                queueItems[index] = item
+                return { queueItems }
+              })
+            }))
+            offs.push(await transport.on('queue:item-removed', (id) => {
+              if (version !== connectionVersion) return
+              queueEpoch++
+              set((state) => ({ queueItems: state.queueItems.filter((item) => item.id !== id) }))
+            }))
+            offs.push(await transport.on('history:changed', () => {
+              if (version !== connectionVersion) return
+              historyEpoch++
+              void get().refreshHistory()
+            }))
+            offs.push(await transport.on('error-notifications:changed', () => {
+              if (version !== connectionVersion) return
+              notificationEpoch++
+              void get().refreshNotifications()
+            }))
+            if (version !== connectionVersion) {
+              offs.forEach((off) => off())
+              return
+            }
+            disconnectors = offs
+            void get().retryActivity()
+          } catch (reason) {
+            offs.forEach((off) => off())
+            if (version === connectionVersion) set({ syncError: appError(reason) })
+          }
+        })()
+      }
+      let released = false
+      return () => {
+        if (released) return
+        released = true
+        connectionUsers--
+        if (connectionUsers !== 0) return
+        connectionVersion++
+        disconnectors.forEach((off) => off())
+        disconnectors = []
+        queueRead++
+        historyRead++
+        notificationRead++
+        settingsRead++
+      }
     },
   }))
 }

@@ -64,6 +64,10 @@ export const en = {
     title: 'History',
     empty: 'No history yet',
   },
+  activity: {
+    syncError: 'Could not load download activity. Try again.',
+    retry: 'Retry loading activity',
+  },
   settings: {
     title: 'Settings',
     language: 'Language',

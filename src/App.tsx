@@ -12,10 +12,21 @@ import { useShellStore } from './state/shell'
 import type { ShellPage } from './state/shell'
 import { createDownloadFlowStore } from './state/downloadFlow'
 import { createSimulatorTransport } from './transport/simulator'
+import { createBrowserMockStorage, createMemoryMockStorage } from './transport/mockStorage'
 import type { AppTransport } from './transport/types'
 import { useStore } from 'zustand'
+import { useEffect } from 'react'
+import { t } from './i18n'
 
-const simulatorTransport = createSimulatorTransport()
+function runningMockStorage() {
+  try {
+    return typeof window === 'undefined' ? createMemoryMockStorage() : createBrowserMockStorage(window.localStorage)
+  } catch {
+    return createMemoryMockStorage()
+  }
+}
+
+const simulatorTransport = createSimulatorTransport({ storage: runningMockStorage() })
 // The running mock pauses analysis briefly so its loading state can be inspected.
 const appTransport: AppTransport = {
   async call(command, args) {
@@ -41,10 +52,24 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
   const step = useStore(flowStore, (state) => state.step)
   const result = useStore(flowStore, (state) => state.result)
   const queueItems = useStore(flowStore, (state) => state.queueItems)
+  const syncError = useStore(flowStore, (state) => state.syncError)
+  useEffect(() => {
+    return flowStore.getState().connectActivity()
+  }, [flowStore])
   return (
     <>
       <HeaderView locale={locale} onToggleLocale={onToggleLocale} onOpenSettings={onOpenSettings} />
       <div hidden={page !== 'main'}>
+        {syncError && (
+          <div className="mx-auto w-full max-w-[86.25rem] px-shell-inline pt-card xl:px-0">
+            <div role="alert" className="rounded-control border border-red-400 bg-card p-4 text-small text-red-400">
+              {t(locale, 'activity.syncError')}
+              <button type="button" className="ml-3 min-h-11 underline" onClick={() => { void flowStore.getState().retryActivity() }}>
+                {t(locale, 'activity.retry')}
+              </button>
+            </div>
+          </div>
+        )}
         <AppShellView locale={locale} queueItems={queueItems}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
