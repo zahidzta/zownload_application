@@ -55,6 +55,8 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
   const queueActionId = useStore(flowStore, (state) => state.queueActionId)
   const historyEntries = useStore(flowStore, (state) => state.historyEntries)
   const historyActionId = useStore(flowStore, (state) => state.historyActionId)
+  const notifications = useStore(flowStore, (state) => state.notifications)
+  const notificationActionId = useStore(flowStore, (state) => state.notificationActionId)
   const syncError = useStore(flowStore, (state) => state.syncError)
   const actionError = useStore(flowStore, (state) => state.actionError)
   useEffect(() => {
@@ -83,12 +85,14 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
         )}
         <AppShellView locale={locale} queueItems={queueItems} queueActionId={queueActionId}
           historyEntries={historyEntries} historyActionId={historyActionId}
+          notifications={notifications} notificationActionId={notificationActionId}
           onPause={(id) => { void flowStore.getState().pauseQueueItem(id) }}
           onResume={(id) => { void flowStore.getState().resumeQueueItem(id) }}
           onCancel={(id) => { void flowStore.getState().cancelQueueItem(id) }}
           onRedownload={(id) => { void flowStore.getState().redownload(id) }}
           onDeleteHistory={(id) => { void flowStore.getState().deleteHistoryEntry(id) }}
-          onClearHistory={() => { void flowStore.getState().clearHistory() }}>
+          onClearHistory={() => { void flowStore.getState().clearHistory() }}
+          onDismissNotification={(id) => { void flowStore.getState().dismissNotification(id) }}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
           ) : result?.kind === 'playlist' ? (

@@ -72,6 +72,12 @@ export const es = {
     delete: 'Eliminar del historial: {title}',
     clear: 'Borrar historial',
   },
+  notifications: {
+    title: 'Errores de descarga',
+    empty: 'No hay errores de descarga',
+    untitled: 'Descarga',
+    dismissFor: 'Descartar error de {title}',
+  },
   activity: {
     syncError: 'No se pudo cargar la actividad de descargas. Inténtalo de nuevo.',
     actionError: 'No se pudo completar la acción. Inténtalo de nuevo.',

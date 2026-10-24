@@ -69,3 +69,7 @@ input, button, select { font: inherit; }
 .queue-progress > div {
   background: linear-gradient(90deg, var(--color-primary), var(--color-progress-end));
 }
+
+.notification-error {
+  border-inline-start: 3px solid var(--color-danger);
+}

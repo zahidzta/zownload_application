@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import type { ReactNode } from 'react'
-import type { QueueItem } from '../../shared/contract'
+import type { ErrorNotification, QueueItem } from '../../shared/contract'
 import type { Locale } from '../i18n'
 import { Header } from './Header'
 import { Page } from './ui/Page'
@@ -10,6 +10,7 @@ import { t } from '../i18n'
 import { useShellStore } from '../state/shell'
 import { QueueCard } from './QueueCard'
 import { HistoryCard } from './HistoryCard'
+import { NotificationCard } from './NotificationCard'
 import type { HistoryEntry } from '../../shared/contract'
 
 interface AppShellProps {
@@ -24,6 +25,9 @@ interface AppShellProps {
   onRedownload?: (id: number) => void
   onDeleteHistory?: (id: number) => void
   onClearHistory?: () => void
+  notifications?: ErrorNotification[]
+  notificationActionId?: string | null
+  onDismissNotification?: (id: string) => void
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -38,7 +42,8 @@ export function AppShell({ children }: AppShellProps) {
 }
 
 export function AppShellView({ locale, children, queueItems = [], queueActionId, onPause, onResume, onCancel,
-  historyEntries = [], historyActionId, onRedownload, onDeleteHistory, onClearHistory }: AppShellProps & { locale: Locale }) {
+  historyEntries = [], historyActionId, onRedownload, onDeleteHistory, onClearHistory,
+  notifications = [], notificationActionId, onDismissNotification }: AppShellProps & { locale: Locale }) {
   return (
     <Page
         title={t(locale, 'input.title')}
@@ -51,6 +56,8 @@ export function AppShellView({ locale, children, queueItems = [], queueActionId,
             onPause={onPause} onResume={onResume} onCancel={onCancel} />
           <HistoryCard locale={locale} entries={historyEntries} busyId={historyActionId}
             onRedownload={onRedownload} onDelete={onDeleteHistory} onClear={onClearHistory} />
+          <NotificationCard locale={locale} notifications={notifications} busyId={notificationActionId}
+            onDismiss={onDismissNotification} />
         </div>
     </Page>
   )

@@ -25,6 +25,7 @@ export interface DownloadFlowState {
   queueActionId: string | null
   queueActionTarget: 'paused' | 'downloading' | 'removed' | null
   historyActionId: number | 'clear' | null
+  notificationActionId: string | null
   setUrl: (url: string) => void
   setFormat: (format: Format) => void
   analyze: () => Promise<void>
@@ -37,6 +38,7 @@ export interface DownloadFlowState {
   deleteHistoryEntry: (id: number) => Promise<void>
   clearHistory: () => Promise<void>
   redownload: (id: number) => Promise<string | null>
+  dismissNotification: (id: string) => Promise<void>
   refreshQueue: () => Promise<void>
   refreshHistory: () => Promise<void>
   refreshNotifications: () => Promise<void>
@@ -110,6 +112,7 @@ export function createDownloadFlowStore(transport: AppTransport) {
     queueActionId: null,
     queueActionTarget: null,
     historyActionId: null,
+    notificationActionId: null,
     setUrl(url) {
       if (get().enqueuing || get().url === url) return
       analysisVersion++
@@ -233,6 +236,21 @@ export function createDownloadFlowStore(transport: AppTransport) {
         set({ historyActionId: null })
       }
     },
+    async dismissNotification(id) {
+      if (get().notificationActionId !== null || !get().notifications.some((note) => note.id === id)) return
+      set({ notificationActionId: id, actionError: null })
+      try {
+        await transport.call('dismiss_error_notification', { id })
+        // Remove only after the command succeeds. The event refetch keeps other notes current.
+        notificationEpoch++
+        set((state) => ({ notificationActionId: null, notifications: state.notifications.filter((note) => note.id !== id) }))
+        await get().refreshNotifications()
+      } catch (reason) {
+        set({ actionError: appError(reason) })
+      } finally {
+        set({ notificationActionId: null })
+      }
+    },
     async redownload(id) {
       const entry = get().historyEntries.find((candidate) => candidate.id === id)
       if (get().historyActionId !== null || !entry) return null
@@ -288,7 +306,10 @@ export function createDownloadFlowStore(transport: AppTransport) {
         const notes = await transport.call('get_error_notifications', {})
         if (read !== notificationRead) return
         if (epoch !== notificationEpoch) return get().refreshNotifications()
-        set({ notifications: notes })
+        set((state) => {
+          const pending = state.notifications.find((note) => note.id === state.notificationActionId)
+          return { notifications: pending && !notes.some((note) => note.id === pending.id) ? [pending, ...notes] : notes }
+        })
       } catch (reason) {
         if (read === notificationRead) set({ syncError: appError(reason) })
       }

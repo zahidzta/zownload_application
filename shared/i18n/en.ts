@@ -80,6 +80,12 @@ export const en = {
     delete: 'Delete from history: {title}',
     clear: 'Clear history',
   },
+  notifications: {
+    title: 'Download errors',
+    empty: 'No download errors',
+    untitled: 'Download',
+    dismissFor: 'Dismiss error for {title}',
+  },
   activity: {
     syncError: 'Could not load download activity. Try again.',
     actionError: 'Could not complete that action. Try again.',
