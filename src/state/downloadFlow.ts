@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import { createStore } from 'zustand/vanilla'
-import type { AnalyzeResult, AppError, ErrorCode, Format, Quality } from '../../shared/contract'
+import type { AnalyzeResult, AppError, ErrorCode, Format, Quality, QueueItem } from '../../shared/contract'
 import type { AppTransport } from '../transport/types'
 
 export type DownloadStep = 'input' | 'download'
@@ -16,6 +16,7 @@ export interface DownloadFlowState {
   result: AnalyzeResult | null
   selectedQuality: Quality | null
   enqueuing: boolean
+  queueItems: QueueItem[]
   setUrl: (url: string) => void
   setFormat: (format: Format) => void
   analyze: () => Promise<void>
@@ -70,6 +71,7 @@ export function createDownloadFlowStore(transport: AppTransport) {
     result: null,
     selectedQuality: null,
     enqueuing: false,
+    queueItems: [],
     setUrl(url) {
       if (get().enqueuing || get().url === url) return
       analysisVersion++
@@ -116,8 +118,9 @@ export function createDownloadFlowStore(transport: AppTransport) {
       if (enqueuing || !result || !selectedQuality ||
           !qualityIsAvailable(result, format, selectedQuality)) return null
       set({ enqueuing: true, error: null })
+      let id: string
       try {
-        const id = await transport.call('enqueue_download', { request: {
+        id = await transport.call('enqueue_download', { request: {
           url: result.url,
           format,
           quality: selectedQuality,
@@ -127,7 +130,6 @@ export function createDownloadFlowStore(transport: AppTransport) {
           step: 'input', url: '', format: 'mp3', analyzing: false, error: null,
           result: null, selectedQuality: null, enqueuing: false,
         })
-        return id
       } catch (reason) {
         set({
           step: 'input', analyzing: false, error: appError(reason),
@@ -135,6 +137,14 @@ export function createDownloadFlowStore(transport: AppTransport) {
         })
         return null
       }
+      // The accepted request clears Input before fetching the transport's real queue snapshot.
+      // A snapshot failure must not turn a successful enqueue into a false rejection.
+      try {
+        set({ queueItems: await transport.call('get_queue', {}) })
+      } catch {
+        // Queue synchronization and its error UI belong to 1C.
+      }
+      return id
     },
   }))
 }

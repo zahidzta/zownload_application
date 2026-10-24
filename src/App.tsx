@@ -4,10 +4,9 @@
 import { AppShellView } from './components/AppShell'
 import { HeaderView } from './components/Header'
 import { InputCard, type DownloadFlowStore } from './components/InputCard'
+import { PlaylistPreview } from './components/PlaylistPreview'
 import { SettingsShell } from './components/SettingsShell'
 import { SinglePreview } from './components/SinglePreview'
-import { Card } from './components/ui/Card'
-import { t } from './i18n'
 import type { Locale } from './i18n'
 import { useShellStore } from './state/shell'
 import type { ShellPage } from './state/shell'
@@ -41,18 +40,17 @@ interface AppViewProps {
 export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, flowStore = appFlowStore }: AppViewProps) {
   const step = useStore(flowStore, (state) => state.step)
   const result = useStore(flowStore, (state) => state.result)
+  const queueItems = useStore(flowStore, (state) => state.queueItems)
   return (
     <>
       <HeaderView locale={locale} onToggleLocale={onToggleLocale} onOpenSettings={onOpenSettings} />
       <div hidden={page !== 'main'}>
-        <AppShellView locale={locale}>
+        <AppShellView locale={locale} queueItems={queueItems}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
-          ) : <Card
-            title={t(locale, 'input.title')}
-            className="min-h-[21.3125rem] rounded-card border border-border bg-card p-card"
-            headingClassName="text-card-title font-medium text-text-strong"
-          />}
+          ) : result?.kind === 'playlist' ? (
+            <PlaylistPreview locale={locale} result={result} flowStore={flowStore} />
+          ) : null}
         </AppShellView>
       </div>
       {page === 'settings' && <SettingsShell locale={locale} onBack={onBack} />}

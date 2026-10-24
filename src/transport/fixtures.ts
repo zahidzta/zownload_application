@@ -25,6 +25,17 @@ function mockThumbnail(label: string, color: string): string {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
+/** The playlist preview prefers its own cover; a missing cover borrows the first entry's image. */
+export function selectPlaylistThumbnail(playlistCover: string | null, firstEntryCover: string | null): string | null {
+  return playlistCover || firstEntryCover || null
+}
+
+// The saved Gate 0B flat-playlist metadata has a Spring cover and a separate
+// Singularity cover for entry 1. Entry artwork is only a preview fallback here;
+// each real download must use its own entry's extracted thumbnail.
+const blenderPlaylistCover = '/fixtures/blender-playlist-cover.jpg'
+const blenderFirstEntryCover = '/fixtures/blender-first-entry-cover.jpg'
+
 /** Metadata below is from the saved 0B-13 JSON; the single image is a licensed local still. */
 export const offlineAnalysisScenarios = {
   single: {
@@ -50,7 +61,7 @@ export const offlineAnalysisScenarios = {
       url: analysisUrls.playlist,
       title: 'Official Blender Open Movies',
       author: 'Blender',
-      thumbnail: mockThumbnail('Blender playlist', '#43506c'),
+      thumbnail: selectPlaylistThumbnail(blenderPlaylistCover, blenderFirstEntryCover),
       site: 'YouTube',
       itemCount: 17,
       itemTitles: [

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import type { ReactNode } from 'react'
+import type { QueueItem } from '../../shared/contract'
 import type { Locale } from '../i18n'
 import { Header } from './Header'
 import { Card } from './ui/Card'
@@ -11,6 +12,7 @@ import { useShellStore } from '../state/shell'
 
 interface AppShellProps {
   children: ReactNode
+  queueItems?: QueueItem[]
 }
 
 export function AppShell({ children }: AppShellProps) {
@@ -24,7 +26,7 @@ export function AppShell({ children }: AppShellProps) {
   )
 }
 
-export function AppShellView({ locale, children }: AppShellProps & { locale: Locale }) {
+export function AppShellView({ locale, children, queueItems = [] }: AppShellProps & { locale: Locale }) {
   return (
     <Page
         title={t(locale, 'input.title')}
@@ -38,7 +40,18 @@ export function AppShellView({ locale, children }: AppShellProps & { locale: Loc
             className="rounded-card border border-border bg-card p-4 lg:min-h-[6.375rem] lg:p-5"
             headingClassName="text-card-title font-medium text-text"
           >
-            <p className="mt-2 mb-0 text-body text-text">{t(locale, 'queue.empty')}</p>
+            {queueItems.length === 0 ? (
+              <p className="mt-2 mb-0 text-body text-text">{t(locale, 'queue.empty')}</p>
+            ) : (
+              <ul className="mt-3 mb-0 space-y-2 p-0">
+                {queueItems.map((item) => (
+                  <li key={item.id} className="min-w-0 list-none rounded-control border border-border bg-field p-3">
+                    <p className="m-0 min-w-0 wrap-break-word text-body font-medium text-text-strong">{item.title ?? item.request.url}</p>
+                    <p className="mt-1 mb-0 text-small text-text">{t(locale, 'queue.queued')}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           <Card
             title={t(locale, 'history.title')}

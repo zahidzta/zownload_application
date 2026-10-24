@@ -50,6 +50,7 @@ export const es = {
   queue: {
     title: 'Cola',
     empty: 'No hay descargas activas',
+    queued: 'En cola',
   },
   history: {
     title: 'Historial',

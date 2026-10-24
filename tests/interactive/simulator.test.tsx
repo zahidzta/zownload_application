@@ -3,7 +3,7 @@
 
 import { afterEach, expect, test, vi } from 'vitest'
 import type { DownloadRequest, QueueItem } from '../../shared/contract'
-import { analysisUrls } from '../../src/transport/fixtures'
+import { analysisUrls, selectPlaylistThumbnail } from '../../src/transport/fixtures'
 import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -29,7 +29,9 @@ test('observed short video has contract-shaped metadata and a bundled thumbnail'
   expect(fetchSpy).not.toHaveBeenCalled()
 })
 
-test('pure playlist exposes all 17 observed titles without a remote image', async () => {
+test('pure playlist exposes its saved cover and all 17 titles without a remote image', async () => {
+  const fetchSpy = vi.fn(() => { throw new Error('Unexpected network request') })
+  vi.stubGlobal('fetch', fetchSpy)
   const result = await createSimulatorTransport().call('analyze_url', { url: analysisUrls.playlist })
 
   expect(result.kind).toBe('playlist')
@@ -39,7 +41,16 @@ test('pure playlist exposes all 17 observed titles without a remote image', asyn
   expect(result.itemTitles).toContain('WING IT! - Blender Open Movie')
   expect(result.itemTitles).toContain('CHARGE - Blender Open Movie')
   expect(result.itemTitles.at(-1)).toBe('Elephants Dream')
-  expect(result.thumbnail).toMatch(/^data:image\/svg\+xml/)
+  expect(result.thumbnail).toBe('/fixtures/blender-playlist-cover.jpg')
+  expect(fetchSpy).not.toHaveBeenCalled()
+})
+
+test('playlist preview artwork prefers the playlist cover, then the first entry cover', () => {
+  const cover = '/fixtures/blender-playlist-cover.jpg'
+  const firstEntry = '/fixtures/blender-first-entry-cover.jpg'
+  expect(selectPlaylistThumbnail(cover, firstEntry)).toBe(cover)
+  expect(selectPlaylistThumbnail(null, firstEntry)).toBe(firstEntry)
+  expect(selectPlaylistThumbnail(null, null)).toBeNull()
 })
 
 test('watch plus list resolves to its single video even when query order changes', async () => {
@@ -113,7 +124,7 @@ test('enqueue returns distinct ids and ordered queued snapshots for single and p
     },
     {
       id: secondId, request: playlist, title: 'Official Blender Open Movies',
-      thumbnail: expect.stringMatching(/^data:image\/svg\+xml/), status: 'queued',
+      thumbnail: '/fixtures/blender-playlist-cover.jpg', status: 'queued',
       progress: { kind: 'playlist', done: 0, failed: 0, total: 17, currentTitle: null, currentPercent: 0 },
       error: null,
     },

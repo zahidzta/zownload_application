@@ -58,6 +58,7 @@ export const en = {
   queue: {
     title: 'Queue',
     empty: 'No active downloads',
+    queued: 'Queued',
   },
   history: {
     title: 'History',
