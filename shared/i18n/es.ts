@@ -56,6 +56,10 @@ export const es = {
     title: 'Historial',
     empty: 'Aún no hay historial',
   },
+  activity: {
+    syncError: 'No se pudo cargar la actividad de descargas. Inténtalo de nuevo.',
+    retry: 'Reintentar la carga de actividad',
+  },
   settings: {
     title: 'Configuración',
     language: 'Idioma',
