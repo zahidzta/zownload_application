@@ -197,3 +197,59 @@ test('enqueue rejects invalid or mismatched requests without creating a queue it
   expect(listener).not.toHaveBeenCalled()
   expect(await transport.call('get_queue', {})).toEqual([])
 })
+
+test('single lifecycle pauses only during download and resumes from recorded progress', async () => {
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock })
+  const statuses: string[] = []
+  const snapshots: QueueItem[] = []
+  await transport.on('queue:item-updated', (item) => {
+    statuses.push(item.status)
+    snapshots.push(item)
+  })
+  const id = await transport.call('enqueue_download', { request: {
+    url: analysisUrls.single, format: 'mp3', quality: { type: 'audio', bitrate: 128 }, isPlaylist: false,
+  } })
+  await expect(transport.call('pause_download', { id })).rejects.toMatchObject({ code: 'unknown' })
+  clock.advanceBy(0)
+  clock.advanceBy(2000)
+  expect(snapshots.at(-1)?.progress).toEqual({ kind: 'single', percent: 25 })
+  await transport.call('pause_download', { id })
+  clock.advanceBy(0)
+  clock.advanceBy(5000)
+  expect((await transport.call('get_queue', {}))[0]).toMatchObject({ status: 'paused', progress: { percent: 25 } })
+  await transport.call('resume_download', { id })
+  clock.advanceBy(0)
+  clock.advanceBy(4000)
+  expect(statuses).toEqual([
+    'queued', 'downloading', 'downloading', 'paused', 'downloading',
+    'downloading', 'downloading', 'downloading', 'postProcessing',
+  ])
+  await expect(transport.call('pause_download', { id })).rejects.toMatchObject({ code: 'unknown' })
+})
+
+test('playlist reaches packaging and removal cancels scheduled progress and subscriptions', async () => {
+  const clock = createManualSimulatorClock()
+  const transport = createSimulatorTransport({ clock })
+  const statuses: string[] = []
+  const removed: string[] = []
+  const off = await transport.on('queue:item-updated', (item) => statuses.push(item.status))
+  const offRemoved = await transport.on('queue:item-removed', (id) => removed.push(id))
+  const id = await transport.call('enqueue_download', { request: {
+    url: analysisUrls.playlist, format: 'mp4', quality: { type: 'min' }, isPlaylist: true,
+  } })
+  clock.advanceBy(7000)
+  expect(statuses).toContain('postProcessing')
+  expect(statuses).toContain('packaging')
+  expect((await transport.call('get_queue', {}))[0].progress).toMatchObject({ kind: 'playlist', done: 17, total: 17 })
+  await expect(transport.call('pause_download', { id })).rejects.toMatchObject({ code: 'unknown' })
+  await transport.call('remove_download', { id })
+  clock.advanceBy(0)
+  expect(removed).toEqual([id])
+  expect(await transport.call('get_queue', {})).toEqual([])
+  off()
+  offRemoved()
+  clock.advanceBy(10000)
+  expect(removed).toEqual([id])
+  await expect(transport.call('resume_download', { id })).rejects.toMatchObject({ code: 'not_found' })
+})

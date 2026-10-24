@@ -145,11 +145,61 @@ function requestMatchesResult(request: DownloadRequest, result: AnalyzeResult): 
   return request.quality.type === 'audio' && result.audioOutputBitrates.includes(request.quality.bitrate)
 }
 
-/** In-memory analysis and enqueue. Lifecycle progression remains for 1C. */
+/** Offline queue lifecycle. The clock owns every transition, including event delivery. */
 export function createSimulatorTransport({ clock = systemClock }: { clock?: SimulatorClock } = {}): AppTransport {
   const queue: QueueItem[] = []
   const queueListeners = new Set<{ handler: (item: QueueItem) => void }>()
+  const removalListeners = new Set<{ handler: (id: string) => void }>()
+  const scheduled = new Map<string, () => void>()
   let nextQueueId = 1
+
+  function emit(item: QueueItem) {
+    for (const listener of [...queueListeners]) listener.handler(copyQueueItem(item))
+  }
+
+  function scheduleNext(item: QueueItem, callback: () => void, delayMs: number) {
+    scheduled.get(item.id)?.()
+    scheduled.set(item.id, clock.schedule(() => {
+      scheduled.delete(item.id)
+      if (queue.includes(item)) callback()
+    }, delayMs))
+  }
+
+  function advance(item: QueueItem) {
+    if (item.status !== 'downloading') return
+    if (item.progress.kind === 'single') {
+      item.progress.percent = Math.min(100, item.progress.percent + 25)
+      emit(item)
+      if (item.progress.percent === 100) {
+        scheduleNext(item, () => {
+          item.status = 'postProcessing'
+          emit(item)
+        }, 1000)
+      } else scheduleNext(item, () => advance(item), 1000)
+      return
+    }
+    const progress = item.progress
+    progress.done = Math.min(progress.total, progress.done + Math.max(1, Math.ceil(progress.total / 4)))
+    progress.currentPercent = progress.done === progress.total ? 100 : 25
+    progress.currentTitle = progress.done === progress.total ? null : `Synthetic playlist item ${progress.done + 1}`
+    emit(item)
+    if (progress.done === progress.total) {
+      scheduleNext(item, () => {
+        item.status = 'postProcessing'
+        emit(item)
+        scheduleNext(item, () => {
+          item.status = 'packaging'
+          emit(item)
+        }, 1000)
+      }, 1000)
+    } else scheduleNext(item, () => advance(item), 1000)
+  }
+
+  function start(item: QueueItem) {
+    item.status = 'downloading'
+    emit(item)
+    scheduleNext(item, () => advance(item), 1000)
+  }
 
   return {
     async call<K extends keyof Commands>(command: K, args: Commands[K]['args']): Promise<Commands[K]['result']> {
@@ -183,21 +233,51 @@ export function createSimulatorTransport({ clock = systemClock }: { clock?: Simu
           error: null,
         }
         queue.push(item)
-        clock.schedule(() => {
-          for (const listener of [...queueListeners]) listener.handler(copyQueueItem(item))
-        }, 0)
+        clock.schedule(() => { if (queue.includes(item)) emit(item) }, 0)
+        scheduleNext(item, () => start(item), 1000)
         return id as Commands[K]['result']
       }
 
       if (command === 'get_queue') return queue.map(copyQueueItem) as Commands[K]['result']
 
+      if (command === 'pause_download' || command === 'resume_download' || command === 'remove_download') {
+        const { id } = args as Commands['pause_download']['args']
+        const item = queue.find((candidate) => candidate.id === id)
+        if (!item) throw syntheticError('not_found', `Queue item ${id} is missing.`)
+        if (command === 'pause_download') {
+          if (item.status !== 'downloading') throw syntheticError('unknown', 'Pause is available only while downloading.')
+          scheduled.get(id)?.()
+          scheduled.delete(id)
+          item.status = 'paused'
+          clock.schedule(() => emit(item), 0)
+        } else if (command === 'resume_download') {
+          if (item.status !== 'paused') throw syntheticError('unknown', 'Resume is available only while paused.')
+          clock.schedule(() => start(item), 0)
+        } else {
+          scheduled.get(id)?.()
+          scheduled.delete(id)
+          queue.splice(queue.indexOf(item), 1)
+          clock.schedule(() => {
+            for (const listener of [...removalListeners]) listener.handler(id)
+          }, 0)
+        }
+        return undefined as Commands[K]['result']
+      }
+
       throw syntheticError('unknown', `Simulator command ${command} is not implemented yet.`)
     },
     async on(name, handler) {
-      if (name !== 'queue:item-updated') return () => {}
-      const listener = { handler: handler as (item: QueueItem) => void }
-      queueListeners.add(listener)
-      return () => { queueListeners.delete(listener) }
+      if (name === 'queue:item-updated') {
+        const listener = { handler: handler as (item: QueueItem) => void }
+        queueListeners.add(listener)
+        return () => { queueListeners.delete(listener) }
+      }
+      if (name === 'queue:item-removed') {
+        const listener = { handler: handler as (id: string) => void }
+        removalListeners.add(listener)
+        return () => { removalListeners.delete(listener) }
+      }
+      return () => {}
     },
   }
 }
