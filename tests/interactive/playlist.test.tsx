@@ -35,7 +35,7 @@ test('playlist shows all 17 titles in a bounded keyboard scroll region and only 
   expect(screen.getByText('Blender', { selector: 'p.mt-2' })).toBeTruthy()
   expect(screen.getByText('YouTube')).toBeTruthy()
   expect(screen.getByText('17', { selector: 'strong' })).toBeTruthy()
-  expect(heading.closest('section')?.querySelector('img')).toBeTruthy()
+  expect(heading.closest('section')?.querySelector('img')?.getAttribute('src')).toBe('/fixtures/blender-playlist-cover.jpg')
 
   const region = screen.getByRole('region', { name: 'Items in list' })
   expect(region.className).toContain('max-h-[22rem]')

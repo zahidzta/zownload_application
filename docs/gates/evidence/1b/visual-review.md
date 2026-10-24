@@ -12,12 +12,16 @@ Date: 2026-10-23. The built app was loaded in headless Chrome from a temporary l
 | [Desktop Input](../../../design/desktop/main-input.png) | [Input](captures/desktop-input.png) | Main card and right Queue/History column follow the accepted 1A placement; form fields, format choices, and Convert match the reference structure. |
 | [Desktop analyzing](../../../design/desktop/analysis-input.png) | [Analyzing](captures/desktop-analyzing.png) | Disabled blue action and spinner use the confirmed loading treatment. |
 | [Desktop single](../../../design/desktop/single-download.png) | [Single](captures/desktop-single.png) | Thumbnail, metadata, quality, and Download retain the confirmed hierarchy. The fixture media differs from the reference, and its missing estimate correctly hides size. |
-| [Desktop playlist](../../../design/desktop/playlist-download.png) | [Playlist](captures/desktop-playlist.png) | Two-column preview, Back, Max/Min, and separate bounded title card follow the reference structure. The offline Blender mock thumbnail and 17-item fixture differ from the pictured album. |
+| [Desktop playlist](../../../design/desktop/playlist-download.png) | [Playlist](captures/desktop-playlist.png) | Two-column preview, Back, Max/Min, and separate bounded title card follow the reference structure. The saved playlist cover depicts *Spring*; the 17-item Blender fixture differs from the pictured album. |
 | [Mobile Input](../../../design/mobile/main-input.png) | [Input](captures/mobile-input.png) | One-column card and controls fit the 369 CSS-pixel app area of the 738-pixel, 2× reference. Browser chrome and system status bars in the reference are outside this app capture. |
 | [Mobile single](../../../design/mobile/single-download.png) | [Single](captures/mobile-single.png) | Thumbnail, metadata, quality, full-width Download, Queue, and History fit without clipping. History remains empty until 1C. |
 | [Mobile playlist](../../../design/mobile/playlist-download.png) | [Playlist](captures/mobile-playlist.png) | Preview and title card stack before Queue and History. The title list scrolls within its card and preserves long names. |
 
 The unindexed mobile analyzing state uses the confirmed mobile Input layout and desktop loading treatment: [capture](captures/mobile-analyzing.png). The minimal accepted Queue row from 1B-10 is shown in [mobile queued](captures/mobile-queued.png); progress and controls are 1C work.
+
+Owner playlist-cover correction on 2026-10-23: the default offline playlist preview now uses the cover from the saved Gate 0B playlist metadata, with the first entry's *Singularity* cover as the fallback when a playlist cover is absent. The two JPEG fixtures and their attribution are in [public fixtures](../../../../public/fixtures/README.md). Refreshed desktop/mobile captures above show the actual playlist cover loaded at its natural 336 × 188 resolution without horizontal overflow. The simulator does not download media; playlist preview artwork does not replace the separate thumbnail that each real entry must receive when the production engine is implemented.
+
+The first correction V1 run reached `test:ui` and failed one stale queue assertion that still expected the old SVG thumbnail. That assertion now checks the exact bundled cover path. The complete V1 rerun passed: build, 33 interactive tests, contract check, and 18 Node tests. The temporary static browser server shut down after the two updated captures; no dev server or remote fixture request was used.
 
 ## Browser measurements
 
