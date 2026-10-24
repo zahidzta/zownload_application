@@ -3,6 +3,7 @@
 
 pub mod history;
 mod migrations;
+pub mod queue;
 pub mod settings;
 
 use rusqlite::Connection;
@@ -19,6 +20,7 @@ pub enum Error {
     Json(serde_json::Error),
     UnsupportedSchema(i64),
     InvalidStoredValue(&'static str),
+    InvalidInput(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -33,6 +35,7 @@ impl fmt::Display for Error {
                 write!(f, "unsupported database schema version {version}")
             }
             Self::InvalidStoredValue(field) => write!(f, "invalid stored {field}"),
+            Self::InvalidInput(field) => write!(f, "invalid {field}"),
         }
     }
 }
@@ -67,7 +70,9 @@ impl Database {
         }
         let mut connection = Connection::open(path)?;
         migrations::apply(&mut connection)?;
-        Ok(Self { connection })
+        let mut database = Self { connection };
+        database.recover_interrupted_queue()?;
+        Ok(database)
     }
 }
 
