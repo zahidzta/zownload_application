@@ -37,9 +37,13 @@ test('Settings replaces the visible main view while retaining the mounted main s
   assert.match(settings, /<div hidden=""><main[^>]*aria-labelledby="[^"]+"/)
   assert.match(settings, /<main[^>]*aria-labelledby="[^"]+"[^>]*><h1[^>]*>Settings<\/h1>/)
   assert.match(settings, /<h2[^>]*>Settings<\/h2>/)
-  assert.match(settings, /<button[^>]*type="button"[^>]*>Back to downloads<\/button>/)
+  assert.match(settings, /mx-auto grid w-full max-w-\[42rem\]/)
+  assert.match(settings, /<button[^>]*aria-label="Back to downloads"[^>]*><span aria-hidden="true"><svg/)
+  assert.match(settings, /<path d="m12 5-7 7 7 7M5 12h14"/)
+  assert.doesNotMatch(settings, />Back to downloads<\/button>/)
   assert.ok(settings.indexOf('class="sticky top-0') < settings.indexOf('<main '))
-  assert.doesNotMatch(settings, /Update engine|Download folder|Download new APK/)
+  assert.match(settings, /Update engine|Download folder/)
+  assert.doesNotMatch(settings, /Download new APK/)
 })
 
 test('Back navigation restores the prior main view and selected language', () => {

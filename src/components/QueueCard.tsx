@@ -65,7 +65,7 @@ export function QueueCard({ locale, items, busyId = null, onPause, onResume, onC
                   </span>
                 </div>
                 {progress.kind === 'playlist' && progress.currentTitle && !paused && (
-                  <p className="mt-1 mb-0 truncate text-small text-text-muted" title={progress.currentTitle}>{progress.currentTitle}</p>
+                  <p className="mt-1 mb-0 truncate text-small text-text" title={progress.currentTitle}>{progress.currentTitle}</p>
                 )}
                 {progress.kind === 'playlist' && progress.failed > 0 && (
                   <p className="mt-1 mb-0 text-small text-text">

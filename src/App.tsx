@@ -5,7 +5,7 @@ import { AppShellView } from './components/AppShell'
 import { HeaderView } from './components/Header'
 import { InputCard, type DownloadFlowStore } from './components/InputCard'
 import { PlaylistPreview } from './components/PlaylistPreview'
-import { SettingsShell } from './components/SettingsShell'
+import { SettingsShell, type FolderPicker } from './components/SettingsShell'
 import { SinglePreview } from './components/SinglePreview'
 import type { Locale } from './i18n'
 import { useShellStore } from './state/shell'
@@ -15,7 +15,7 @@ import { createSimulatorTransport } from './transport/simulator'
 import { createBrowserMockStorage, createMemoryMockStorage } from './transport/mockStorage'
 import type { AppTransport } from './transport/types'
 import { useStore } from 'zustand'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { t } from './i18n'
 
 function runningMockStorage() {
@@ -46,9 +46,12 @@ interface AppViewProps {
   onToggleLocale: () => void
   onOpenSettings: () => void
   flowStore?: DownloadFlowStore
+  isAndroid?: boolean
+  pickFolder?: FolderPicker
 }
 
-export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, flowStore = appFlowStore }: AppViewProps) {
+export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, flowStore = appFlowStore,
+  isAndroid, pickFolder }: AppViewProps) {
   const step = useStore(flowStore, (state) => state.step)
   const result = useStore(flowStore, (state) => state.result)
   const queueItems = useStore(flowStore, (state) => state.queueItems)
@@ -100,7 +103,9 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
           ) : null}
         </AppShellView>
       </div>
-      {page === 'settings' && <SettingsShell locale={locale} onBack={onBack} />}
+      {page === 'settings' && <SettingsShell locale={locale} onBack={onBack} flowStore={flowStore}
+        onChangeLanguage={(language) => { if (language !== locale) onToggleLocale() }}
+        isAndroid={isAndroid} pickFolder={pickFolder} />}
     </>
   )
 }
@@ -110,7 +115,27 @@ export default function App() {
   const page = useShellStore((state) => state.page)
   const closeSettings = useShellStore((state) => state.closeSettings)
   const toggleLocale = useShellStore((state) => state.toggleLocale)
+  const setLocale = useShellStore((state) => state.setLocale)
   const openSettings = useShellStore((state) => state.openSettings)
+  const settings = useStore(appFlowStore, (state) => state.settings)
+  const initialSettingsApplied = useRef(false)
+
+  useEffect(() => {
+    if (settings && !initialSettingsApplied.current) {
+      initialSettingsApplied.current = true
+      setLocale(settings.language)
+    }
+  }, [settings, setLocale])
+
+  function changeLocale() {
+    const previous = useShellStore.getState().locale
+    const language = previous === 'en' ? 'es' : 'en'
+    initialSettingsApplied.current = true
+    toggleLocale()
+    void appFlowStore.getState().saveSettings({ language }).then((saved) => {
+      if (!saved && useShellStore.getState().locale === language) setLocale(previous)
+    })
+  }
 
   function returnToMain() {
     closeSettings()
@@ -123,7 +148,7 @@ export default function App() {
       locale={locale}
       page={page}
       onBack={returnToMain}
-      onToggleLocale={toggleLocale}
+      onToggleLocale={changeLocale}
       onOpenSettings={openSettings}
     />
   )

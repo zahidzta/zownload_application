@@ -167,3 +167,23 @@ in `package.json` and `package-lock.json`; clean checkouts use `npm ci`.
 jsdom with Testing Library cleanup after each test. Keep the existing `node
 --test --test-concurrency=1` suite separate; its Vite SSR tests remain under
 `tests/ui/*.test.mjs`.
+
+## 1C-09 desktop folder picker (2026-10-24)
+
+The approved native folder picker uses Tauri's dialog plugin. Context7 was
+consulted first but returned a monthly-quota error, so setup and the
+`open({ directory: true, multiple: false })` API were checked against the
+[official Tauri dialog documentation](https://v2.tauri.app/plugin/dialog/).
+The JavaScript and Rust plugin versions are both pinned to `2.7.3`. Setup:
+
+```powershell
+npm install --save --save-exact @tauri-apps/plugin-dialog@2.7.3
+# After adding tauri-plugin-dialog = { version = "=2.7.3" } to Cargo.toml:
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+`npm install` added one package and reported zero vulnerabilities. It warned
+that the local Node `24.14.0` and npm `11.21.0` differ from the repository's
+exact `24.22.0`/`11.19.1` pins. Cargo locked the exact Rust plugin and its
+transitive dependencies. The app grants only `dialog:allow-open` in its main
+window capability.

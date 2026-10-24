@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import { createStore } from 'zustand/vanilla'
-import type { AnalyzeResult, AppError, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings } from '../../shared/contract'
+import type { AnalyzeResult, AppError, EngineUpdateInfo, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings } from '../../shared/contract'
 import type { AppTransport, Unsubscribe } from '../transport/types'
 
 export type DownloadStep = 'input' | 'download'
@@ -20,6 +20,9 @@ export interface DownloadFlowState {
   historyEntries: HistoryEntry[]
   notifications: ErrorNotification[]
   settings: Settings | null
+  engineInfo: EngineUpdateInfo | null
+  engineBusy: 'checking' | 'updating' | null
+  engineError: AppError | null
   syncError: AppError | null
   actionError: AppError | null
   queueActionId: string | null
@@ -43,6 +46,9 @@ export interface DownloadFlowState {
   refreshHistory: () => Promise<void>
   refreshNotifications: () => Promise<void>
   refreshSettings: () => Promise<void>
+  saveSettings: (patch: Partial<Settings>) => Promise<boolean>
+  checkEngineUpdate: () => Promise<void>
+  updateEngine: () => Promise<void>
   retryActivity: () => Promise<void>
   connectActivity: () => Unsubscribe
 }
@@ -93,6 +99,7 @@ export function createDownloadFlowStore(transport: AppTransport) {
   let historyRead = 0
   let notificationRead = 0
   let settingsRead = 0
+  let settingsWrite: Promise<unknown> = Promise.resolve()
 
   return createStore<DownloadFlowState>()((set, get) => ({
     step: 'input',
@@ -107,6 +114,9 @@ export function createDownloadFlowStore(transport: AppTransport) {
     historyEntries: [],
     notifications: [],
     settings: null,
+    engineInfo: null,
+    engineBusy: null,
+    engineError: null,
     syncError: null,
     actionError: null,
     queueActionId: null,
@@ -321,6 +331,48 @@ export function createDownloadFlowStore(transport: AppTransport) {
         if (read === settingsRead) set({ settings: { ...settings } })
       } catch (reason) {
         if (read === settingsRead) set({ syncError: appError(reason) })
+      }
+    },
+    saveSettings(patch) {
+      const write = settingsWrite.then(async () => {
+        try {
+          const current = get().settings ?? await transport.call('get_settings', {})
+          const next = { ...current, ...patch }
+          settingsRead++ // Older reads must not replace a newer local choice.
+          set({ settings: next, actionError: null })
+          await transport.call('set_settings', { settings: next })
+          return true
+        } catch (reason) {
+          set({ actionError: appError(reason) })
+          await get().refreshSettings()
+          return false
+        }
+      })
+      settingsWrite = write
+      return write
+    },
+    async checkEngineUpdate() {
+      if (get().engineBusy) return
+      set({ engineBusy: 'checking', engineError: null })
+      try {
+        const engineInfo = await transport.call('engine_check_update', {})
+        set({ engineInfo })
+      } catch (reason) {
+        set({ engineError: appError(reason) })
+      } finally {
+        set({ engineBusy: null })
+      }
+    },
+    async updateEngine() {
+      if (get().engineBusy) return
+      set({ engineBusy: 'updating', engineError: null })
+      try {
+        const engineInfo = await transport.call('engine_update', {})
+        set({ engineInfo })
+      } catch (reason) {
+        set({ engineError: appError(reason) })
+      } finally {
+        set({ engineBusy: null })
       }
     },
     async retryActivity() {

@@ -1,0 +1,246 @@
+[
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 360,
+    "doc": 345,
+    "body": 345,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 360,
+    "doc": 345,
+    "body": 345,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 369,
+    "doc": 354,
+    "body": 354,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 369,
+    "doc": 354,
+    "body": 354,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 738,
+    "doc": 723,
+    "body": 723,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 738,
+    "doc": 723,
+    "body": 723,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 800,
+    "doc": 785,
+    "body": 785,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 800,
+    "doc": 785,
+    "body": 785,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 1024,
+    "doc": 1009,
+    "body": 1009,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 1024,
+    "doc": 1009,
+    "body": 1009,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "en",
+    "page": "main",
+    "width": 1920,
+    "doc": 1920,
+    "body": 1920,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "settings",
+    "width": 1920,
+    "doc": 1920,
+    "body": 1920,
+    "minActionHeight": 44,
+    "focus": "Back to downloads",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 360,
+    "doc": 345,
+    "body": 345,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 360,
+    "doc": 345,
+    "body": 345,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 369,
+    "doc": 354,
+    "body": 354,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 369,
+    "doc": 354,
+    "body": 354,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 738,
+    "doc": 723,
+    "body": 723,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 738,
+    "doc": 723,
+    "body": 723,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 800,
+    "doc": 785,
+    "body": 785,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 800,
+    "doc": 785,
+    "body": 785,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 1024,
+    "doc": 1009,
+    "body": 1009,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 1024,
+    "doc": 1009,
+    "body": 1009,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "main",
+    "width": 1920,
+    "doc": 1920,
+    "body": 1920,
+    "alerts": 1,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "es",
+    "page": "settings",
+    "width": 1920,
+    "doc": 1920,
+    "body": 1920,
+    "minActionHeight": 44,
+    "focus": "Volver a descargas",
+    "folderVisible": true
+  },
+  {
+    "locale": "es",
+    "page": "progress",
+    "width": 369,
+    "doc": 354,
+    "body": 354,
+    "minActionHeight": 44
+  },
+  {
+    "locale": "en",
+    "page": "empty",
+    "width": 369,
+    "doc": 369,
+    "body": 369,
+    "minActionHeight": 44
+  }
+]
