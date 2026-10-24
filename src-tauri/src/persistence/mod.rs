@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
+pub mod history;
 mod migrations;
 pub mod settings;
 
