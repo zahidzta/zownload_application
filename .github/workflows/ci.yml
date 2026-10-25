@@ -25,6 +25,10 @@ jobs:
         run: rustup toolchain install 1.99.1 --profile minimal
       - run: npm ci
       - name: Verify frontend, contracts, Rust, and design
+        # Foundation CI compiles Rust without packaging an installer. Native
+        # builds keep the Windows resource map and require verified staging.
+        env:
+          TAURI_CONFIG: '{"bundle":{"resources":null}}'
         run: powershell -NoProfile -File scripts/verify-foundation.ps1
 
   android:

@@ -222,6 +222,14 @@ The 2B-02 no-bundle Windows build also succeeded with
 `binaries/yt-dlp.exe`, `binaries/ffmpeg.exe`, and `binaries/qjs.exe`, each with
 the exact staged hash above.
 
+Foundation CI runs Rust tests from a clean checkout without packaging native
+resources. Its test step overlays `TAURI_CONFIG={"bundle":{"resources":null}}`
+only for that verification process; native development/build commands retain
+the Windows resource map and require verified staging. A clean local
+`cargo check` with resources temporarily absent failed on the missing FFmpeg
+path, then passed with this test-only overlay. This follows Tauri's documented
+[`TAURI_CONFIG` merge behavior](https://docs.rs/tauri-build/latest/tauri_build/#environment-variables).
+
 ## 2B-03 app-data bootstrap (2026-10-25)
 
 Rust uses the already locked `sha2 0.10.9` for streaming checksum verification
