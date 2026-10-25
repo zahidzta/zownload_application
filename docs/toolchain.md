@@ -187,3 +187,71 @@ that the local Node `24.14.0` and npm `11.21.0` differ from the repository's
 exact `24.22.0`/`11.19.1` pins. Cargo locked the exact Rust plugin and its
 transitive dependencies. The app grants only `dialog:allow-open` in its main
 window capability.
+
+## 2B-02 Windows engine resource staging (2026-10-25)
+
+Run from the repository root after Gate 0B's locked artifacts have been acquired
+or built at the paths in [engine-sources](engine-sources.md) and the
+[0B checkpoint](gates/evidence/0b/checkpoint.md):
+
+```powershell
+powershell -NoProfile -File scripts/gate-2b/stage-windows-engine.ps1
+powershell -NoProfile -File scripts/gate-2b/test-stage-windows-engine.ps1
+```
+
+The first command verifies input SHA-256 values, copies into ignored
+`src-tauri/resources/windows-engine/`, verifies the output again, and only then
+replaces the staged resource directory. Tauri's Windows configuration maps the
+three files to `binaries/` in the resource directory. Run staging before
+`npm run tauri -- dev` or `npm run tauri -- build`; builds do not use a system
+yt-dlp, FFmpeg, or QuickJS. Other platforms do not include these resources.
+
+| Staged Windows x64 file | SHA-256 | Locked origin |
+|---|---|---|
+| `yt-dlp.exe` | `66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a` | Official yt-dlp 2026.08.19 release |
+| `ffmpeg.exe` | `fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66` | Gate 0B FFmpeg 8.1.3/LAME 3.100/zlib 1.3.2 build |
+| `qjs.exe` | `bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83` | Gate 0B QuickJS 2026-06-04 build |
+
+Context7 was consulted before this Tauri configuration change but returned a
+quota error. The resource mapping and platform configuration were checked
+against the [official resource](https://v2.tauri.app/develop/resources/) and
+[configuration](https://v2.tauri.app/reference/config/) documentation.
+
+The 2B-02 no-bundle Windows build also succeeded with
+`npm run tauri -- build --no-bundle`. Its release resource directory contained
+`binaries/yt-dlp.exe`, `binaries/ffmpeg.exe`, and `binaries/qjs.exe`, each with
+the exact staged hash above.
+
+Foundation CI runs Rust tests from a clean checkout without packaging native
+resources. Its test step overlays `TAURI_CONFIG={"bundle":{"resources":null}}`
+only for that verification process; native development/build commands retain
+the Windows resource map and require verified staging. A clean local
+`cargo check` with resources temporarily absent failed on the missing FFmpeg
+path, then passed with this test-only overlay. This follows Tauri's documented
+[`TAURI_CONFIG` merge behavior](https://docs.rs/tauri-build/latest/tauri_build/#environment-variables).
+
+## 2B-03 app-data bootstrap (2026-10-25)
+
+Rust uses the already locked `sha2 0.10.9` for streaming checksum verification
+and `time 0.3.55` for the manifest's RFC 3339 install timestamp. Cargo's lock
+file already contained both crates transitively; adding them as direct
+dependencies changed only the app dependency list. The Tauri setup code
+resolves `binaries/` through Tauri's resource directory and uses the existing
+app-local data directory. The bootstrap checks hashes before running bounded
+health probes on staged app-data copies. A healthy prior directory is retained
+if preparation or activation fails.
+
+The exact Gate 2B V1 command is in [gate-2b](gates/gate-2b.md). To run the
+additional real-binary health test after staging:
+
+```powershell
+$env:ZOWNLOAD_TEST_REAL_ENGINE = '1'
+cargo test --manifest-path src-tauri/Cargo.toml real_pinned_resources_pass_health_checks_only_after_app_data_copy
+Remove-Item Env:ZOWNLOAD_TEST_REAL_ENGINE
+```
+
+The focused real-binary test passed with all three processes launched from a
+temporary app-data directory. Context7 returned a quota error when consulted;
+the implementation used the [official Tauri resource documentation](https://v2.tauri.app/develop/resources/),
+[RustCrypto SHA-2 documentation](https://docs.rs/sha2/0.10.9/sha2/), and
+[time RFC 3339 documentation](https://docs.rs/time/0.3.55/time/format_description/well_known/struct.Rfc3339.html).
