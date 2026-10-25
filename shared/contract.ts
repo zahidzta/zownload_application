@@ -10,8 +10,9 @@
  *  - YouTube needs a JS runtime for yt-dlp: QuickJS on ALL platforms for now
  *    (`--js-runtimes quickjs:<path>`). The UI never sees this; a missing or
  *    broken runtime surfaces as the "engine_missing" error.
- *  - Redownload shows up in the queue card like any download (status
- *    "analyzing" first, then "queued"/"downloading").
+ *  - Redownload shows up in the queue card like any download. In Stage 2A,
+ *    native enqueue persists it as "queued" until an engine is available;
+ *    later engine stages may use "analyzing" before downloading.
  *  - Finished items leave the queue. Failures are persisted separately as
  *    ErrorNotification records until the user dismisses them.
  */
@@ -77,7 +78,7 @@ export type AnalyzeResult =
 // ───────────────────────── Queue ─────────────────────────
 
 export type ItemStatus =
-  | "analyzing" // enqueued (e.g. from redownload), fetching info
+  | "analyzing" // engine fetching info; Stage 2A native enqueue stays queued
   | "queued"
   | "downloading"
   | "postProcessing" // ffmpeg metadata/extraction/merge; pause is disabled

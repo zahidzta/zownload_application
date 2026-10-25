@@ -13,7 +13,10 @@ import type { ShellPage } from './state/shell'
 import { createDownloadFlowStore } from './state/downloadFlow'
 import { createSimulatorTransport } from './transport/simulator'
 import { createBrowserMockStorage, createMemoryMockStorage } from './transport/mockStorage'
+import { createRuntimeTransport, usesDesktopNativeTransport } from './transport/runtime'
+import { tauriTransport } from './transport/tauri'
 import type { AppTransport } from './transport/types'
+import { isTauri } from '@tauri-apps/api/core'
 import { useStore } from 'zustand'
 import { useEffect, useRef } from 'react'
 import { t } from './i18n'
@@ -26,17 +29,22 @@ function runningMockStorage() {
   }
 }
 
-const simulatorTransport = createSimulatorTransport({ storage: runningMockStorage() })
-// The running mock pauses analysis briefly so its loading state can be inspected.
-const appTransport: AppTransport = {
-  async call(command, args) {
-    if (command === 'analyze_url') {
-      await new Promise((resolve) => setTimeout(resolve, 900))
-    }
-    return simulatorTransport.call(command, args)
+const native = usesDesktopNativeTransport(isTauri(), typeof navigator === 'undefined' ? '' : navigator.userAgent)
+const simulator = !native || import.meta.env.DEV
+  ? createSimulatorTransport({ storage: native ? createMemoryMockStorage() : runningMockStorage() })
+  : null
+// Keep the preview loading state inspectable; native data reads and writes go straight to Rust.
+const previewTransport: AppTransport | null = simulator && {
+  call: async (command, args) => {
+    if (command === 'analyze_url') await new Promise((resolve) => setTimeout(resolve, 900))
+    return simulator.call(command, args)
   },
-  on: (name, handler) => simulatorTransport.on(name, handler),
+  on: (name, handler) => simulator.on(name, handler),
 }
+const appTransport = createRuntimeTransport({
+  native, development: import.meta.env.DEV, nativeTransport: tauriTransport,
+  simulatorTransport: previewTransport,
+})
 const appFlowStore = createDownloadFlowStore(appTransport)
 
 interface AppViewProps {
