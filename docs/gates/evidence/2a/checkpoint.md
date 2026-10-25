@@ -3,7 +3,7 @@
 
 # Gate 2A checkpoint — 2026-10-25
 
-**Status:** Ready for owner review. The owner has not yet explicitly accepted the Gate 2A checkpoint or recorded a judgement of the 2A-08 native UI. Under [Appendix A](../../../../PROJECT.md), Stage 2B remains on hold until that acceptance.
+**Status:** Accepted by the owner on 2026-10-25. The owner approved this checkpoint, including its linked 2A-08 native UI evidence, and requested the [Gate 2B plan](../../gate-2b.md). This acceptance allows planning Stage 2B; implementation follows review of that plan.
 
 ## SQLite and command evidence
 
