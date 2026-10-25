@@ -5,6 +5,8 @@ pub mod android_spike;
 #[cfg(not(target_os = "android"))]
 mod commands;
 pub mod contract;
+#[cfg(target_os = "windows")]
+pub mod engine;
 pub mod persistence;
 
 #[cfg(not(target_os = "android"))]
@@ -22,6 +24,20 @@ pub fn run() {
                 let path = app.path().app_local_data_dir()?.join("zownload.sqlite3");
                 let database = persistence::Database::open_at(&path)?;
                 app.manage(std::sync::Mutex::new(database));
+                #[cfg(target_os = "windows")]
+                {
+                    let resources = app.path().resource_dir()?.join("binaries");
+                    let data = app.path().app_local_data_dir()?;
+                    let status = engine::bootstrap(
+                        &resources,
+                        &data,
+                        &app.package_info().version.to_string(),
+                    );
+                    if let engine::EngineStatus::Unavailable(reason) = &status {
+                        eprintln!("Windows engine unavailable: {reason}");
+                    }
+                    app.manage(status);
+                }
             }
             Ok(())
         });

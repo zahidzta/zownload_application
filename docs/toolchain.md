@@ -216,3 +216,34 @@ Context7 was consulted before this Tauri configuration change but returned a
 quota error. The resource mapping and platform configuration were checked
 against the [official resource](https://v2.tauri.app/develop/resources/) and
 [configuration](https://v2.tauri.app/reference/config/) documentation.
+
+The 2B-02 no-bundle Windows build also succeeded with
+`npm run tauri -- build --no-bundle`. Its release resource directory contained
+`binaries/yt-dlp.exe`, `binaries/ffmpeg.exe`, and `binaries/qjs.exe`, each with
+the exact staged hash above.
+
+## 2B-03 app-data bootstrap (2026-10-25)
+
+Rust uses the already locked `sha2 0.10.9` for streaming checksum verification
+and `time 0.3.55` for the manifest's RFC 3339 install timestamp. Cargo's lock
+file already contained both crates transitively; adding them as direct
+dependencies changed only the app dependency list. The Tauri setup code
+resolves `binaries/` through Tauri's resource directory and uses the existing
+app-local data directory. The bootstrap checks hashes before running bounded
+health probes on staged app-data copies. A healthy prior directory is retained
+if preparation or activation fails.
+
+The exact Gate 2B V1 command is in [gate-2b](gates/gate-2b.md). To run the
+additional real-binary health test after staging:
+
+```powershell
+$env:ZOWNLOAD_TEST_REAL_ENGINE = '1'
+cargo test --manifest-path src-tauri/Cargo.toml real_pinned_resources_pass_health_checks_only_after_app_data_copy
+Remove-Item Env:ZOWNLOAD_TEST_REAL_ENGINE
+```
+
+The focused real-binary test passed with all three processes launched from a
+temporary app-data directory. Context7 returned a quota error when consulted;
+the implementation used the [official Tauri resource documentation](https://v2.tauri.app/develop/resources/),
+[RustCrypto SHA-2 documentation](https://docs.rs/sha2/0.10.9/sha2/), and
+[time RFC 3339 documentation](https://docs.rs/time/0.3.55/time/format_description/well_known/struct.Rfc3339.html).
