@@ -7,11 +7,13 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
+    sync::atomic::AtomicBool,
+    time::Duration,
 };
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+
+pub mod analysis;
+pub mod process;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
 const YT_DLP_HASH: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
@@ -104,50 +106,23 @@ fn verify_files(paths: &EnginePaths, hashes: &Hashes<'_>) -> Result<(), String> 
 }
 
 fn probe(path: &Path, args: &[&str], expected: &str) -> Result<(), String> {
-    let mut child = Command::new(path)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("health probe could not start {}: {error}", path.display()))?;
-    let start = Instant::now();
-    loop {
-        let status = match child.try_wait() {
-            Ok(status) => status,
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "health probe wait failed for {}: {error}",
-                    path.display()
-                ));
-            }
-        };
-        if let Some(status) = status {
-            let mut output = [0u8; 256];
-            let count = child
-                .stdout
-                .take()
-                .ok_or("health probe has no stdout")?
-                .read(&mut output)
-                .map_err(|error| error.to_string())?;
-            let value = String::from_utf8_lossy(&output[..count]);
-            if !status.success() || !value.contains(expected) {
-                return Err(format!(
-                    "health probe failed for {}: {status}; {value}",
-                    path.display()
-                ));
-            }
-            return Ok(());
-        }
-        if start.elapsed() >= PROBE_TIMEOUT {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(format!("health probe timed out for {}", path.display()));
-        }
-        thread::sleep(Duration::from_millis(25));
+    let supervisor = process::Supervisor::install().map_err(|error| error.to_string())?;
+    let args = args
+        .iter()
+        .map(std::ffi::OsString::from)
+        .collect::<Vec<_>>();
+    let output = supervisor
+        .run(path, &args, PROBE_TIMEOUT, 4096, &AtomicBool::new(false))
+        .map_err(|error| format!("health probe failed for {}: {error}", path.display()))?;
+    let value = String::from_utf8_lossy(&output.stdout);
+    if !output.status.success() || !value.contains(expected) {
+        return Err(format!(
+            "health probe failed for {}: {}; {value}",
+            path.display(),
+            output.status
+        ));
     }
+    Ok(())
 }
 
 fn health_check(paths: &EnginePaths) -> Result<(), String> {
