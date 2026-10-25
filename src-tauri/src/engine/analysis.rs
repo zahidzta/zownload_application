@@ -48,6 +48,8 @@ fn mode_for_url(url: &Url) -> Mode {
 }
 
 fn arguments(paths: &EnginePaths, url: &str, mode: Mode) -> Vec<OsString> {
+    let mut runtime = OsString::from("quickjs:");
+    runtime.push(&paths.quickjs);
     let mut args = vec![
         "--ignore-config".into(),
         "--no-plugin-dirs".into(),
@@ -55,7 +57,7 @@ fn arguments(paths: &EnginePaths, url: &str, mode: Mode) -> Vec<OsString> {
         "--no-cache-dir".into(),
         "--no-js-runtimes".into(),
         "--js-runtimes".into(),
-        OsString::from(format!("quickjs:{}", paths.quickjs.display())),
+        runtime,
         "--skip-download".into(),
         "--dump-single-json".into(),
         "--socket-timeout".into(),
@@ -136,7 +138,7 @@ fn video_heights(value: &Value) -> Vec<u32> {
     let mut heights = BTreeSet::new();
     if let Some(formats) = value.get("formats").and_then(Value::as_array) {
         for format in formats {
-            if matches!(nonempty(format, "vcodec"), None | Some("none"))
+            if nonempty(format, "vcodec") == Some("none")
                 || nonempty(format, "ext") == Some("mhtml")
             {
                 continue;
@@ -152,6 +154,17 @@ fn video_heights(value: &Value) -> Vec<u32> {
         }
     }
     heights.into_iter().rev().collect()
+}
+
+fn duration_seconds(value: &Value) -> u64 {
+    let Some(duration) = value.get("duration").and_then(Value::as_f64) else {
+        return 0;
+    };
+    if duration.is_finite() && duration > 0.0 {
+        duration.round() as u64
+    } else {
+        0
+    }
 }
 
 pub fn parse_result(input_url: &str, json: &[u8]) -> Result<AnalyzeResult, AppError> {
@@ -202,7 +215,7 @@ pub fn parse_result(input_url: &str, json: &[u8]) -> Result<AnalyzeResult, AppEr
             title,
             author,
             thumbnail: cover(&value),
-            duration_sec: value.get("duration").and_then(Value::as_u64).unwrap_or(0),
+            duration_sec: duration_seconds(&value),
             site,
             video_heights: video_heights(&value),
             audio_output_bitrates: vec![320, 256, 192, 128],
@@ -280,6 +293,20 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("l5OZu-IrXpw"));
+    }
+
+    #[test]
+    fn fractional_duration_and_unknown_video_codec_keep_real_metadata() {
+        let mut value: Value = serde_json::from_slice(SINGLE).unwrap();
+        value["duration"] = json!(9.74);
+        value["formats"] = json!([
+            {"height": 360, "ext": "mp4"},
+            {"height": 24, "ext": "mhtml", "vcodec": "none"}
+        ]);
+        let parsed = parse_result(SINGLE_URL, &serde_json::to_vec(&value).unwrap()).unwrap();
+        let parsed = serde_json::to_value(parsed).unwrap();
+        assert_eq!(parsed["durationSec"], 10);
+        assert_eq!(parsed["videoHeights"], json!([360]));
     }
 
     #[test]

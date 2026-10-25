@@ -9,7 +9,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     io::{self, Read},
-    os::windows::io::AsRawHandle,
+    os::windows::{io::AsRawHandle, process::CommandExt},
     path::Path,
     process::{Command, ExitStatus, Stdio},
     sync::{
@@ -20,14 +20,19 @@ use std::{
     time::{Duration, Instant},
 };
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, HANDLE},
+    Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE},
     System::{
+        Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+        },
         JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
             SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
         },
-        Threading::GetCurrentProcess,
+        Threading::{
+            GetCurrentProcess, OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
+        },
     },
 };
 
@@ -78,6 +83,47 @@ impl Drop for Job {
     fn drop(&mut self) {
         unsafe { CloseHandle(self.0) };
     }
+}
+
+fn resume_primary_thread(pid: u32) -> io::Result<()> {
+    // std::process::Child exposes its process handle but not its primary thread.
+    // A suspended process has only that thread, so find it by owner PID before
+    // allowing yt-dlp to create any descendants outside its nested job.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(io::Error::last_os_error());
+    }
+    let result = (|| {
+        let mut entry = THREADENTRY32::default();
+        entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+        if unsafe { Thread32First(snapshot, &mut entry) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        loop {
+            if entry.th32OwnerProcessID == pid {
+                let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
+                if thread.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let previous = unsafe { ResumeThread(thread) };
+                let error = if previous == u32::MAX {
+                    Some(io::Error::last_os_error())
+                } else {
+                    None
+                };
+                unsafe { CloseHandle(thread) };
+                return error.map_or(Ok(()), Err);
+            }
+            if unsafe { Thread32Next(snapshot, &mut entry) } == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "suspended process thread not found",
+                ));
+            }
+        }
+    })();
+    unsafe { CloseHandle(snapshot) };
+    result
 }
 
 #[derive(Debug)]
@@ -159,13 +205,14 @@ impl Supervisor {
             return Err(RunError::Cancelled);
         }
         let job = Arc::new(Job::new().map_err(RunError::Io)?);
-        let mut child = Command::new(executable)
+        let mut command = Command::new(executable);
+        command
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()
-            .map_err(RunError::Io)?;
+            .creation_flags(CREATE_SUSPENDED);
+        let mut child = command.spawn().map_err(RunError::Io)?;
         if let Err(error) = job.assign(child.as_raw_handle() as HANDLE) {
             let _ = child.kill();
             let _ = child.wait();
@@ -180,6 +227,12 @@ impl Supervisor {
                 return Err(RunError::Cancelled);
             }
             active.insert(id, Arc::clone(&job));
+        }
+        if let Err(error) = resume_primary_thread(child.id()) {
+            job.terminate();
+            let _ = child.wait();
+            self.active.lock().expect("supervisor lock").remove(&id);
+            return Err(RunError::Io(error));
         }
         let exceeded = Arc::new(AtomicBool::new(false));
         let stdout = capture(
