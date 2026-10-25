@@ -12,6 +12,7 @@ use std::{
 };
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+pub mod analysis;
 pub mod process;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
