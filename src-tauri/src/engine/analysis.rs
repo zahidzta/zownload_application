@@ -5,7 +5,10 @@
 //! size estimates: format transfer sizes do not reliably include merged audio
 //! or later MP3 copy/reencode decisions.
 
-use super::{process::Supervisor, EnginePaths};
+use super::{
+    process::{RunError, Supervisor},
+    EnginePaths,
+};
 use crate::contract::{AnalyzeResult, AppError, ErrorCode};
 use serde_json::Value;
 use std::{collections::BTreeSet, ffi::OsString, sync::atomic::AtomicBool, time::Duration};
@@ -13,6 +16,7 @@ use url::Url;
 
 const ANALYSIS_TIMEOUT: Duration = Duration::from_secs(180);
 const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
+const URL_LIMIT: usize = 8 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
@@ -21,6 +25,12 @@ enum Mode {
 }
 
 fn parsed_url(input: &str) -> Result<Url, AppError> {
+    if input.len() > URL_LIMIT {
+        return Err(AppError::new(
+            ErrorCode::InvalidUrl,
+            Some(format!("URL exceeds {URL_LIMIT} bytes")),
+        ));
+    }
     let parsed = Url::parse(input)
         .map_err(|error| AppError::new(ErrorCode::InvalidUrl, Some(error.to_string())))?;
     if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
@@ -87,14 +97,97 @@ pub fn analyze(
     let args = arguments(paths, url, mode_for_url(&parsed));
     let output = supervisor
         .run(&paths.yt_dlp, &args, ANALYSIS_TIMEOUT, OUTPUT_LIMIT, cancel)
-        .map_err(|error| AppError::new(ErrorCode::Unknown, Some(error.to_string())))?;
+        .map_err(process_error)?;
     if !output.status.success() {
-        return Err(AppError::new(
-            ErrorCode::Unknown,
-            Some(String::from_utf8_lossy(&output.stderr).into_owned()),
-        ));
+        return Err(extraction_error(&output.stderr, output.status.code()));
     }
     parse_result(url, &output.stdout)
+}
+
+fn process_error(error: RunError) -> AppError {
+    let code = match &error {
+        RunError::Io(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            ErrorCode::EngineMissing
+        }
+        RunError::Io(_) | RunError::TimedOut | RunError::Cancelled | RunError::OutputLimit => {
+            ErrorCode::Unknown
+        }
+    };
+    AppError::new(code, Some(format!("analysis process: {error}")))
+}
+
+fn extraction_error(stderr: &[u8], status: Option<i32>) -> AppError {
+    let raw = String::from_utf8_lossy(stderr).into_owned();
+    let diagnostic = raw
+        .lines()
+        .find(|line| line.trim_start().starts_with("ERROR:"))
+        .unwrap_or(&raw)
+        .to_ascii_lowercase();
+    // Keep the original diagnostic in detail; classification is deliberately
+    // narrow so an unfamiliar extractor failure is not mislabeled as a site error.
+    let code = if diagnostic.contains("not a valid url") {
+        ErrorCode::InvalidUrl
+    } else if diagnostic.contains("unsupported url") || diagnostic.contains("no suitable extractor")
+    {
+        ErrorCode::UnsupportedSite
+    } else if [
+        "http error 401",
+        "http error 403",
+        "private video",
+        "this video is private",
+        "members-only",
+        "age-restricted",
+        "geo-restricted",
+        "not available in your country",
+        "sign in to confirm your age",
+    ]
+    .iter()
+    .any(|pattern| diagnostic.contains(pattern))
+    {
+        ErrorCode::PrivateOrRestricted
+    } else if [
+        "http error 404",
+        "video not found",
+        "video unavailable",
+        "video has been removed",
+        "this video is unavailable",
+    ]
+    .iter()
+    .any(|pattern| diagnostic.contains(pattern))
+    {
+        ErrorCode::NotFound
+    } else if [
+        "network is unreachable",
+        "no internet connection",
+        "connection refused",
+        "connection timed out",
+        "temporary failure in name resolution",
+        "failed to resolve",
+        "getaddrinfo failed",
+        "unable to resolve host",
+    ]
+    .iter()
+    .any(|pattern| diagnostic.contains(pattern))
+    {
+        ErrorCode::NoInternet
+    } else if [
+        "no supported javascript runtime",
+        "quickjs is not installed",
+        "failed to execute quickjs",
+    ]
+    .iter()
+    .any(|pattern| diagnostic.contains(pattern))
+    {
+        ErrorCode::EngineMissing
+    } else {
+        ErrorCode::Unknown
+    };
+    let detail = if raw.is_empty() {
+        format!("yt-dlp exited with status {status:?} without stderr")
+    } else {
+        raw
+    };
+    AppError::new(code, Some(detail))
 }
 
 fn nonempty<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -169,6 +262,12 @@ fn duration_seconds(value: &Value) -> u64 {
 
 pub fn parse_result(input_url: &str, json: &[u8]) -> Result<AnalyzeResult, AppError> {
     let url = parsed_url(input_url)?;
+    if json.len() > OUTPUT_LIMIT {
+        return Err(AppError::new(
+            ErrorCode::Unknown,
+            Some(format!("analysis JSON exceeds {OUTPUT_LIMIT} bytes")),
+        ));
+    }
     let value: Value = serde_json::from_slice(json).map_err(|error| {
         AppError::new(
             ErrorCode::Unknown,
@@ -340,5 +439,82 @@ mod tests {
             ),
             Mode::Playlist
         );
+    }
+
+    #[test]
+    fn rejects_invalid_and_oversized_urls_before_launch() {
+        for input in [
+            "not-a-url".to_owned(),
+            "file:///C:/secret".to_owned(),
+            "https:///".to_owned(),
+            format!("https://example.com/{}", "x".repeat(URL_LIMIT)),
+        ] {
+            assert_eq!(parsed_url(&input).unwrap_err().code, ErrorCode::InvalidUrl);
+        }
+    }
+
+    #[test]
+    fn observed_and_known_extraction_errors_keep_diagnostics() {
+        let cases = [
+            (
+                "ERROR: [generic] 'not-a-url' is not a valid URL",
+                ErrorCode::InvalidUrl,
+            ),
+            (
+                "ERROR: Unsupported URL: https://example.invalid",
+                ErrorCode::UnsupportedSite,
+            ),
+            (
+                "ERROR: HTTP Error 401: Unauthorized",
+                ErrorCode::PrivateOrRestricted,
+            ),
+            (
+                "ERROR: HTTP Error 403: Forbidden",
+                ErrorCode::PrivateOrRestricted,
+            ),
+            (
+                "ERROR: Sign in to confirm your age",
+                ErrorCode::PrivateOrRestricted,
+            ),
+            ("ERROR: HTTP Error 404: Not Found", ErrorCode::NotFound),
+            ("ERROR: Video unavailable", ErrorCode::NotFound),
+            ("ERROR: Network is unreachable", ErrorCode::NoInternet),
+            ("ERROR: Failed to resolve host", ErrorCode::NoInternet),
+            (
+                "ERROR: No supported JavaScript runtime",
+                ErrorCode::EngineMissing,
+            ),
+            ("ERROR: opening play-av tag not found", ErrorCode::Unknown),
+            ("ERROR: extractor changed unexpectedly", ErrorCode::Unknown),
+        ];
+        for (diagnostic, expected) in cases {
+            let error = extraction_error(diagnostic.as_bytes(), Some(1));
+            assert_eq!(error.code, expected, "{diagnostic}");
+            assert_eq!(error.detail.as_deref(), Some(diagnostic));
+        }
+        let empty = extraction_error(b"", Some(1));
+        assert_eq!(empty.code, ErrorCode::Unknown);
+        assert!(empty.detail.unwrap().contains("status Some(1)"));
+    }
+
+    #[test]
+    fn process_failures_and_response_bounds_are_typed() {
+        let missing = process_error(RunError::Io(std::io::ErrorKind::NotFound.into()));
+        assert_eq!(missing.code, ErrorCode::EngineMissing);
+        for failure in [
+            RunError::TimedOut,
+            RunError::Cancelled,
+            RunError::OutputLimit,
+        ] {
+            let error = process_error(failure);
+            assert_eq!(error.code, ErrorCode::Unknown);
+            assert!(error.detail.unwrap().starts_with("analysis process:"));
+        }
+        let malformed = parse_result(SINGLE_URL, b"{no json").unwrap_err();
+        assert_eq!(malformed.code, ErrorCode::Unknown);
+        assert!(malformed.detail.unwrap().contains("invalid analysis JSON"));
+        let oversized = parse_result(SINGLE_URL, &vec![b' '; OUTPUT_LIMIT + 1]).unwrap_err();
+        assert_eq!(oversized.code, ErrorCode::Unknown);
+        assert!(oversized.detail.unwrap().contains("exceeds"));
     }
 }
