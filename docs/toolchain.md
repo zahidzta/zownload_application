@@ -187,3 +187,32 @@ that the local Node `24.14.0` and npm `11.21.0` differ from the repository's
 exact `24.22.0`/`11.19.1` pins. Cargo locked the exact Rust plugin and its
 transitive dependencies. The app grants only `dialog:allow-open` in its main
 window capability.
+
+## 2B-02 Windows engine resource staging (2026-10-25)
+
+Run from the repository root after Gate 0B's locked artifacts have been acquired
+or built at the paths in [engine-sources](engine-sources.md) and the
+[0B checkpoint](gates/evidence/0b/checkpoint.md):
+
+```powershell
+powershell -NoProfile -File scripts/gate-2b/stage-windows-engine.ps1
+powershell -NoProfile -File scripts/gate-2b/test-stage-windows-engine.ps1
+```
+
+The first command verifies input SHA-256 values, copies into ignored
+`src-tauri/resources/windows-engine/`, verifies the output again, and only then
+replaces the staged resource directory. Tauri's Windows configuration maps the
+three files to `binaries/` in the resource directory. Run staging before
+`npm run tauri -- dev` or `npm run tauri -- build`; builds do not use a system
+yt-dlp, FFmpeg, or QuickJS. Other platforms do not include these resources.
+
+| Staged Windows x64 file | SHA-256 | Locked origin |
+|---|---|---|
+| `yt-dlp.exe` | `66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a` | Official yt-dlp 2026.08.19 release |
+| `ffmpeg.exe` | `fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66` | Gate 0B FFmpeg 8.1.3/LAME 3.100/zlib 1.3.2 build |
+| `qjs.exe` | `bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83` | Gate 0B QuickJS 2026-06-04 build |
+
+Context7 was consulted before this Tauri configuration change but returned a
+quota error. The resource mapping and platform configuration were checked
+against the [official resource](https://v2.tauri.app/develop/resources/) and
+[configuration](https://v2.tauri.app/reference/config/) documentation.
