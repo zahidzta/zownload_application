@@ -26,6 +26,9 @@ pub fn run() {
                 app.manage(std::sync::Mutex::new(database));
                 #[cfg(target_os = "windows")]
                 {
+                    // Joining a kill-on-close Windows job before launching any sidecar
+                    // makes abrupt app termination close the whole descendant tree.
+                    app.manage(engine::process::Supervisor::install()?);
                     let resources = app.path().resource_dir()?.join("binaries");
                     let data = app.path().app_local_data_dir()?;
                     let status = engine::bootstrap(
@@ -40,6 +43,18 @@ pub fn run() {
                 }
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "windows")]
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                if let Some(supervisor) =
+                    window.try_state::<std::sync::Arc<engine::process::Supervisor>>()
+                {
+                    supervisor.shutdown();
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            let _ = (window, event);
         });
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
