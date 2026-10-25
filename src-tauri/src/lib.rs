@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 // Keep the shared contract in the Rust build before commands are implemented.
 pub mod android_spike;
+#[cfg(not(target_os = "android"))]
+mod commands;
 pub mod contract;
 pub mod persistence;
 
@@ -29,6 +31,24 @@ pub fn run() {
         android_spike::resume_download,
         android_spike::get_queue,
         android_spike::probe_mediastore_zip
+    ]);
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        commands::analyze_url,
+        commands::enqueue_download,
+        commands::pause_download,
+        commands::resume_download,
+        commands::remove_download,
+        commands::get_queue,
+        commands::get_history,
+        commands::delete_history_entry,
+        commands::clear_history,
+        commands::get_error_notifications,
+        commands::dismiss_error_notification,
+        commands::get_settings,
+        commands::set_settings,
+        commands::engine_check_update,
+        commands::engine_update
     ]);
     builder
         .run(tauri::generate_context!())
