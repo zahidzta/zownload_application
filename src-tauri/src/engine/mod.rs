@@ -39,7 +39,7 @@ pub enum EngineStatus {
     Unavailable(String),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct EnginePaths {
     pub yt_dlp: PathBuf,
     pub ffmpeg: PathBuf,
