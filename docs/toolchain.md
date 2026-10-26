@@ -255,3 +255,52 @@ temporary app-data directory. Context7 returned a quota error when consulted;
 the implementation used the [official Tauri resource documentation](https://v2.tauri.app/develop/resources/),
 [RustCrypto SHA-2 documentation](https://docs.rs/sha2/0.10.9/sha2/), and
 [time RFC 3339 documentation](https://docs.rs/time/0.3.55/time/format_description/well_known/struct.Rfc3339.html).
+
+## 2B-08 native review verification setup (2026-10-26)
+
+The native review used the locked Windows resources staged by 2B-02. Before
+the live runs, these commands passed from the repository root:
+
+```powershell
+powershell -NoProfile -File scripts/gate-0b/verify-fixtures.ps1
+npm run tauri -- build --debug --no-bundle
+```
+
+The first exact V3 attempt in the generated working checkout passed the UI
+suite but hit Vite SSR module-loading timeouts in the Node suite. Reinstalling
+with `npm ci` and trying pinned Node `24.22.0` did not clear that local
+checkout's timeout. A clean detached worktree at the same source commit passed
+the isolated header test in five seconds. Its first full V3 attempt hit a
+Vitest fork startup timeout; the exact V3 rerun passed. No test or product
+source was changed to get that pass.
+
+The pinned [Node 24.22.0 Windows archive](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip)
+was downloaded into ignored `work/engine/2b-08/`, checked against the SHA-256
+`f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3`,
+then extracted. The clean verification setup was:
+
+```powershell
+$repo = (Resolve-Path .).Path
+$archive = Join-Path $repo 'work\engine\2b-08\node-v24.22.0-win-x64.zip'
+Invoke-WebRequest -Uri 'https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip' -OutFile $archive
+if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3') { throw 'Node archive hash mismatch' }
+Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $repo 'work\engine\2b-08\node')
+$check = Join-Path $repo 'work\engine\2b-08\clean'
+$nodeDir = Join-Path $repo 'work\engine\2b-08\node\node-v24.22.0-win-x64'
+git worktree add --detach $check HEAD
+$env:PATH = "$nodeDir;$env:PATH"
+Push-Location $check
+npm ci
+New-Item -ItemType Directory -Path src-tauri/resources/windows-engine -Force | Out-Null
+foreach ($name in @('yt-dlp.exe', 'ffmpeg.exe', 'qjs.exe')) {
+    Copy-Item -LiteralPath (Join-Path $repo "src-tauri\resources\windows-engine\$name") -Destination (Join-Path $check "src-tauri\resources\windows-engine\$name")
+}
+$env:CARGO_TARGET_DIR = Join-Path $repo 'src-tauri\target'
+# Run the exact V3 command from docs/gates/gate-2b.md here.
+Pop-Location
+```
+
+The copied resource hashes matched the 2B-02 table above. The clean checkout
+was detached at `1ebddb8`; `task-2b-08` had only documentation and screenshot
+changes relative to that commit. See the [native evidence](gates/evidence/2b/native-analysis.md)
+for the exact V3 result and the separate active-window-close observation.
