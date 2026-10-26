@@ -27,9 +27,9 @@ Each task is one session on its own `task-<id>` branch. After exact verification
 Run from the repository root. `tests/interactive` stays under Vitest/jsdom; the Node suite stays separate. Record any setup and exact native command/engine hashes in [toolchain](../toolchain.md) or focused gate evidence.
 
 - **V0 (2C-01 documentation):** check every changed relative Markdown link target, then `git diff --check` and, after staging, `git diff --cached --check`.
-- **V1 (Rust engine/repository tasks 2C-02 through 2C-06):** `powershell -NoProfile -Command 'cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo check --manifest-path src-tauri/Cargo.toml; exit $LASTEXITCODE'`. Run the focused Windows process-tree test whenever the supervisor or cancellation path changes.
-- **V2 (native command/UI task 2C-07):** `powershell -NoProfile -Command 'npm run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run test:ui; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run check:contracts; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node --test --test-concurrency=1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo check --manifest-path src-tauri/Cargo.toml; exit $LASTEXITCODE'`.
-- **V3 (2C-08/09 native review and checkpoint):** `powershell -NoProfile -Command 'npm run test:ui; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node --test --test-concurrency=1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; powershell -NoProfile -File scripts/verify-foundation.ps1; exit $LASTEXITCODE'`, plus focused Windows child-tree/queue tests and the recorded native output, pause/resume, restart, and close scenarios. A passing V3 command does not replace media playback and lifecycle observations.
+- **V1 (single media worker task 2C-02):** `powershell -NoProfile -Command 'cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo check --manifest-path src-tauri/Cargo.toml; exit $LASTEXITCODE'`, plus the focused Windows process-tree test and pinned-artifact CLI proof for behavior stubs cannot establish.
+- **V2 (queue and native integration task 2C-03):** `powershell -NoProfile -Command 'npm run build; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run test:ui; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run check:contracts; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node --test --test-concurrency=1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo test --manifest-path src-tauri/Cargo.toml; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo check --manifest-path src-tauri/Cargo.toml; exit $LASTEXITCODE'`, plus the focused Windows process-tree test.
+- **V3 (native review and checkpoint task 2C-04):** `powershell -NoProfile -Command 'npm run test:ui; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; node --test --test-concurrency=1; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; cargo fmt --manifest-path src-tauri/Cargo.toml --check; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; powershell -NoProfile -File scripts/verify-foundation.ps1; exit $LASTEXITCODE'`, plus focused Windows child-tree/queue tests and the recorded native output, pause/resume, restart, and close scenarios. A passing V3 command does not replace media playback and lifecycle observations.
 
 ## Tasks
 
@@ -40,61 +40,26 @@ Run from the repository root. `tests/interactive` stays under Vitest/jsdom; the 
 - Read: `PROJECT.md:121-168,180-195,236-262,309-340,484-509,522-554,555-629,630-693,694-714,734-745,763-778`.
 - Acceptance: relative Markdown links resolve, **V0** passes, and no source, dependency, or contract file changes. Stop for owner review of the plan and its two decisions above before implementation.
 
-### 2C-02 — Single media command profiles and fixture proof — AUTOMATABLE
+### 2C-02 — Single media worker and resumable files — AUTOMATABLE
 
-- Goal: turn the pinned Gate 0B MP3/MP4, metadata, thumbnail, AAC-compatibility, progress, and resume observations into exact safe argument-array profiles and deterministic selection tests. Prove MP3 copy/down-encode behavior for all preset boundaries, rather than assuming `--audio-quality` enforces it. Record any site-specific cover fallback without hardcoding one site's URL into production.
-- Files: focused modules/tests under `src-tauri/src/engine/`, deterministic fixtures under `src-tauri/tests/`, focused evidence in `docs/gates/evidence/2c/`, `docs/STATE.md`.
-- Read: `PROJECT.md:129-130,156-167,236-244,319-320,331,555-588,618-629,630-645,664-671,769`; Gate 0B CLI evidence.
-- Dependencies: owner acceptance of 2C-01. Acceptance: request validation and profile tests cover MP3 copy/reencode, MP4 chosen height/AAC, metadata mapping, JPEG cover, redownload lower-height fallback, no-playlist mode, app-data paths, and option injection. Exact verification: **V1** plus focused CLI proof with pinned artifacts where a behavior cannot be established from stubs.
+- Goal: implement one safe single-file MP3/MP4 worker. Combine Gate 0B command profiles, selected quality and redownload fallback, metadata/JPEG cover, AAC-compatible MP4, bounded streaming progress and phase signals, and the 2B Windows process-tree supervisor. Implement the approved internal path migration, Downloads/chosen-folder resolution, collision-safe final names, owned `.part` files, and typed filesystem failures. Prove MP3 copy/down-encode behavior rather than assuming `--audio-quality` enforces the requested maximum.
+- Files: focused `src-tauri/src/engine/` and `src-tauri/src/persistence/` modules, Rust integration fixtures/tests under `src-tauri/tests/`, focused evidence under `docs/gates/evidence/2c/`, `docs/STATE.md`.
+- Read: `PROJECT.md:129-130,135-144,156-167,180-184,236-244,254-258,309-314,319-320,330-339,499-509,522-536,555-588,598-629,630-645,664-671,683,769,776-777`; Gate 0B CLI evidence.
+- Dependencies: owner acceptance of 2C-01, including the internal path-record design. Acceptance: deterministic tests cover exact safe argument arrays, MP3 copy/reencode, MP4 height/AAC, metadata/cover, lower-height fallback, no-playlist mode, malformed progress, phase changes, output bounds, cancellation/timeout/close, migration/reopen, folder changes, collision reservation, no overwrite, partial retention and owned-only cleanup, and disk/permission errors. Local fixtures and pinned-artifact CLI proof establish media behavior; failures never create History. Exact verification: **V1**.
 
-### 2C-03 — Bounded streaming progress and phase supervision — AUTOMATABLE
+### 2C-03 — Sequential native queue and UI lifecycle — AUTOMATABLE
 
-- Goal: extend the Windows supervisor so yt-dlp progress and postprocessing signals reach a Rust worker while stdout/stderr stay bounded and cancellation still kills the full child tree. Parse the Gate 0B progress format and coalesce live updates without dropping status changes.
-- Files: `src-tauri/src/engine/process.rs` and focused engine progress module/tests, `docs/STATE.md`.
-- Read: `PROJECT.md:135-144,164,191-194,254-258,309-314,323,522-536,577-584,630-645,656-662,683,769`.
-- Dependencies: 2C-02. Acceptance: malformed lines, unknown totals, stderr errors, output bounds, repeated updates, phase transitions, timeout, cancel, window close, and parent exit are tested with stubs. Exact verification: **V1** plus the focused Windows child-tree test.
+- Goal: start one eligible single at a time in stored order, wire enqueue/pause/resume/remove to real worker control, checkpoint progress, and settle History or error notifications before queue removal and events. Restore interrupted work as paused without automatic restart. Connect the existing Queue, History, notification, and Settings UI to native progress, controls, chosen folder, and redownload; keep the browser simulator and Android spike isolated. Playlist jobs remain queued for 3A.
+- Files: `src-tauri/src/commands/`, `src-tauri/src/persistence/`, queue coordinator under `src-tauri/src/engine/`, `src-tauri/src/lib.rs`, focused `src/` changes if needed, Rust and `tests/interactive/` tests, `docs/STATE.md`.
+- Read: `PROJECT.md:121-194,236-244,254-262,309-314,323-329,522-554,559-584,598-617,630-645,650-671,683,769`; indexed single progress reference.
+- Dependencies: 2C-02. Acceptance: deterministic tests prove FIFO among eligible singles, no parallel work, pause guards and races, byte-offset `.part` continuation, removal/close cleanup, throttled progress, event-after-commit order, transient terminal states, notification durability, and restart recovery. Mounted native transport tests prove Input clears on enqueue, Queue controls reflect Rust, translated errors survive reload, and browser mocks create no native files. Exact verification: **V2**.
 
-### 2C-04 — Single output paths and resumable partial ownership — AUTOMATABLE
+### 2C-04 — Real Windows review and stage checkpoint — OWNER-REVIEW
 
-- Goal: implement the approved internal path record and versioned migration, resolve Downloads or chosen Settings folder, sanitize names, safely reserve collision suffixes, and keep each queue id's resumable `.part` and owned temporary files distinct. Preserve the existing public `QueueItem` shape.
-- Files: `src-tauri/src/persistence/`, focused filesystem module under `src-tauri/src/engine/`, migration and filesystem tests, `docs/STATE.md`.
-- Read: `PROJECT.md:141-143,162-167,254-258,309-314,337-339,499-509,522-536,618-629,665-671,683,769,776-777`.
-- Dependencies: 2C-01 database-design approval and 2C-02. Acceptance: migration/reopen, folder changes after enqueue, duplicate and unsafe titles, case-insensitive Windows collisions, simultaneous reservation, no overwrite, pause/restart retention, remove-owned-only cleanup, and typed disk/permission failures pass. Exact verification: **V1**.
-
-### 2C-05 — Real single MP3/MP4 worker — AUTOMATABLE
-
-- Goal: join the proven command profiles, pinned app-data paths, streaming supervisor, and owned output into one single-file worker. It sets `analyzing`, `downloading`, and `postProcessing` from real work; validates final media and metadata before success; classifies process and filesystem errors into existing `AppError` values.
-- Files: `src-tauri/src/engine/` single worker and focused tests/fixtures, `docs/STATE.md`.
-- Read: `PROJECT.md:129-130,156-167,180-184,236-244,254-258,320,330-339,555-588,598-629,664-671,769`.
-- Dependencies: 2C-02 through 2C-04. Acceptance: MP3/MP4 stub and local-fixture paths finish with the selected quality and FR-58 tags; failed, cancelled, or invalid output never enters History; all child processes stop on fatal errors. Exact verification: **V1**.
-
-### 2C-06 — Sequential queue, commands, and durable lifecycle — AUTOMATABLE
-
-- Goal: start one eligible single at a time in stored order, wire enqueue/pause/resume/remove to real worker control, checkpoint progress, and use existing transactional History/notification settlement before removal and events. Restore interrupted jobs as paused with resumable files, without automatic restart. Keep playlist jobs queued for 3A.
-- Files: `src-tauri/src/commands/`, `src-tauri/src/persistence/`, queue coordinator under `src-tauri/src/engine/`, `src-tauri/src/lib.rs`, focused Rust tests, `docs/STATE.md`.
-- Read: `PROJECT.md:135-154,180-194,236-244,254-262,309-314,323-329,522-554,559-584,598-617,630-645,656-662,683,769`.
-- Dependencies: 2C-03 through 2C-05. Acceptance: FIFO among eligible singles, no parallel work, pause guard/races, byte-offset `.part` continuation, remove/cancel cleanup, transient terminal states, event-after-commit order, notification durability, restart and window-close behavior pass deterministic tests. Exact verification: **V1** plus focused Windows child-tree test.
-
-### 2C-07 — Native Queue and Settings integration — AUTOMATABLE
-
-- Goal: connect the existing Queue, History, notification, and Settings UI to real 2C commands/events, including chosen download folder, progress, Pause/Continue/Cancel, terminal removal, and native redownload. Keep browser simulator tests deterministic and Android's spike boundary intact.
-- Files: focused `src/` transport/UI changes only if needed, native command wiring, `tests/interactive/`, `docs/STATE.md`.
-- Read: `PROJECT.md:121-168,169-179,236-244,254-262,559-584,600-616,650-671,769`; indexed single progress reference.
-- Dependencies: 2C-06. Acceptance: mounted native transport tests exercise real queue snapshots/events and command errors; Input clears on enqueue, status and controls match Rust, translated persistent errors survive reload, and no browser mock starts native files. Exact verification: **V2**.
-
-### 2C-08 — Real Windows media and lifecycle review — OWNER-REVIEW
-
-- Goal: run the native app against the pinned app-data engine with public Gate 0B fixtures. Inspect MP3/MP4 outputs in a player and ffprobe, selected bitrate/height, tags and cover, Downloads/chosen folder, collision names, two-item order, progress, pause/`.part`/resume byte offset, restart, redownload fallback, errors, and active window-close process cleanup. Capture the single progress UI for owner review.
-- Files: `docs/gates/evidence/2c/native-downloads.md`, focused fixes/tests if evidence exposes a defect, `docs/STATE.md`.
-- Read: `PROJECT.md:129-130,135-167,180-194,236-244,254-262,309-314,319-339,630-645,656-671,683,769`.
-- Dependencies: 2C-07. Acceptance: recorded outputs are playable and match FR-58 and MP3/MP4 rules; no overwrite, orphan child, automatic resume, or lost notification; owner reviews visible Queue behavior; **V3** passes. A failed native observation is fixed in 2C.
-
-### 2C-09 — Stage evidence and owner checkpoint — OWNER-REVIEW
-
-- Goal: link 2C command/profile tests, queue/recovery/collision/error tests, real MP3/MP4 and `.part` observations, UI review, and exact **V3** result in `docs/gates/evidence/2c/checkpoint.md`.
-- Files: `docs/gates/evidence/2c/checkpoint.md`, `docs/STATE.md`.
-- Read: `PROJECT.md:630-645,646-693,734-745,763-778`.
-- Dependencies: 2C-02 through 2C-08 and owner review of the native result. Acceptance: evidence maps AC-07, AC-11, AC-12, AC-15..19, and AC-29 for **single-item Windows scenarios**, states site/test limits and remaining playlist/ZIP/updater work, then stops for explicit owner acceptance before 2D.
+- Goal: run the native app against pinned app-data engine copies with public Gate 0B fixtures. Inspect real MP3/MP4 playback and ffprobe output, selected bitrate/height, tags and cover, Downloads/chosen folder, collision names, two-item order, progress, pause/`.part`/resume byte offset, restart, redownload fallback, errors, and active-close process cleanup. Capture the Queue UI for owner review, fix any defect found, and link the complete tests and observations in the 2C checkpoint.
+- Files: `docs/gates/evidence/2c/native-downloads.md`, `docs/gates/evidence/2c/checkpoint.md`, focused fixes/tests if evidence exposes a defect, `docs/STATE.md`.
+- Read: `PROJECT.md:129-130,135-167,180-194,236-244,254-262,309-314,319-339,630-693,734-745,763-778`.
+- Dependencies: 2C-02/03 and owner review of the visible native result before checkpoint finalization. Acceptance: real output is playable and matches FR-58 and quality rules; no overwrite, orphan child, automatic resume, or lost notification; **V3** passes. Checkpoint evidence maps AC-07, AC-11, AC-12, AC-15..19, and AC-29 for **single-item Windows scenarios**, states site/test limits and remaining playlist/ZIP/updater work, then stops for explicit owner acceptance before 2D. A failed native observation stays in 2C.
 
 ## Stage exit
 
