@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
+#[cfg(target_os = "windows")]
+use crate::engine::{analysis, process::Supervisor, EnginePaths, EngineStatus};
 use crate::{
     contract::{
         AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, ErrorCode, ErrorNotification,
@@ -9,6 +11,10 @@ use crate::{
     persistence::Database,
 };
 use std::sync::Mutex;
+#[cfg(target_os = "windows")]
+use std::sync::{atomic::AtomicBool, Arc};
+#[cfg(target_os = "windows")]
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 
 type CommandResult<T> = Result<T, AppError>;
@@ -184,10 +190,48 @@ fn deferred(detail: &'static str) -> AppError {
     AppError::new(ErrorCode::EngineMissing, Some(detail.into()))
 }
 
+#[cfg(target_os = "windows")]
+fn ready_engine(status: &EngineStatus) -> CommandResult<EnginePaths> {
+    match status {
+        EngineStatus::Ready(paths) => Ok(paths.clone()),
+        EngineStatus::Unavailable(reason) => Err(AppError::new(
+            ErrorCode::EngineMissing,
+            Some(reason.clone()),
+        )),
+    }
+}
+
 #[tauri::command]
-pub fn analyze_url(url: String) -> CommandResult<AnalyzeResult> {
-    let _ = url;
-    Err(deferred("native analysis is scheduled for Stage 2B"))
+pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeResult> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = app
+            .try_state::<EngineStatus>()
+            .ok_or_else(|| deferred("Windows engine state is unavailable"))?;
+        let paths = ready_engine(&status)?;
+        let supervisor = app
+            .try_state::<Arc<Supervisor>>()
+            .ok_or_else(|| deferred("Windows process supervisor is unavailable"))?;
+        let supervisor = Arc::clone(supervisor.inner());
+        // yt-dlp and JSON parsing are blocking work. Keep them off Tauri's UI thread.
+        return tauri::async_runtime::spawn_blocking(move || {
+            analysis::analyze(&paths, &supervisor, &url, &AtomicBool::new(false))
+        })
+        .await
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Unknown,
+                Some(format!("analysis worker: {error}")),
+            )
+        })?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, url);
+        Err(deferred(
+            "desktop analysis is available on Windows in Stage 2B",
+        ))
+    }
 }
 
 #[tauri::command]
@@ -376,6 +420,27 @@ mod tests {
         assert_eq!(names, expected);
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_analysis_uses_ready_app_data_paths_and_reports_bootstrap_failure() {
+        let paths = EnginePaths {
+            yt_dlp: "C:/AppData/engine/yt-dlp.exe".into(),
+            ffmpeg: "C:/AppData/engine/ffmpeg.exe".into(),
+            quickjs: "C:/AppData/engine/qjs.exe".into(),
+        };
+        let ready = ready_engine(&EngineStatus::Ready(paths)).unwrap();
+        assert!(ready.yt_dlp.ends_with("engine/yt-dlp.exe"));
+        assert!(ready.quickjs.ends_with("engine/qjs.exe"));
+        let error =
+            ready_engine(&EngineStatus::Unavailable("failed health check".into())).unwrap_err();
+        assert_eq!(error.code, ErrorCode::EngineMissing);
+        assert_eq!(error.detail.as_deref(), Some("failed health check"));
+        assert_eq!(
+            serde_json::to_value(error).unwrap()["code"],
+            "engine_missing"
+        );
+    }
+
     #[test]
     fn enqueue_and_remove_events_follow_commits_with_contract_payloads() {
         let path = test_path();
@@ -450,11 +515,6 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        assert_eq!(
-            serde_json::to_value(analyze_url("https://example.com".into()).unwrap_err()).unwrap()
-                ["code"],
-            "engine_missing"
-        );
         assert_eq!(
             pause_download("id".into()).unwrap_err().code,
             ErrorCode::EngineMissing

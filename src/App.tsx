@@ -30,10 +30,8 @@ function runningMockStorage() {
 }
 
 const native = usesDesktopNativeTransport(isTauri(), typeof navigator === 'undefined' ? '' : navigator.userAgent)
-const simulator = !native || import.meta.env.DEV
-  ? createSimulatorTransport({ storage: native ? createMemoryMockStorage() : runningMockStorage() })
-  : null
-// Keep the preview loading state inspectable; native data reads and writes go straight to Rust.
+const simulator = native ? null : createSimulatorTransport({ storage: runningMockStorage() })
+// Keep browser preview loading inspectable while native analysis runs in Rust.
 const previewTransport: AppTransport | null = simulator && {
   call: async (command, args) => {
     if (command === 'analyze_url') await new Promise((resolve) => setTimeout(resolve, 900))
@@ -42,7 +40,7 @@ const previewTransport: AppTransport | null = simulator && {
   on: (name, handler) => simulator.on(name, handler),
 }
 const appTransport = createRuntimeTransport({
-  native, development: import.meta.env.DEV, nativeTransport: tauriTransport,
+  native, nativeTransport: tauriTransport,
   simulatorTransport: previewTransport,
 })
 const appFlowStore = createDownloadFlowStore(appTransport)

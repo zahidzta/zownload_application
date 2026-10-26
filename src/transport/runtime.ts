@@ -8,10 +8,9 @@ export function usesDesktopNativeTransport(tauri: boolean, userAgent: string): b
   return tauri && !/Android/i.test(userAgent)
 }
 
-/** Native data always goes through Rust; only development analysis uses the offline preview. */
-export function createRuntimeTransport({ native, development, nativeTransport, simulatorTransport }: {
+/** Desktop native commands always go through Rust; browser preview stays offline. */
+export function createRuntimeTransport({ native, nativeTransport, simulatorTransport }: {
   native: boolean
-  development: boolean
   nativeTransport: AppTransport
   simulatorTransport: AppTransport | null
 }): AppTransport {
@@ -19,11 +18,5 @@ export function createRuntimeTransport({ native, development, nativeTransport, s
     if (!simulatorTransport) throw new Error('Browser preview needs a simulator transport')
     return simulatorTransport
   }
-  if (!development || !simulatorTransport) return nativeTransport
-  return {
-    call: (command, args) => command === 'analyze_url'
-      ? simulatorTransport.call(command, args)
-      : nativeTransport.call(command, args),
-    on: (name, handler) => nativeTransport.on(name, handler),
-  }
+  return nativeTransport
 }
