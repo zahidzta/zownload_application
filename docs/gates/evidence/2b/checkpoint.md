@@ -3,7 +3,7 @@
 
 # Gate 2B checkpoint — 2026-10-26
 
-**Status:** Prepared for owner checkpoint review. The owner merged the [2B-08 evidence PR](https://github.com/zahidzta/zownload_application/pull/108), directed this 2B-09 task, and confirmed on 2026-10-26 that the single, playlist, mixed URL, and active-close screenshots look right. Explicit Gate 2B checkpoint acceptance is still pending. Stage 2C remains closed until that decision.
+**Status:** Accepted by the owner on 2026-10-26. The owner merged the [2B-08 evidence PR](https://github.com/zahidzta/zownload_application/pull/108), directed this 2B-09 task, confirmed that the single, playlist, mixed URL, and active-close screenshots look right, then explicitly accepted this checkpoint and requested the [Stage 2C plan](../../gate-2c.md).
 
 ## Windows engine and analysis evidence
 
@@ -34,4 +34,4 @@ This evidence supports the [Stage 2B deliverable](../../../../PROJECT.md): verif
 
 The **2C** task is single MP3/MP4 output, progress, sequential queue execution, pause/resume/remove, metadata, and recovery; native enqueue is still queued-only. **2D** owns engine updates, checksum/probation/fallback, and app-update checks. **3A** owns playlist downloads and per-entry results; the 17-title preview does not establish extraction or download success. This checkpoint does not establish output playback, AC-29's interrupted-download recovery, installer packaging, other desktop platforms, or Android distribution. The [Android distribution blocker](../../../STATE.md#release-blocker--android-distribution) remains open.
 
-The owner reviewed the [single](native-single.png), [playlist cover](native-playlist-cover.png), [playlist quality and list](native-playlist-details.png), [playlist scroll](native-playlist-list.png), [mixed URL](native-mixed.png), and [active-close](native-close-active.png) screenshot set and confirmed that the visible result looks right. The remaining decision is explicit acceptance of this Gate 2B checkpoint or a requested 2B correction. Do not start 2C before that decision.
+The owner reviewed the [single](native-single.png), [playlist cover](native-playlist-cover.png), [playlist quality and list](native-playlist-details.png), [playlist scroll](native-playlist-list.png), [mixed URL](native-mixed.png), and [active-close](native-close-active.png) screenshot set and confirmed that the visible result looks right. On 2026-10-26, the owner explicitly accepted this Gate 2B checkpoint and requested the 2C plan. Stage 2C planning is open; implementation follows owner review of that plan.
