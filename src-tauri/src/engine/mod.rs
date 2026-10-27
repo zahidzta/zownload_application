@@ -14,6 +14,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub mod analysis;
 pub mod process;
+pub mod single;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
 const YT_DLP_HASH: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";

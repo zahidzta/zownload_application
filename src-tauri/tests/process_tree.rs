@@ -123,6 +123,20 @@ fn windows_supervisor_cleans_timeout_cancel_close_and_parent_exit() {
         &AtomicBool::new(false),
     );
     assert!(matches!(overflow, Err(RunError::OutputLimit)));
+    let observed_bytes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = Arc::clone(&observed_bytes);
+    let streamed = supervisor.run_observed(
+        &binary,
+        &[OsString::from("flood"), OsString::from("unused")],
+        Duration::from_millis(300),
+        64,
+        &AtomicBool::new(false),
+        Arc::new(move |bytes| {
+            count.fetch_add(bytes.len(), Ordering::SeqCst);
+        }),
+    );
+    assert!(matches!(streamed, Err(RunError::TimedOut)));
+    assert!(observed_bytes.load(Ordering::SeqCst) > 64);
 
     let time_marker = marker(&root, "timeout");
     let result = supervisor.run(

@@ -116,7 +116,7 @@ fn process_error(error: RunError) -> AppError {
     AppError::new(code, Some(format!("analysis process: {error}")))
 }
 
-fn extraction_error(stderr: &[u8], status: Option<i32>) -> AppError {
+pub(super) fn extraction_error(stderr: &[u8], status: Option<i32>) -> AppError {
     let raw = String::from_utf8_lossy(stderr).into_owned();
     let diagnostic = raw
         .lines()
