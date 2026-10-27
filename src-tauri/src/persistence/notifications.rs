@@ -2,7 +2,9 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 use super::{history::record_in_transaction, Database, Error, Result};
-use crate::contract::{AppError, DownloadRequest, ErrorNotification};
+use crate::contract::{
+    AppError, DownloadRequest, ErrorCode, ErrorNotification, ItemStatus, Progress,
+};
 use rusqlite::{params, OptionalExtension};
 
 /// Internal result of engine work. The engine will call this in a later stage.
@@ -12,6 +14,36 @@ pub enum TerminalOutcome {
 }
 
 impl Database {
+    pub(super) fn recover_terminal_queue(&mut self) -> Result<()> {
+        // A crash between the transient terminal write and its settlement must
+        // not leave a finished item stuck in Queue on the next launch.
+        for item in self.get_queue()? {
+            match item.status {
+                ItemStatus::Done => {
+                    let successful_files = match item.progress {
+                        Progress::Single { .. } => 1,
+                        Progress::Playlist { done, .. } => done,
+                    };
+                    self.settle_queue_item(
+                        &item.id,
+                        TerminalOutcome::Completed { successful_files },
+                    )?;
+                }
+                ItemStatus::Failed => {
+                    let error = item.error.unwrap_or_else(|| {
+                        AppError::new(
+                            ErrorCode::Unknown,
+                            Some("failed queue item had no stored error".into()),
+                        )
+                    });
+                    self.settle_queue_item(&item.id, TerminalOutcome::Failed(error))?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     pub fn get_error_notifications(&self) -> Result<Vec<ErrorNotification>> {
         let mut statement = self
             .connection
@@ -96,6 +128,23 @@ mod tests {
             progress: Progress::Single { percent: 100.0 },
             error: None,
         }
+    }
+
+    #[test]
+    fn reopening_settles_committed_terminal_rows_before_the_ui_reads_them() {
+        let path = test_path();
+        let mut db = Database::open_at(&path).unwrap();
+        let done = item(ItemStatus::Done);
+        let failed = item(ItemStatus::Failed);
+        db.insert_queue_item(&done).unwrap();
+        db.insert_queue_item(&failed).unwrap();
+        drop(db);
+        let db = Database::open_at(&path).unwrap();
+        assert!(db.get_queue().unwrap().is_empty());
+        assert_eq!(db.get_history().unwrap().len(), 1);
+        assert_eq!(db.get_error_notifications().unwrap()[0].id, failed.id);
+        drop(db);
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

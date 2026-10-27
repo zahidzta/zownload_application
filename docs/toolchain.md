@@ -304,3 +304,42 @@ The copied resource hashes matched the 2B-02 table above. The clean checkout
 was detached at `1ebddb8`; `task-2b-08` had only documentation and screenshot
 changes relative to that commit. See the [native evidence](gates/evidence/2b/native-analysis.md)
 for the exact V3 result and the separate active-window-close observation.
+
+## Gate 2C-03 clean verification
+
+The first exact V2 run in the working checkout reached `node --test`, which
+discovered an ignored nested old checkout under `work/engine/2b-09/clean`.
+For the passing run on 2026-10-27, a detached checkout at `65ee158` received
+the task files without that nested directory. These were the setup commands
+from the repository root (the pinned Node archive and Windows engine resources
+were already present from Gate 2B):
+
+```powershell
+$repo = (Resolve-Path .).Path
+$check = Join-Path $env:TEMP ('zownload-2c03-verify-' + [guid]::NewGuid().ToString('N'))
+git worktree add --detach $check HEAD
+$files = @(
+  'src-tauri/src/commands/mod.rs', 'src-tauri/src/engine/mod.rs',
+  'src-tauri/src/engine/queue.rs', 'src-tauri/src/lib.rs',
+  'src-tauri/src/persistence/mod.rs', 'src-tauri/src/persistence/notifications.rs',
+  'src-tauri/src/persistence/queue.rs', 'src-tauri/tests/queue_lifecycle.rs',
+  'src-tauri/tests/support/queue_stub.rs', 'tests/interactive/nativeRuntime.test.tsx'
+)
+foreach ($file in $files) {
+  Copy-Item -LiteralPath (Join-Path $repo $file) -Destination (Join-Path $check $file) -Force
+}
+New-Item -ItemType Directory -Path (Join-Path $check 'src-tauri/resources/windows-engine') -Force | Out-Null
+foreach ($name in @('yt-dlp.exe', 'ffmpeg.exe', 'qjs.exe')) {
+  Copy-Item -LiteralPath (Join-Path $repo "src-tauri/resources/windows-engine/$name") -Destination (Join-Path $check "src-tauri/resources/windows-engine/$name") -Force
+}
+$nodeDir = Join-Path $repo 'work/engine/2b-08/node/node-v24.22.0-win-x64'
+$env:PATH = "$nodeDir;$env:PATH"
+$env:CARGO_TARGET_DIR = Join-Path $repo 'src-tauri/target'
+Push-Location $check
+npm ci
+# Run exact V2 from docs/gates/gate-2c.md, then the focused process-tree test.
+Pop-Location
+```
+
+The exact V2 and focused process-tree commands passed. Details and limits are
+in [2C-03 evidence](gates/evidence/2c/native-queue.md).

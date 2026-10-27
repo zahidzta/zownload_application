@@ -14,6 +14,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub mod analysis;
 pub mod process;
+pub mod queue;
 pub mod single;
 
 const YT_DLP_VERSION: &str = "2026.08.19";

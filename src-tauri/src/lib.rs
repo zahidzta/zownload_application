@@ -22,13 +22,16 @@ pub fn run() {
             {
                 // Production data is local to this app and separate from the Android spike DB.
                 let path = app.path().app_local_data_dir()?.join("zownload.sqlite3");
-                let database = persistence::Database::open_at(&path)?;
-                app.manage(std::sync::Mutex::new(database));
+                let database = std::sync::Arc::new(std::sync::Mutex::new(
+                    persistence::Database::open_at(&path)?,
+                ));
+                app.manage(std::sync::Arc::clone(&database));
                 #[cfg(target_os = "windows")]
                 {
                     // Joining a kill-on-close Windows job before launching any sidecar
                     // makes abrupt app termination close the whole descendant tree.
-                    app.manage(engine::process::Supervisor::install()?);
+                    let supervisor = engine::process::Supervisor::install()?;
+                    app.manage(std::sync::Arc::clone(&supervisor));
                     let resources = app.path().resource_dir()?.join("binaries");
                     let data = app.path().app_local_data_dir()?;
                     let status = engine::bootstrap(
@@ -39,7 +42,23 @@ pub fn run() {
                     if let engine::EngineStatus::Unavailable(reason) = &status {
                         eprintln!("Windows engine unavailable: {reason}");
                     }
+                    let ready = match &status {
+                        engine::EngineStatus::Ready(paths) => Some(paths.clone()),
+                        engine::EngineStatus::Unavailable(_) => None,
+                    };
                     app.manage(status);
+                    let queue = engine::queue::QueueCoordinator::new(
+                        database,
+                        ready,
+                        supervisor,
+                        data,
+                        app.path().download_dir()?,
+                        commands::queue_sink(app.handle().clone()),
+                    );
+                    app.manage(std::sync::Arc::clone(&queue));
+                    if let Err(error) = queue.kick() {
+                        eprintln!("could not start saved queue: {error:?}");
+                    }
                 }
             }
             Ok(())
@@ -47,6 +66,11 @@ pub fn run() {
         .on_window_event(|window, event| {
             #[cfg(target_os = "windows")]
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                if let Some(queue) =
+                    window.try_state::<std::sync::Arc<engine::queue::QueueCoordinator>>()
+                {
+                    queue.close();
+                }
                 if let Some(supervisor) =
                     window.try_state::<std::sync::Arc<engine::process::Supervisor>>()
                 {

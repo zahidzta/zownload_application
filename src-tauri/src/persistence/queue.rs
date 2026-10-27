@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-use super::{Database, Error, Result};
+use super::{paths::DownloadPaths, Database, Error, Result};
 use crate::contract::{AppError, DownloadRequest, ItemStatus, Progress, QueueItem};
 use rusqlite::params;
 
@@ -56,6 +56,15 @@ impl Database {
     }
 
     pub fn insert_queue_item(&mut self, item: &QueueItem) -> Result<()> {
+        self.insert_queue_item_with_paths(item, None)
+    }
+
+    /// Insert the queue row and its private output choice in one commit.
+    pub fn insert_queue_item_with_paths(
+        &mut self,
+        item: &QueueItem,
+        paths: Option<&DownloadPaths>,
+    ) -> Result<()> {
         uuid::Uuid::parse_str(&item.id).map_err(|_| Error::InvalidInput("queue id"))?;
         let request = serde_json::to_string(&item.request)?;
         let progress = serde_json::to_string(&item.progress)?;
@@ -73,6 +82,20 @@ impl Database {
             params![item.id, position, request, item.title, item.thumbnail,
                 status_text(item.status), progress, error],
         )?;
+        if let Some(paths) = paths {
+            if paths.queue_id != item.id {
+                return Err(Error::InvalidInput("download path owner"));
+            }
+            transaction.execute(
+                "INSERT INTO download_paths (queue_id, output_dir, work_dir, reserved_path) \
+                 VALUES (?1, ?2, ?3, NULL)",
+                params![
+                    paths.queue_id,
+                    paths.output_dir.to_string_lossy(),
+                    paths.work_dir.to_string_lossy()
+                ],
+            )?;
+        }
         transaction.commit()?;
         Ok(())
     }
