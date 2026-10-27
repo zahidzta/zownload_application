@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
+#[cfg(any(test, not(target_os = "windows")))]
+use crate::contract::{ItemStatus, Progress};
 #[cfg(target_os = "windows")]
-use crate::engine::{analysis, process::Supervisor, EnginePaths, EngineStatus};
+use crate::engine::{
+    analysis,
+    process::Supervisor,
+    queue::{QueueCoordinator, QueueEvent},
+    EnginePaths, EngineStatus,
+};
 use crate::{
     contract::{
         AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, ErrorCode, ErrorNotification,
-        Format, HistoryEntry, ItemStatus, Progress, Quality, QueueItem, Settings,
+        Format, HistoryEntry, Quality, QueueItem, Settings,
     },
     persistence::Database,
 };
-use std::sync::Mutex;
 #[cfg(target_os = "windows")]
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 #[cfg(target_os = "windows")]
 use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
@@ -67,6 +74,21 @@ impl EventSink for AppHandle {
             eprintln!("could not emit native change event: {error}");
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn queue_sink(app: AppHandle) -> Arc<dyn Fn(QueueEvent) + Send + Sync> {
+    Arc::new(move |event| {
+        EventSink::emit(
+            &app,
+            match event {
+                QueueEvent::Updated(item) => NativeEvent::QueueUpdated(item),
+                QueueEvent::Removed(id) => NativeEvent::QueueRemoved(id),
+                QueueEvent::HistoryChanged => NativeEvent::HistoryChanged,
+                QueueEvent::NotificationsChanged => NativeEvent::NotificationsChanged,
+            },
+        );
+    })
 }
 
 fn database_error(error: crate::persistence::Error) -> AppError {
@@ -134,6 +156,7 @@ fn validate_request(request: &DownloadRequest) -> CommandResult<()> {
     Ok(())
 }
 
+#[cfg(any(test, not(target_os = "windows")))]
 fn enqueue(
     database: &mut Database,
     request: DownloadRequest,
@@ -164,6 +187,7 @@ fn enqueue(
     Ok((id, Some(NativeEvent::QueueUpdated(item))))
 }
 
+#[cfg(any(test, not(target_os = "windows")))]
 fn remove(database: &mut Database, id: String) -> CommandResult<((), Option<NativeEvent>)> {
     let item = database
         .get_queue()
@@ -236,43 +260,77 @@ pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeRe
 
 #[tauri::command]
 pub fn enqueue_download(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
     app: AppHandle,
     request: DownloadRequest,
 ) -> CommandResult<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = database;
+        validate_request(&request)?;
+        let queue = app
+            .try_state::<Arc<QueueCoordinator>>()
+            .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?;
+        return queue.enqueue(request);
+    }
+    #[cfg(not(target_os = "windows"))]
     mutate(database.inner(), &app, |db| enqueue(db, request))
 }
 
 #[tauri::command]
-pub fn pause_download(id: String) -> CommandResult<()> {
-    let _ = id;
-    Err(deferred("pause requires a running download engine"))
+pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
+    #[cfg(target_os = "windows")]
+    return app
+        .try_state::<Arc<QueueCoordinator>>()
+        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .pause(&id);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, id);
+        Err(deferred("pause requires a running download engine"))
+    }
 }
 
 #[tauri::command]
-pub fn resume_download(id: String) -> CommandResult<()> {
-    let _ = id;
-    Err(deferred("resume requires a running download engine"))
+pub fn resume_download(app: AppHandle, id: String) -> CommandResult<()> {
+    #[cfg(target_os = "windows")]
+    return app
+        .try_state::<Arc<QueueCoordinator>>()
+        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .resume(&id);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, id);
+        Err(deferred("resume requires a running download engine"))
+    }
 }
 
 #[tauri::command]
 pub fn remove_download(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
     app: AppHandle,
     id: String,
 ) -> CommandResult<()> {
+    #[cfg(target_os = "windows")]
+    let _ = database;
+    #[cfg(target_os = "windows")]
+    return app
+        .try_state::<Arc<QueueCoordinator>>()
+        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .remove(&id);
+    #[cfg(not(target_os = "windows"))]
     mutate(database.inner(), &app, |db| remove(db, id))
 }
 
 #[tauri::command]
-pub fn get_queue(database: State<'_, Mutex<Database>>) -> CommandResult<Vec<QueueItem>> {
+pub fn get_queue(database: State<'_, Arc<Mutex<Database>>>) -> CommandResult<Vec<QueueItem>> {
     read(database.inner(), |db| {
         db.get_queue().map_err(database_error)
     })
 }
 
 #[tauri::command]
-pub fn get_history(database: State<'_, Mutex<Database>>) -> CommandResult<Vec<HistoryEntry>> {
+pub fn get_history(database: State<'_, Arc<Mutex<Database>>>) -> CommandResult<Vec<HistoryEntry>> {
     read(database.inner(), |db| {
         db.get_history().map_err(database_error)
     })
@@ -280,7 +338,7 @@ pub fn get_history(database: State<'_, Mutex<Database>>) -> CommandResult<Vec<Hi
 
 #[tauri::command]
 pub fn delete_history_entry(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
     app: AppHandle,
     id: i64,
 ) -> CommandResult<()> {
@@ -291,7 +349,10 @@ pub fn delete_history_entry(
 }
 
 #[tauri::command]
-pub fn clear_history(database: State<'_, Mutex<Database>>, app: AppHandle) -> CommandResult<()> {
+pub fn clear_history(
+    database: State<'_, Arc<Mutex<Database>>>,
+    app: AppHandle,
+) -> CommandResult<()> {
     mutate(database.inner(), &app, |db| {
         let changed = db.clear_history().map_err(database_error)?;
         Ok(((), (changed > 0).then_some(NativeEvent::HistoryChanged)))
@@ -300,7 +361,7 @@ pub fn clear_history(database: State<'_, Mutex<Database>>, app: AppHandle) -> Co
 
 #[tauri::command]
 pub fn get_error_notifications(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
 ) -> CommandResult<Vec<ErrorNotification>> {
     read(database.inner(), |db| {
         db.get_error_notifications().map_err(database_error)
@@ -309,7 +370,7 @@ pub fn get_error_notifications(
 
 #[tauri::command]
 pub fn dismiss_error_notification(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
     app: AppHandle,
     id: String,
 ) -> CommandResult<()> {
@@ -320,7 +381,7 @@ pub fn dismiss_error_notification(
 }
 
 #[tauri::command]
-pub fn get_settings(database: State<'_, Mutex<Database>>) -> CommandResult<Settings> {
+pub fn get_settings(database: State<'_, Arc<Mutex<Database>>>) -> CommandResult<Settings> {
     read(database.inner(), |db| {
         db.get_settings().map_err(database_error)
     })
@@ -328,7 +389,7 @@ pub fn get_settings(database: State<'_, Mutex<Database>>) -> CommandResult<Setti
 
 #[tauri::command]
 pub fn set_settings(
-    database: State<'_, Mutex<Database>>,
+    database: State<'_, Arc<Mutex<Database>>>,
     app: AppHandle,
     settings: Settings,
 ) -> CommandResult<()> {
@@ -515,14 +576,6 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        assert_eq!(
-            pause_download("id".into()).unwrap_err().code,
-            ErrorCode::EngineMissing
-        );
-        assert_eq!(
-            resume_download("id".into()).unwrap_err().code,
-            ErrorCode::EngineMissing
-        );
         assert_eq!(
             engine_check_update().unwrap_err().code,
             ErrorCode::EngineMissing

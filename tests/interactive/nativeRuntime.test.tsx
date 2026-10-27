@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-import { waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { expect, test, vi } from 'vitest'
+import { AppView } from '../../src/App'
 import { createDownloadFlowStore } from '../../src/state/downloadFlow'
 import { analysisUrls } from '../../src/transport/fixtures'
 import { createMemoryMockStorage } from '../../src/transport/mockStorage'
@@ -74,4 +76,43 @@ test('native analysis stays on Rust and browser preview stays isolated', async (
   expect(usesDesktopNativeTransport(true, 'Mozilla/5.0 (Windows NT 10.0)')).toBe(true)
   expect(usesDesktopNativeTransport(true, 'Mozilla/5.0 (Linux; Android 15)')).toBe(false)
   expect(usesDesktopNativeTransport(false, 'Mozilla/5.0 (Windows NT 10.0)')).toBe(false)
+})
+
+test('mounted native activity routes controls and reloads a translated failure', async () => {
+  const clock = createManualSimulatorClock()
+  const nativeStorage = createMemoryMockStorage()
+  const previewStorage = createMemoryMockStorage()
+  const native = createSimulatorTransport({ clock, storage: nativeStorage, outcomes: { [analysisUrls.single]: 'failed' } })
+  const preview = createSimulatorTransport({ storage: previewStorage })
+  const nativeCall = vi.spyOn(native, 'call')
+  const previewCall = vi.spyOn(preview, 'call')
+  const transport = createRuntimeTransport({ native: true, nativeTransport: native, simulatorTransport: preview })
+  const flow = createDownloadFlowStore(transport)
+  const props = { page: 'main' as const, onBack: () => {}, onToggleLocale: () => {}, onOpenSettings: () => {}, flowStore: flow }
+  const view = render(<AppView {...props} locale="en" />)
+  const user = userEvent.setup()
+  await user.type(screen.getByRole('textbox', { name: 'Enter URL' }), analysisUrls.single)
+  await user.click(screen.getByRole('button', { name: 'Convert' }))
+  await user.click(await screen.findByRole('button', { name: 'Download' }))
+  await waitFor(() => expect(flow.getState()).toMatchObject({ step: 'input', url: '' }))
+  act(() => clock.advanceBy(1000))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Stop' }).hasAttribute('disabled')).toBe(false))
+  await user.click(screen.getByRole('button', { name: 'Stop' }))
+  act(() => clock.advanceBy(0))
+  await waitFor(() => expect(screen.getByText('Paused')).not.toBeNull())
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
+  act(() => clock.advanceBy(8000))
+  await waitFor(() => expect(flow.getState().notifications).toHaveLength(1))
+  expect(screen.getByText('No active downloads')).not.toBeNull()
+  expect(nativeCall.mock.calls.map(([name]) => name)).toEqual(expect.arrayContaining([
+    'analyze_url', 'enqueue_download', 'pause_download', 'resume_download', 'get_error_notifications',
+  ]))
+  expect(previewCall).not.toHaveBeenCalled()
+  expect(previewStorage.load()?.queue ?? []).toEqual([])
+  view.unmount()
+  const reopened = createDownloadFlowStore(createSimulatorTransport({ storage: nativeStorage, clock: createManualSimulatorClock() }))
+  const second = render(<AppView {...props} flowStore={reopened} locale="es" />)
+  await waitFor(() => expect(reopened.getState().notifications).toHaveLength(1))
+  expect(screen.getByRole('alert').textContent).toContain('Ocurrió un error.')
+  second.unmount()
 })

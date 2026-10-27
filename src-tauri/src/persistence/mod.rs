@@ -77,6 +77,7 @@ impl Database {
         migrations::apply(&mut connection)?;
         let mut database = Self { connection };
         database.recover_interrupted_queue()?;
+        database.recover_terminal_queue()?;
         Ok(database)
     }
 }
