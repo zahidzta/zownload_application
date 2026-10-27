@@ -201,6 +201,39 @@ impl Supervisor {
         max_output_bytes: usize,
         cancel: &AtomicBool,
     ) -> Result<Output, RunError> {
+        self.run_inner(executable, args, timeout, max_output_bytes, cancel, None)
+    }
+
+    /// Streams stdout to a bounded parser while retaining only a diagnostic
+    /// tail. The observer must not block; process ownership remains here.
+    pub fn run_observed(
+        &self,
+        executable: &Path,
+        args: &[OsString],
+        timeout: Duration,
+        max_output_bytes: usize,
+        cancel: &AtomicBool,
+        observer: Arc<dyn Fn(&[u8]) + Send + Sync>,
+    ) -> Result<Output, RunError> {
+        self.run_inner(
+            executable,
+            args,
+            timeout,
+            max_output_bytes,
+            cancel,
+            Some(observer),
+        )
+    }
+
+    fn run_inner(
+        &self,
+        executable: &Path,
+        args: &[OsString],
+        timeout: Duration,
+        max_output_bytes: usize,
+        cancel: &AtomicBool,
+        observer: Option<Arc<dyn Fn(&[u8]) + Send + Sync>>,
+    ) -> Result<Output, RunError> {
         if self.closing.load(Ordering::SeqCst) || cancel.load(Ordering::SeqCst) {
             return Err(RunError::Cancelled);
         }
@@ -239,11 +272,15 @@ impl Supervisor {
             child.stdout.take().expect("piped stdout"),
             max_output_bytes,
             Arc::clone(&exceeded),
+            observer.clone(),
+            observer.is_some(),
         );
         let stderr = capture(
             child.stderr.take().expect("piped stderr"),
             max_output_bytes,
             Arc::clone(&exceeded),
+            None,
+            observer.is_some(),
         );
         let start = Instant::now();
         let result = loop {
@@ -290,6 +327,8 @@ fn capture(
     mut reader: impl Read + Send + 'static,
     limit: usize,
     exceeded: Arc<AtomicBool>,
+    observer: Option<Arc<dyn Fn(&[u8]) + Send + Sync>>,
+    tail_only: bool,
 ) -> thread::JoinHandle<io::Result<Vec<u8>>> {
     thread::spawn(move || {
         let mut bytes = Vec::new();
@@ -298,6 +337,20 @@ fn capture(
             let count = reader.read(&mut chunk)?;
             if count == 0 {
                 return Ok(bytes);
+            }
+            if let Some(observer) = &observer {
+                observer(&chunk[..count]);
+            }
+            if tail_only {
+                if count >= limit {
+                    bytes.clear();
+                    bytes.extend_from_slice(&chunk[count - limit..count]);
+                } else {
+                    let overflow = bytes.len().saturating_add(count).saturating_sub(limit);
+                    bytes.drain(..overflow);
+                    bytes.extend_from_slice(&chunk[..count]);
+                }
+                continue;
             }
             let keep = count.min(limit.saturating_sub(bytes.len()));
             bytes.extend_from_slice(&chunk[..keep]);

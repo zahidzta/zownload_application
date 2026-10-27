@@ -4,6 +4,7 @@
 pub mod history;
 mod migrations;
 pub mod notifications;
+pub mod paths;
 pub mod queue;
 pub mod settings;
 
@@ -72,6 +73,7 @@ impl Database {
             fs::create_dir_all(parent)?;
         }
         let mut connection = Connection::open(path)?;
+        connection.pragma_update(None, "foreign_keys", "ON")?;
         migrations::apply(&mut connection)?;
         let mut database = Self { connection };
         database.recover_interrupted_queue()?;

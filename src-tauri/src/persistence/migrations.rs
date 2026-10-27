@@ -4,7 +4,7 @@
 use super::{Error, Result};
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 2;
+const CURRENT_VERSION: i64 = 3;
 
 const VERSION_1: &str = "
     CREATE TABLE settings (
@@ -44,12 +44,22 @@ const VERSION_2: &str = "
     );
 ";
 
+// Private paths are keyed by queue identity and never added to the UI contract.
+const VERSION_3: &str = "
+    CREATE TABLE download_paths (
+        queue_id TEXT PRIMARY KEY REFERENCES queue_items(id) ON DELETE CASCADE,
+        output_dir TEXT NOT NULL,
+        work_dir TEXT NOT NULL,
+        reserved_path TEXT
+    );
+";
+
 pub(super) fn apply(connection: &mut Connection) -> Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if !(0..=CURRENT_VERSION).contains(&version) {
         return Err(Error::UnsupportedSchema(version));
     }
-    for (next, sql) in [(1, VERSION_1), (2, VERSION_2)] {
+    for (next, sql) in [(1, VERSION_1), (2, VERSION_2), (3, VERSION_3)] {
         if version < next {
             // Schema and version advance together, so a failure leaves the prior data intact.
             let transaction = connection.transaction()?;
@@ -132,7 +142,7 @@ mod tests {
         drop(connection);
         assert!(matches!(
             Database::open_at(&path),
-            Err(Error::UnsupportedSchema(3))
+            Err(Error::UnsupportedSchema(4))
         ));
         let connection = Connection::open(&path).unwrap();
         let value: String = connection
