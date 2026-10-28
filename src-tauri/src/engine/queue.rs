@@ -223,6 +223,10 @@ impl QueueCoordinator {
         }
         let Ok(mut item) = self.item(id) else { return };
         match observation {
+            single::Observation::Title(title) => {
+                item.title = Some(title);
+                let _ = self.save(&item);
+            }
             single::Observation::Downloaded { percent, .. } => {
                 if active.phase == ItemStatus::PostProcessing {
                     return;

@@ -4,6 +4,7 @@
 import { AppShellView } from './components/AppShell'
 import { HeaderView } from './components/Header'
 import { InputCard, type DownloadFlowStore } from './components/InputCard'
+import { NotificationCard } from './components/NotificationCard'
 import { PlaylistPreview } from './components/PlaylistPreview'
 import { SettingsShell, type FolderPicker } from './components/SettingsShell'
 import { SinglePreview } from './components/SinglePreview'
@@ -94,14 +95,12 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
         )}
         <AppShellView locale={locale} queueItems={queueItems} queueActionId={queueActionId}
           historyEntries={historyEntries} historyActionId={historyActionId}
-          notifications={notifications} notificationActionId={notificationActionId}
           onPause={(id) => { void flowStore.getState().pauseQueueItem(id) }}
           onResume={(id) => { void flowStore.getState().resumeQueueItem(id) }}
           onCancel={(id) => { void flowStore.getState().cancelQueueItem(id) }}
           onRedownload={(id) => { void flowStore.getState().redownload(id) }}
           onDeleteHistory={(id) => { void flowStore.getState().deleteHistoryEntry(id) }}
-          onClearHistory={() => { void flowStore.getState().clearHistory() }}
-          onDismissNotification={(id) => { void flowStore.getState().dismissNotification(id) }}>
+          onClearHistory={() => { void flowStore.getState().clearHistory() }}>
           {step === 'input' ? <InputCard locale={locale} flowStore={flowStore} /> : result?.kind === 'single' ? (
             <SinglePreview locale={locale} result={result} flowStore={flowStore} />
           ) : result?.kind === 'playlist' ? (
@@ -112,6 +111,8 @@ export function AppView({ locale, page, onBack, onToggleLocale, onOpenSettings, 
       {page === 'settings' && <SettingsShell locale={locale} onBack={onBack} flowStore={flowStore}
         onChangeLanguage={(language) => { if (language !== locale) onToggleLocale() }}
         isAndroid={isAndroid} pickFolder={pickFolder} />}
+      <NotificationCard locale={locale} notifications={notifications} busyId={notificationActionId}
+        onDismiss={(id) => { void flowStore.getState().dismissNotification(id) }} />
     </>
   )
 }
