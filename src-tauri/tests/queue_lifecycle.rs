@@ -49,6 +49,7 @@ fn sequential_pause_resume_settlement_and_close_are_durable() {
         .status()
         .unwrap()
         .success());
+    fs::copy(&stub, root.join("ffmpeg.exe")).unwrap();
     let db_path = root.join("state.sqlite3");
     let db = Arc::new(Mutex::new(Database::open_at(&db_path).unwrap()));
     db.lock()

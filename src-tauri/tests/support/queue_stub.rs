@@ -6,6 +6,13 @@ use std::{env, fs::{self, OpenOptions}, io::{self, Write}, path::PathBuf, thread
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("-nostdin") {
+        // The MP4 finishing pass copies streams and updates tags. The queue
+        // lifecycle test only needs its output file, so copy the stub media.
+        let input = &args[args.iter().position(|arg| arg == "-i").unwrap() + 1];
+        fs::copy(input, args.last().unwrap()).unwrap();
+        return;
+    }
     assert!(args.contains(&"--no-playlist".into()));
     let url = args.last().unwrap();
     let id = url.rsplit('/').next().unwrap();

@@ -73,3 +73,16 @@ input, button, select { font: inherit; }
 .notification-error {
   border-inline-start: 3px solid var(--color-danger);
 }
+
+.notification-toast {
+  position: fixed;
+  inset-block-end: calc(1rem + env(safe-area-inset-bottom));
+  inset-inline-start: 50%;
+  z-index: 50;
+  inline-size: min(34rem, calc(100vw - 2rem - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  max-block-size: min(50vh, 25rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform: translateX(-50%);
+  box-shadow: 0 14px 40px rgb(0 0 0 / 65%);
+}

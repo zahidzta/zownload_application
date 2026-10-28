@@ -343,3 +343,51 @@ Pop-Location
 
 The exact V2 and focused process-tree commands passed. Details and limits are
 in [2C-03 evidence](gates/evidence/2c/native-queue.md).
+
+## Gate 2C-04 clean verification
+
+The native review used `npm run tauri -- build --debug --no-bundle` so the
+debug executable embedded the production `tauri.localhost` WebView origin.
+Plain `cargo build` uses the development URL and is unsuitable for this
+standalone native review. The Tauri CLI transiently added `features = []` to
+`src-tauri/Cargo.toml`; that generated change was restored after the build.
+WebView2 remote debugging was enabled only in the review launch through
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`.
+
+The exact Gate 2C V3 command ran in a detached checkout so Node did not
+discover ignored older checkouts under `work/engine`. These were the setup
+commands from the repository root; the three pinned Windows resources and
+Node `24.22.0` archive were already present:
+
+```powershell
+$repo = (Resolve-Path .).Path
+$check = Join-Path $env:TEMP ('zownload-2c04-verify-' + [guid]::NewGuid().ToString('N'))
+git worktree add --detach $check HEAD
+$files = @(
+  'src-tauri/src/engine/single.rs', 'src-tauri/src/engine/queue.rs',
+  'src-tauri/tests/queue_lifecycle.rs', 'src-tauri/tests/support/queue_stub.rs',
+  'src/App.tsx', 'src/components/AppShell.tsx',
+  'src/components/NotificationCard.tsx', 'src/styles.css',
+  'tests/interactive/notificationCard.test.tsx'
+)
+foreach ($file in $files) {
+  Copy-Item -LiteralPath (Join-Path $repo $file) -Destination (Join-Path $check $file) -Force
+}
+New-Item -ItemType Directory -Path (Join-Path $check 'src-tauri/resources/windows-engine') -Force | Out-Null
+foreach ($name in @('yt-dlp.exe', 'ffmpeg.exe', 'qjs.exe')) {
+  Copy-Item -LiteralPath (Join-Path $repo "src-tauri/resources/windows-engine/$name") -Destination (Join-Path $check "src-tauri/resources/windows-engine/$name") -Force
+}
+$nodeDir = Join-Path $repo 'work/engine/2b-08/node/node-v24.22.0-win-x64'
+$env:PATH = "$nodeDir;$env:PATH"
+$env:CARGO_TARGET_DIR = Join-Path $repo 'src-tauri/target'
+Push-Location $check
+npm ci
+# Run the exact V3 command from docs/gates/gate-2c.md, then the focused tests.
+Pop-Location
+```
+
+`npm ci` installed 120 packages and reported zero vulnerabilities. The native
+media fixture, run logs, and temporary database backup are under ignored
+`work/engine/2c-04/`; only the reviewed captures are committed. See the
+[2C-04 native review](gates/evidence/2c/native-downloads.md) for outputs and
+lifecycle observations.

@@ -33,6 +33,7 @@ const PROGRESS: &str = "ZP1|%(info.id)s|%(progress.status)s|%(progress.downloade
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Observation {
+    Title(String),
     Downloaded {
         bytes: u64,
         total: u64,
@@ -281,6 +282,8 @@ fn download_args(
                 "mp4".into(),
                 "--postprocessor-args".into(),
                 "Merger+ffmpeg_o:-c:a aac".into(),
+                "--postprocessor-args".into(),
+                format!("VideoConvertor+ffmpeg_o:-vf scale=-2:{selected}").into(),
                 "--embed-metadata".into(),
                 "--embed-thumbnail".into(),
                 "--parse-metadata".into(),
@@ -301,6 +304,7 @@ struct Lines {
     pending: Vec<u8>,
     discard: bool,
     expected_id: Option<String>,
+    media_finished: bool,
 }
 
 impl Lines {
@@ -323,17 +327,20 @@ impl Lines {
         }
     }
 
-    fn line(&self, observe: &dyn Fn(Observation)) {
+    fn line(&mut self, observe: &dyn Fn(Observation)) {
         let Ok(line) = std::str::from_utf8(&self.pending) else {
             return;
         };
         let line = line.trim_end_matches('\r');
-        if line.starts_with("ZP2|")
-            || line.starts_with("[Merger]")
-            || line.starts_with("[VideoConvertor]")
-            || line.starts_with("[Metadata]")
-            || line.starts_with("[EmbedThumbnail]")
-            || line.starts_with("[ExtractAudio]")
+        // yt-dlp may convert a thumbnail before it starts transferring media.
+        // Keep Stop available until the media progress stream has finished.
+        if self.media_finished
+            && (line.starts_with("ZP2|")
+                || line.starts_with("[Merger]")
+                || line.starts_with("[VideoConvertor]")
+                || line.starts_with("[Metadata]")
+                || line.starts_with("[EmbedThumbnail]")
+                || line.starts_with("[ExtractAudio]"))
         {
             observe(Observation::PostProcessing);
         }
@@ -356,6 +363,7 @@ impl Lines {
         if total == 0 || bytes > total {
             return;
         }
+        self.media_finished = fields[1] == "finished";
         observe(Observation::Downloaded {
             bytes,
             total,
@@ -483,6 +491,38 @@ fn mp3_args(
         "album=".into(),
         "-f".into(),
         "mp3".into(),
+        output.as_os_str().into(),
+    ]);
+    args
+}
+
+fn mp4_tag_args(source: &Source, input: &Path, output: &Path) -> Vec<OsString> {
+    // yt-dlp's selected derivative can carry a different embedded title than
+    // the analyzed item. Copy every stream, including the JPEG cover, and set
+    // the same title and creator used by the Queue and History.
+    let mut args: Vec<OsString> = vec![
+        "-nostdin".into(),
+        "-y".into(),
+        "-i".into(),
+        input.as_os_str().into(),
+        "-map".into(),
+        "0".into(),
+        "-c".into(),
+        "copy".into(),
+        "-metadata".into(),
+        format!("title={}", source.title).into(),
+    ];
+    if !source.artist.is_empty() {
+        args.extend([
+            "-metadata".into(),
+            format!("artist={}", source.artist).into(),
+        ]);
+    }
+    args.extend([
+        "-metadata".into(),
+        "album=".into(),
+        "-f".into(),
+        "mp4".into(),
         output.as_os_str().into(),
     ]);
     args
@@ -646,6 +686,7 @@ pub fn run_single(
             return Err(download_failure(&metadata.stderr, metadata.status.code()));
         }
         let mut source = source_from_json(&metadata.stdout)?;
+        observe(Observation::Title(source.title.clone()));
         let height = match request.quality {
             Quality::Video { height } => Some(chosen_height(height, &source.heights)?),
             _ => None,
@@ -704,7 +745,18 @@ pub fn run_single(
                 }
                 output
             }
-            Quality::Video { .. } => disk.work_dir.join("source.mp4"),
+            Quality::Video { .. } => {
+                let input = disk.work_dir.join("source.mp4");
+                let output = disk.work_dir.join("ready.mp4");
+                let args = mp4_tag_args(&source, &input, &output);
+                let result = supervisor
+                    .run(&paths.ffmpeg, &args, TIMEOUT, DIAGNOSTIC_LIMIT, cancel)
+                    .map_err(run_error)?;
+                if !result.status.success() {
+                    return Err(download_failure(&result.stderr, result.status.code()));
+                }
+                output
+            }
             _ => unreachable!(),
         };
         if !stage.is_file() {
@@ -778,7 +830,20 @@ mod tests {
         assert_eq!(args.last().unwrap(), &OsString::from(&request.url));
         assert!(args.contains(&OsString::from("--no-playlist")));
         assert!(args.contains(&OsString::from("Merger+ffmpeg_o:-c:a aac")));
+        assert!(args.contains(&OsString::from("VideoConvertor+ffmpeg_o:-vf scale=-2:720")));
         assert!(args.contains(&OsString::from("bv*[height=720]+ba/b[height=720]")));
+        let tags = mp4_tag_args(
+            &source,
+            Path::new("C:/Data/partial/source.mp4"),
+            Path::new("C:/Data/partial/ready.mp4"),
+        );
+        assert!(tags.windows(2).any(|pair| pair == ["-map", "0"]));
+        assert!(tags.windows(2).any(|pair| pair == ["-c", "copy"]));
+        assert!(tags.windows(2).any(|pair| pair == ["-metadata", "title=a"]));
+        assert!(tags
+            .windows(2)
+            .any(|pair| pair == ["-metadata", "artist=b"]));
+        assert!(tags.windows(2).any(|pair| pair == ["-metadata", "album="]));
         for flag in [
             "--continue",
             "--part",
@@ -799,7 +864,7 @@ mod tests {
             ..Lines::default()
         };
         parser.feed(
-            b"ZP1|wrong|downloading|1|10\nZP1|item|downloading|5|10\nZP1|item|downloading|oops|10\nZP2|Metadata|started\n",
+            b"ZP2|ThumbnailsConvertor|started\nZP1|wrong|downloading|1|10\nZP1|item|downloading|5|10\nZP1|item|downloading|oops|10\nZP1|item|finished|10|10\nZP2|Metadata|started\n",
             &move |event| collected.lock().unwrap().push(event),
         );
         assert_eq!(
@@ -809,6 +874,11 @@ mod tests {
                     bytes: 5,
                     total: 10,
                     percent: 50.0
+                },
+                Observation::Downloaded {
+                    bytes: 10,
+                    total: 10,
+                    percent: 100.0
                 },
                 Observation::PostProcessing
             ]
