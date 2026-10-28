@@ -3,7 +3,7 @@
 
 # Gate 2C checkpoint — 2026-10-27
 
-**Status:** Evidence prepared for explicit owner checkpoint acceptance. The owner reviewed the revised native Paused and bottom error-toast captures on 2026-10-27 and confirmed the visible result looks right. Stage 2D remains unopened until the owner accepts this full checkpoint.
+**Status:** Accepted by the owner on 2026-10-28 with the instruction to start [Gate 2D planning](../../gate-2d.md). The owner reviewed the revised native Paused and bottom error-toast captures on 2026-10-27 and confirmed the visible result looks right.
 
 ## Windows single-download acceptance map
 
@@ -35,4 +35,4 @@ Two earlier attempts established setup issues. The first passed UI and Node but 
 
 ## Stage boundary
 
-Gate 2C establishes the Windows single-item media pipeline and native queue lifecycle on one machine. Public site responses can change; the real playback review used Archive media and the checksum-locked Commons fixture served over a throttled local range server. Playlist extraction/Max-Min/counters remain in **3A**, playlist ZIP and full disk/permission stress in **3B**, and engine/app update checks in **2D**. Installer packaging, other desktop platforms, and Android distribution are outside this checkpoint. The [Android distribution blocker](../../../STATE.md#release-blocker--android-distribution) remains open. The owner has approved the revised visible native result; explicit acceptance of this complete checkpoint is still required before 2D.
+Gate 2C establishes the Windows single-item media pipeline and native queue lifecycle on one machine. Public site responses can change; the real playback review used Archive media and the checksum-locked Commons fixture served over a throttled local range server. Playlist extraction/Max-Min/counters remain in **3A**, playlist ZIP and full disk/permission stress in **3B**, and engine/app update checks in **2D**. Installer packaging, other desktop platforms, and Android distribution are outside this checkpoint. The [Android distribution blocker](../../../STATE.md#release-blocker--android-distribution) remains open. The owner accepted this checkpoint on 2026-10-28.
