@@ -412,3 +412,8 @@ setup: `cargo fmt --manifest-path src-tauri/Cargo.toml`, followed by the Gate
 --test probation_queue`, `--test process_tree`, and `--test queue_lifecycle`.
 The [engine-update evidence](gates/evidence/2d/engine-update.md) records the
 official asset hash, local fixture behavior, native results, and limits.
+Foundation CI omits the ignored pinned binaries. To reproduce its fixture
+mode locally, set `ZOWNLOAD_TEST_NO_PINNED_ENGINE=1` for
+`cargo test --manifest-path src-tauri/Cargo.toml --test probation_queue`;
+the site-error and missing-baseline cases still run. With the binaries
+present, the same test also runs crash and malformed-JSON baseline retries.

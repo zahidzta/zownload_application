@@ -56,18 +56,25 @@ Manifest tests cover first launch, unchanged restart, updated restart,
 legacy fields, corrupt copy, interrupted directory replacement, app-version
 tool refresh, and numeric date-version order.
 
-The focused queue integration uses a crashing updated stub and verifies that
-the baseline is restored and the final notification comes from the single
-baseline retry. A stub that emits a normal `ERROR:` site failure leaves the
-updated copy in place and completes probation. Existing Windows process-tree
-and queue tests cover cancellation, close, pause, and `.part` ownership.
+The focused queue integration always uses a compiled updated stub and a
+synthetic app-data manifest. With the pinned binaries present, it verifies
+that a crash or malformed JSON restores the baseline and settles after one
+retry. Without those ignored binaries, it still verifies that a normal
+`ERROR:` site failure keeps the update and a missing baseline returns
+`engine_missing`. Existing Windows process-tree and queue tests cover
+cancellation, close, pause, and `.part` ownership.
 
 ## Verification and boundary
 
 On 2026-10-29 the exact Gate 2D V1 command passed: Rust formatting check,
 the full Rust test suite, and `cargo check`. `npm run check:contracts` passed.
 The focused `process_tree` and `queue_lifecycle` integrations passed; the
-full suite included the four-case `probation_queue` native integration. The
+full local suite included all four `probation_queue` scenarios. Foundation CI
+initially failed because `src-tauri/resources/windows-engine/` is ignored and
+absent on its runner. The follow-up test fixture uses local stubs for the two
+resource-independent scenarios there, while retaining the full pinned native
+run locally. A CI-like focused run with `ZOWNLOAD_TEST_NO_PINNED_ENGINE=1`
+passed, and the exact V1 command passed again with the pinned binaries. The
 initial Windows rename failures were fixed with a bounded retry and the
 final run passed. `engine_check_update`
 and `engine_update` remain the scheduled 2D-05 native/UI wiring task; this
