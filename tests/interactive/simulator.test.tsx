@@ -369,5 +369,14 @@ test('browser-backed mock storage round-trips and failed update stays typed', as
   await expect(first.call('engine_update', {})).rejects.toMatchObject({ code: 'no_internet' })
   const reloaded = createSimulatorTransport({ storage })
   expect(await reloaded.call('get_settings', {})).toEqual({ language: 'es', zipPlaylists: false, downloadDir: null })
-  expect(await reloaded.call('engine_check_update', {})).toMatchObject({ updateAvailable: true })
+  expect(await reloaded.call('engine_check_update', {})).toMatchObject({
+    updateAvailable: true, outcome: 'failed', failedVersion: '2026.10.23', manualRetryAvailable: true,
+  })
+  expect(await reloaded.call('engine_update', {})).toMatchObject({
+    updateAvailable: false, outcome: 'updated', current: '2026.10.23',
+  })
+  const afterRetry = createSimulatorTransport({ storage })
+  expect(await afterRetry.call('engine_check_update', {})).toMatchObject({
+    updateAvailable: false, outcome: 'current', current: '2026.10.23',
+  })
 })

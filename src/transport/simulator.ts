@@ -175,10 +175,15 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
   let nextQueueId = saved?.nextQueueId ?? 1
   let nextHistoryId = saved?.nextHistoryId ?? 1
   let engineVersion = saved?.engineVersion ?? '2026.10.01'
+  const failedEngineVersions = saved?.failedEngineVersions ?? []
+  const manualEngineRetries = saved?.manualEngineRetries ?? []
+  let pendingEngineVersion = saved?.pendingEngineVersion ?? null
+  const revertedEngineVersion = saved?.revertedEngineVersion ?? null
   const latestEngineVersion = '2026.10.23'
 
   function persist() {
-    storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId, engineVersion })
+    storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId, engineVersion,
+      failedEngineVersions, manualEngineRetries, pendingEngineVersion, revertedEngineVersion })
   }
 
   // A recreated transport models a process restart: interrupted work waits for Continue.
@@ -370,15 +375,31 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
         return undefined as Commands[K]['result']
       }
       if (command === 'engine_check_update' || command === 'engine_update') {
+        const failed = engineVersion !== latestEngineVersion && failedEngineVersions.includes(latestEngineVersion)
+        const retryAvailable = failed && !manualEngineRetries.includes(latestEngineVersion)
+        const info = (outcome: 'current' | 'available' | 'pending' | 'updated' | 'failed' | 'reverted') => ({
+          current: engineVersion,
+          latest: latestEngineVersion,
+          updateAvailable: engineVersion !== latestEngineVersion && (!failed || retryAvailable) && !pendingEngineVersion,
+          outcome,
+          ...(pendingEngineVersion ? { pendingVersion: pendingEngineVersion } : {}),
+          ...(revertedEngineVersion ? { revertedVersion: revertedEngineVersion } : {}),
+          ...(failed ? { failedVersion: latestEngineVersion, manualRetryAvailable: retryAvailable } : {}),
+        })
         if (command === 'engine_update') {
-          if (engineUpdateFails) throw syntheticError('no_internet', 'Mock engine update failed.')
+          if (failed && !retryAvailable) return info('failed') as Commands[K]['result']
+          if (failed) manualEngineRetries.push(latestEngineVersion)
+          if (engineUpdateFails) {
+            if (!failed) failedEngineVersions.push(latestEngineVersion)
+            persist()
+            throw syntheticError('no_internet', 'Mock engine update failed.')
+          }
           engineVersion = latestEngineVersion
+          pendingEngineVersion = null
           persist()
+          return info('updated') as Commands[K]['result']
         }
-        return {
-          current: engineVersion, latest: latestEngineVersion,
-          updateAvailable: engineVersion !== latestEngineVersion,
-        } as Commands[K]['result']
+        return info(failed ? 'failed' : engineVersion === latestEngineVersion ? 'current' : 'available') as Commands[K]['result']
       }
       if (command === 'dismiss_error_notification') {
         const { id } = args as Commands['dismiss_error_notification']['args']

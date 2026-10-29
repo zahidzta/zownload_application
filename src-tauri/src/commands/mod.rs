@@ -4,6 +4,8 @@
 #[cfg(any(test, not(target_os = "windows")))]
 use crate::contract::{ItemStatus, Progress};
 #[cfg(target_os = "windows")]
+use crate::engine::updater::ReleaseClient;
+#[cfg(target_os = "windows")]
 use crate::engine::{
     analysis,
     process::Supervisor,
@@ -12,8 +14,8 @@ use crate::engine::{
 };
 use crate::{
     contract::{
-        AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, ErrorCode, ErrorNotification,
-        Format, HistoryEntry, Quality, QueueItem, Settings,
+        AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, EngineUpdateOutcome, ErrorCode,
+        ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings,
     },
     persistence::Database,
 };
@@ -436,14 +438,93 @@ pub fn set_settings(
     })
 }
 
-#[tauri::command]
-pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
-    Err(deferred("engine update checks are scheduled for Stage 2D"))
+#[cfg(target_os = "windows")]
+fn engine_update_error(reason: String) -> AppError {
+    let lower = reason.to_ascii_lowercase();
+    let code = if lower.contains("http")
+        || lower.contains("request")
+        || lower.contains("connection")
+        || lower.contains("timed out")
+    {
+        ErrorCode::NoInternet
+    } else {
+        ErrorCode::Unknown
+    };
+    AppError::new(code, Some(reason))
 }
 
 #[tauri::command]
+#[cfg(target_os = "windows")]
+pub fn engine_check_update(
+    app: AppHandle,
+    engine: State<'_, EngineStatus>,
+) -> CommandResult<EngineUpdateInfo> {
+    ready_engine(engine.inner())?;
+    let data = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| AppError::new(ErrorCode::Unknown, Some(error.to_string())))?;
+    let client = ReleaseClient::official().map_err(engine_update_error)?;
+    let candidate = client.latest().map_err(engine_update_error)?;
+    client
+        .update_info(&data, &candidate.version)
+        .map_err(engine_update_error)
+}
+
+#[tauri::command]
+#[cfg(target_os = "windows")]
+pub fn engine_update(
+    app: AppHandle,
+    engine: State<'_, EngineStatus>,
+    queue: State<'_, Arc<QueueCoordinator>>,
+) -> CommandResult<EngineUpdateInfo> {
+    ready_engine(engine.inner())?;
+    let data = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| AppError::new(ErrorCode::Unknown, Some(error.to_string())))?;
+    let client = ReleaseClient::official().map_err(engine_update_error)?;
+    let candidate = client.latest().map_err(engine_update_error)?;
+    let status = client
+        .update_info(&data, &candidate.version)
+        .map_err(engine_update_error)?;
+    let previous = status.current.clone();
+    if status.pending_version.as_deref() == Some(candidate.version.as_str())
+        || !crate::engine::newer(&candidate.version, &status.current)
+        || (status.failed_version.is_some() && status.manual_retry_available == Some(false))
+    {
+        return Ok(status);
+    }
+    let staged = client
+        .update_manually(&data, &candidate)
+        .map_err(engine_update_error)?;
+    if !staged {
+        return Ok(status);
+    }
+    queue.kick()?;
+    let mut status = client
+        .update_info(&data, &candidate.version)
+        .map_err(engine_update_error)?;
+    if status.pending_version.is_none() && status.current != previous {
+        status.outcome = Some(EngineUpdateOutcome::Updated);
+    }
+    Ok(status)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
+    Err(deferred(
+        "engine updates are currently supported on Windows only",
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
 pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
-    Err(deferred("engine updates are scheduled for Stage 2D"))
+    Err(deferred(
+        "engine updates are currently supported on Windows only",
+    ))
 }
 
 #[cfg(test)]
@@ -613,11 +694,14 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        assert_eq!(
-            engine_check_update().unwrap_err().code,
-            ErrorCode::EngineMissing
-        );
-        assert_eq!(engine_update().unwrap_err().code, ErrorCode::EngineMissing);
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert_eq!(
+                engine_check_update().unwrap_err().code,
+                ErrorCode::EngineMissing
+            );
+            assert_eq!(engine_update().unwrap_err().code, ErrorCode::EngineMissing);
+        }
         drop(sink);
         drop(database);
         std::fs::remove_file(path).unwrap();

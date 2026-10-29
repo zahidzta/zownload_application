@@ -102,11 +102,26 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
             <div className="flex flex-wrap gap-compact">
               <Button label={engineBusy === 'checking' ? t(locale, 'settings.checking') : t(locale, 'settings.checkEngine')}
                 disabled={engineBusy !== null} onClick={() => { void flowStore.getState().checkEngineUpdate() }} className={actionClass} />
-              <Button label={engineBusy === 'updating' ? t(locale, 'settings.updating') : t(locale, 'settings.updateEngine')}
-                disabled={engineBusy !== null} onClick={() => { void flowStore.getState().updateEngine() }} className={actionClass} />
+              <Button label={engineBusy === 'updating' ? t(locale, 'settings.updating')
+                : engineInfo?.failedVersion && engineInfo.manualRetryAvailable
+                  ? t(locale, 'settings.retryEngine') : t(locale, 'settings.updateEngine')}
+                disabled={engineBusy !== null || (engineInfo?.failedVersion !== undefined && !engineInfo.manualRetryAvailable)}
+                onClick={() => { void flowStore.getState().updateEngine() }} className={actionClass} />
             </div>
-            {engineInfo && <p role="status" className="text-small">{t(locale, engineInfo.updateAvailable ? 'settings.engineAvailable' : 'settings.engineCurrent')}
-              {' '}{engineInfo.current}{engineInfo.updateAvailable ? ` → ${engineInfo.latest}` : ''}</p>}
+            {engineInfo && <p role="status" className="text-small">
+              {engineError ? t(locale, 'settings.engineFailed')
+                : engineInfo.outcome === 'updated' ? t(locale, 'settings.engineUpdated')
+                  : engineInfo.outcome === 'pending' || engineInfo.pendingVersion ? t(locale, 'settings.enginePending')
+                    : engineInfo.outcome === 'failed' || engineInfo.failedVersion ? engineInfo.manualRetryAvailable
+                      ? t(locale, 'settings.engineRetryAvailable') : t(locale, 'settings.engineRetryUsed')
+                      : engineInfo.outcome === 'reverted' || engineInfo.revertedVersion ? t(locale, 'settings.engineReverted')
+                        : engineInfo.outcome === 'available' || engineInfo.updateAvailable
+                          ? t(locale, 'settings.engineAvailable') : t(locale, 'settings.engineCurrent')}
+              {' '}{engineInfo.revertedVersion && <>{engineInfo.revertedVersion} → </>}
+              {engineInfo.failedVersion && <>{engineInfo.failedVersion} · </>}
+              {engineInfo.pendingVersion ?? engineInfo.current}
+              {engineInfo.updateAvailable && !engineInfo.failedVersion ? ` → ${engineInfo.latest}` : ''}
+            </p>}
             {engineError && <p role="alert" className="text-small text-danger">{t(locale, `errors.${engineError.code}`)}</p>}
           </section>
           <section aria-labelledby="settings-app-heading" className="space-y-compact border-t border-border pt-section">

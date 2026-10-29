@@ -65,7 +65,7 @@ test('Android hides folder selection and engine update remains separate from app
   await userEvent.setup().click(screen.getByRole('button', { name: 'Check engine update' }))
   await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Engine update available:'))
   await userEvent.setup().click(screen.getByRole('button', { name: 'Update engine' }))
-  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Engine is current:'))
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Engine update completed:'))
   expect(screen.getByRole('heading', { name: 'Zownload updates' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Update Zownload' })).toBeNull()
   userAgent.mockRestore()

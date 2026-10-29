@@ -12,6 +12,10 @@ export interface MockSnapshot {
   nextQueueId: number
   nextHistoryId: number
   engineVersion?: string
+  failedEngineVersions?: string[]
+  manualEngineRetries?: string[]
+  pendingEngineVersion?: string | null
+  revertedEngineVersion?: string | null
 }
 
 export interface MockStorage {

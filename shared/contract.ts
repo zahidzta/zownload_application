@@ -143,12 +143,17 @@ export interface Settings {
 
 // ───────────────────────── Engine updates ─────────────────────────
 
+export type EngineUpdateOutcome = 'current' | 'available' | 'pending' | 'updated' | 'failed' | 'reverted'
+
 export interface EngineUpdateInfo {
   current: string; // yt-dlp version in use
   latest: string;
   updateAvailable: boolean;
+  outcome?: EngineUpdateOutcome;
   pendingVersion?: string; // verified update waiting for an idle engine
   revertedVersion?: string; // update reverted after probation
+  failedVersion?: string; // latest release failed a health check or probation
+  manualRetryAvailable?: boolean; // one explicit retry remains for failedVersion
 }
 
 // ───────────────────────── Errors ─────────────────────────
