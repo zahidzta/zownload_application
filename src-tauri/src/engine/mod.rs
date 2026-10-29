@@ -16,6 +16,7 @@ pub mod analysis;
 pub mod process;
 pub mod queue;
 pub mod single;
+pub mod updater;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
 const YT_DLP_HASH: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
@@ -66,25 +67,35 @@ impl EnginePaths {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct EngineManifest {
+pub(crate) struct EngineManifest {
     yt_dlp: YtDlpManifest,
     baseline_app_version: String,
+    #[serde(default)]
     failed_versions: Vec<String>,
+    #[serde(default)]
     last_update_check: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pending_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reverted_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pending_sha256: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct YtDlpManifest {
+pub(crate) struct YtDlpManifest {
     version: String,
     source: String,
     state: String,
     installed_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
 }
 
-fn hash_file(path: &Path) -> Result<String, String> {
+pub(crate) fn hash_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut hash = Sha256::new();
     let mut chunk = [0u8; 64 * 1024];
@@ -127,8 +138,25 @@ fn probe(path: &Path, args: &[&str], expected: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn health_check(paths: &EnginePaths) -> Result<(), String> {
-    probe(&paths.yt_dlp, &["--version"], YT_DLP_VERSION)?;
+fn probe_version(path: &Path, expected: &str) -> Result<(), String> {
+    let supervisor = process::Supervisor::install().map_err(|error| error.to_string())?;
+    let output = supervisor
+        .run(
+            path,
+            &["--version".into()],
+            PROBE_TIMEOUT,
+            4096,
+            &AtomicBool::new(false),
+        )
+        .map_err(|error| format!("yt-dlp version probe failed: {error}"))?;
+    if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != expected {
+        return Err(format!("yt-dlp version probe did not report {expected}"));
+    }
+    Ok(())
+}
+
+fn health_check(paths: &EnginePaths, version: &str) -> Result<(), String> {
+    probe_version(&paths.yt_dlp, version)?;
     probe(&paths.ffmpeg, &["-version"], "ffmpeg version 8.1.3")?;
     probe(
         &paths.quickjs,
@@ -137,17 +165,69 @@ fn health_check(paths: &EnginePaths) -> Result<(), String> {
     )
 }
 
-fn valid_manifest(path: &Path, app_version: &str) -> bool {
-    let Ok(bytes) = fs::read(path) else {
+pub(crate) fn read_manifest(data: &Path) -> Result<EngineManifest, String> {
+    let path = data.join("engine/engine.json");
+    let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+    serde_json::from_slice(&bytes).map_err(|error| error.to_string())
+}
+
+pub(crate) fn write_manifest(data: &Path, manifest: &EngineManifest) -> Result<(), String> {
+    let path = data.join("engine/engine.json");
+    let temp = data.join("engine/engine.json.tmp");
+    let mut file = File::create(&temp).map_err(|error| error.to_string())?;
+    serde_json::to_writer_pretty(&mut file, manifest).map_err(|error| error.to_string())?;
+    file.write_all(b"\n").map_err(|error| error.to_string())?;
+    file.sync_all().map_err(|error| error.to_string())?;
+    drop(file);
+    fs::rename(&temp, &path).map_err(|error| error.to_string())
+}
+
+fn version_parts(value: &str) -> Option<Vec<u32>> {
+    let parts = value
+        .split('.')
+        .map(str::parse::<u32>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    (parts.len() == 3).then_some(parts)
+}
+
+pub(crate) fn newer(left: &str, right: &str) -> bool {
+    match (version_parts(left), version_parts(right)) {
+        (Some(left), Some(right)) => left > right,
+        _ => false,
+    }
+}
+
+fn active_is_healthy(
+    paths: &EnginePaths,
+    manifest: &EngineManifest,
+    hashes: &Hashes<'_>,
+    check: &impl Fn(&EnginePaths, &str) -> Result<(), String>,
+) -> bool {
+    yt_is_verified(paths, manifest, hashes)
+        && hash_file(&paths.ffmpeg).is_ok_and(|hash| hash == hashes.ffmpeg)
+        && hash_file(&paths.quickjs).is_ok_and(|hash| hash == hashes.quickjs)
+        && check(paths, &manifest.yt_dlp.version).is_ok()
+}
+
+fn yt_is_verified(paths: &EnginePaths, manifest: &EngineManifest, hashes: &Hashes<'_>) -> bool {
+    if !matches!(manifest.yt_dlp.source.as_str(), "bundled" | "updated")
+        || !matches!(manifest.yt_dlp.state.as_str(), "good" | "probation")
+    {
         return false;
+    }
+    let expected = if manifest.yt_dlp.source == "bundled" {
+        if manifest.yt_dlp.version != YT_DLP_VERSION {
+            return false;
+        }
+        hashes.yt_dlp
+    } else {
+        match manifest.yt_dlp.sha256.as_deref() {
+            Some(hash) if hash.len() == 64 => hash,
+            _ => return false,
+        }
     };
-    let Ok(manifest) = serde_json::from_slice::<EngineManifest>(&bytes) else {
-        return false;
-    };
-    manifest.baseline_app_version == app_version
-        && manifest.yt_dlp.version == YT_DLP_VERSION
-        && manifest.yt_dlp.source == "bundled"
-        && manifest.yt_dlp.state == "good"
+    hash_file(&paths.yt_dlp).is_ok_and(|hash| hash == expected)
 }
 
 fn make_manifest(app_version: &str) -> Result<EngineManifest, String> {
@@ -160,11 +240,35 @@ fn make_manifest(app_version: &str) -> Result<EngineManifest, String> {
             source: "bundled".to_owned(),
             state: "good".to_owned(),
             installed_at,
+            sha256: None,
         },
         baseline_app_version: app_version.to_owned(),
         failed_versions: Vec::new(),
         last_update_check: None,
+        pending_version: None,
+        reverted_version: None,
+        pending_sha256: None,
     })
+}
+
+fn clean_orphaned_stages(data: &Path) {
+    let root = fs::canonicalize(data).ok();
+    if let Ok(entries) = fs::read_dir(data) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if (name.starts_with(".engine-stage-") || name.starts_with(".engine-backup-"))
+                && entry
+                    .file_type()
+                    .is_ok_and(|kind| kind.is_dir() && !kind.is_symlink())
+                && root.as_ref().is_some_and(|root| {
+                    fs::canonicalize(entry.path()).is_ok_and(|target| target.starts_with(root))
+                })
+            {
+                let _ = fs::remove_dir_all(entry.path());
+            }
+        }
+    }
 }
 
 fn prepare_with(
@@ -172,16 +276,38 @@ fn prepare_with(
     data: &Path,
     app_version: &str,
     hashes: &Hashes<'_>,
-    check: impl Fn(&EnginePaths) -> Result<(), String>,
+    check: impl Fn(&EnginePaths, &str) -> Result<(), String>,
     promote: impl Fn(&Path, &Path) -> std::io::Result<()>,
 ) -> Result<EnginePaths, String> {
     fs::create_dir_all(data).map_err(|error| error.to_string())?;
     let active = data.join("engine");
+    // A crash between the two directory renames leaves only the previous set.
+    if !active.exists() {
+        let mut backups = fs::read_dir(data)
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with(".engine-backup-"))
+            })
+            .collect::<Vec<_>>();
+        backups.sort_by_key(|path| fs::metadata(path).and_then(|meta| meta.modified()).ok());
+        if let Some(previous) = backups.pop() {
+            fs::rename(previous, &active).map_err(|error| error.to_string())?;
+        }
+    }
     let active_paths = EnginePaths::in_dir(&active);
-    if valid_manifest(&active.join("engine.json"), app_version)
-        && verify_files(&active_paths, hashes).is_ok()
-        && check(&active_paths).is_ok()
+    let previous = read_manifest(data).ok();
+    let healthy = previous
+        .as_ref()
+        .is_some_and(|manifest| active_is_healthy(&active_paths, manifest, hashes, &check));
+    if healthy
+        && previous
+            .as_ref()
+            .is_some_and(|manifest| manifest.baseline_app_version == app_version)
     {
+        clean_orphaned_stages(data);
         return Ok(active_paths);
     }
 
@@ -201,9 +327,62 @@ fn prepare_with(
         {
             fs::copy(source, destination).map_err(|error| error.to_string())?;
         }
-        verify_files(&staged_paths, hashes)?;
-        check(&staged_paths)?;
-        let manifest = make_manifest(app_version)?;
+        let mut manifest = previous.clone().unwrap_or(make_manifest(app_version)?);
+        let retain_updated = previous
+            .as_ref()
+            .is_some_and(|old| yt_is_verified(&active_paths, old, hashes))
+            && manifest.yt_dlp.source == "updated"
+            && !newer(YT_DLP_VERSION, &manifest.yt_dlp.version);
+        if retain_updated {
+            fs::copy(&active_paths.yt_dlp, &staged_paths.yt_dlp)
+                .map_err(|error| error.to_string())?;
+        } else {
+            if manifest.yt_dlp.source == "updated" && !healthy {
+                manifest
+                    .failed_versions
+                    .push(manifest.yt_dlp.version.clone());
+                manifest.reverted_version = Some(manifest.yt_dlp.version.clone());
+            }
+            manifest.yt_dlp = make_manifest(app_version)?.yt_dlp;
+        }
+        manifest.baseline_app_version = app_version.to_owned();
+        if manifest.pending_version.is_some() {
+            let pending = active.join("staging/candidate.exe");
+            if pending.is_file()
+                && manifest
+                    .pending_sha256
+                    .as_deref()
+                    .is_some_and(|hash| hash_file(&pending).is_ok_and(|actual| actual == hash))
+            {
+                fs::create_dir(stage.join("staging")).map_err(|error| error.to_string())?;
+                fs::copy(pending, stage.join("staging/candidate.exe"))
+                    .map_err(|error| error.to_string())?;
+            } else {
+                manifest.pending_version = None;
+                manifest.pending_sha256 = None;
+            }
+        }
+        if !retain_updated {
+            verify_files(&staged_paths, hashes)?;
+        } else {
+            let expected = manifest
+                .yt_dlp
+                .sha256
+                .as_deref()
+                .ok_or("updated hash missing")?;
+            if hash_file(&staged_paths.yt_dlp)? != expected {
+                return Err("updated copy changed during staging".into());
+            }
+            for (path, hash) in [
+                (&staged_paths.ffmpeg, hashes.ffmpeg),
+                (&staged_paths.quickjs, hashes.quickjs),
+            ] {
+                if hash_file(path)? != hash {
+                    return Err("baseline tool checksum mismatch".into());
+                }
+            }
+        }
+        check(&staged_paths, &manifest.yt_dlp.version)?;
         let mut file =
             File::create(stage.join("engine.json")).map_err(|error| error.to_string())?;
         serde_json::to_writer_pretty(&mut file, &manifest).map_err(|error| error.to_string())?;
@@ -213,11 +392,11 @@ fn prepare_with(
         drop(file);
 
         if active.exists() {
-            fs::rename(&active, &backup).map_err(|error| error.to_string())?;
+            updater::rename_after_probe(&active, &backup).map_err(|error| error.to_string())?;
         }
         if let Err(error) = promote(&stage, &active) {
             if backup.exists() {
-                fs::rename(&backup, &active).map_err(|rollback| {
+                updater::rename_after_probe(&backup, &active).map_err(|rollback| {
                     format!("activation failed: {error}; rollback failed: {rollback}")
                 })?;
             }
@@ -241,7 +420,7 @@ pub fn bootstrap(resources: &Path, data: &Path, app_version: &str) -> EngineStat
         app_version,
         &BASELINE_HASHES,
         health_check,
-        |from, to| fs::rename(from, to),
+        updater::rename_after_probe,
     ) {
         Ok(paths) => EngineStatus::Ready(paths),
         Err(reason) => EngineStatus::Unavailable(reason),
@@ -297,7 +476,7 @@ mod tests {
                 &self.data,
                 version,
                 &self.hashes(),
-                |paths| {
+                |paths, _| {
                     assert!(paths.yt_dlp.starts_with(&self.data));
                     assert!(paths.ffmpeg.starts_with(&self.data));
                     assert!(paths.quickjs.starts_with(&self.data));
@@ -380,7 +559,7 @@ mod tests {
             &fixture.data,
             "0.0.2",
             &fixture.hashes(),
-            |_| Err("probe rejected candidate".into()),
+            |_, _| Err("probe rejected candidate".into()),
             |from, to| fs::rename(from, to),
         );
         assert!(result.unwrap_err().contains("probe rejected"));
@@ -406,7 +585,7 @@ mod tests {
             &fixture.data,
             "0.0.2",
             &fixture.hashes(),
-            |_| Ok(()),
+            |_, _| Ok(()),
             |_, _| Err(std::io::Error::other("simulated rename failure")),
         );
         assert!(result.unwrap_err().contains("activation failed"));
@@ -415,6 +594,149 @@ mod tests {
             before
         );
         assert_eq!(fs::read_dir(&fixture.data).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn healthy_updated_copy_and_manifest_survive_restart_and_app_refresh() {
+        let fixture = Fixture::new();
+        let paths = fixture.prepare("0.0.1").unwrap();
+        fs::write(&paths.yt_dlp, b"updated yt-dlp stub").unwrap();
+        let mut manifest = read_manifest(&fixture.data).unwrap();
+        manifest.yt_dlp.version = "2026.10.21".into();
+        manifest.yt_dlp.source = "updated".into();
+        manifest.yt_dlp.state = "probation".into();
+        manifest.yt_dlp.sha256 = Some(hash_file(&paths.yt_dlp).unwrap());
+        manifest.failed_versions = vec!["2026.09.10".into()];
+        manifest.last_update_check = Some("2026-10-28T10:00:00Z".into());
+        write_manifest(&fixture.data, &manifest).unwrap();
+        fixture.prepare("0.0.1").unwrap();
+        assert_eq!(fs::read(&paths.yt_dlp).unwrap(), b"updated yt-dlp stub");
+        fixture.prepare("0.0.2").unwrap();
+        let restored = read_manifest(&fixture.data).unwrap();
+        assert_eq!(restored.yt_dlp.version, "2026.10.21");
+        assert_eq!(restored.yt_dlp.state, "probation");
+        assert_eq!(restored.failed_versions, manifest.failed_versions);
+        assert_eq!(restored.last_update_check, manifest.last_update_check);
+        assert_eq!(restored.baseline_app_version, "0.0.2");
+        assert_eq!(fs::read(&paths.yt_dlp).unwrap(), b"updated yt-dlp stub");
+    }
+
+    #[test]
+    fn app_refresh_replaces_changed_tools_without_downgrading_updated_ytdlp() {
+        let mut fixture = Fixture::new();
+        let paths = fixture.prepare("0.0.1").unwrap();
+        fs::write(&paths.yt_dlp, b"updated yt-dlp stub").unwrap();
+        let mut manifest = read_manifest(&fixture.data).unwrap();
+        manifest.yt_dlp.version = "2026.10.21".into();
+        manifest.yt_dlp.source = "updated".into();
+        manifest.yt_dlp.sha256 = Some(hash_file(&paths.yt_dlp).unwrap());
+        write_manifest(&fixture.data, &manifest).unwrap();
+        let resources = EnginePaths::in_dir(&fixture.resources);
+        fs::write(&resources.ffmpeg, b"new ffmpeg").unwrap();
+        fs::write(&resources.quickjs, b"new quickjs").unwrap();
+        fixture.hashes[1] = hash_file(&resources.ffmpeg).unwrap();
+        fixture.hashes[2] = hash_file(&resources.quickjs).unwrap();
+        fixture.prepare("0.0.2").unwrap();
+        assert_eq!(fs::read(&paths.yt_dlp).unwrap(), b"updated yt-dlp stub");
+        assert_eq!(fs::read(&paths.ffmpeg).unwrap(), b"new ffmpeg");
+        assert_eq!(fs::read(&paths.quickjs).unwrap(), b"new quickjs");
+    }
+
+    #[test]
+    fn bundled_date_version_wins_only_when_newer_than_active_update() {
+        for (active_version, expected_source) in [
+            ("2026.07.04", "bundled"),
+            (YT_DLP_VERSION, "updated"),
+            ("2026.10.21", "updated"),
+        ] {
+            let fixture = Fixture::new();
+            let paths = fixture.prepare("0.0.1").unwrap();
+            fs::write(&paths.yt_dlp, b"updated yt-dlp stub").unwrap();
+            let mut manifest = read_manifest(&fixture.data).unwrap();
+            manifest.yt_dlp.version = active_version.into();
+            manifest.yt_dlp.source = "updated".into();
+            manifest.yt_dlp.sha256 = Some(hash_file(&paths.yt_dlp).unwrap());
+            write_manifest(&fixture.data, &manifest).unwrap();
+            fixture.prepare("0.0.2").unwrap();
+            assert_eq!(
+                read_manifest(&fixture.data).unwrap().yt_dlp.source,
+                expected_source,
+                "active version {active_version}"
+            );
+        }
+    }
+
+    #[test]
+    fn verified_pending_candidate_survives_app_version_refresh() {
+        let fixture = Fixture::new();
+        fixture.prepare("0.0.1").unwrap();
+        let staging = fixture.data.join("engine/staging");
+        fs::create_dir_all(&staging).unwrap();
+        let candidate = staging.join("candidate.exe");
+        fs::write(&candidate, b"pending update").unwrap();
+        let mut manifest = read_manifest(&fixture.data).unwrap();
+        manifest.pending_version = Some("2026.10.21".into());
+        manifest.pending_sha256 = Some(hash_file(&candidate).unwrap());
+        write_manifest(&fixture.data, &manifest).unwrap();
+        fixture.prepare("0.0.2").unwrap();
+        assert_eq!(fs::read(&candidate).unwrap(), b"pending update");
+        assert_eq!(
+            read_manifest(&fixture.data)
+                .unwrap()
+                .pending_version
+                .as_deref(),
+            Some("2026.10.21")
+        );
+    }
+
+    #[test]
+    fn legacy_manifest_and_interrupted_directory_swap_recover() {
+        let fixture = Fixture::new();
+        fixture.prepare("0.0.1").unwrap();
+        let manifest_path = fixture.data.join("engine/engine.json");
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("pendingVersion");
+        value.as_object_mut().unwrap().remove("revertedVersion");
+        value.as_object_mut().unwrap().remove("pendingSha256");
+        fs::write(&manifest_path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let backup = fixture.data.join(".engine-backup-interrupted");
+        fs::rename(fixture.data.join("engine"), &backup).unwrap();
+        let orphan = fixture.data.join(".engine-stage-orphan");
+        fs::create_dir(&orphan).unwrap();
+        fixture.prepare("0.0.1").unwrap();
+        assert!(fixture.data.join("engine/engine.json").exists());
+        assert!(!backup.exists());
+        assert!(!orphan.exists());
+    }
+
+    #[test]
+    fn corrupt_updated_copy_reverts_without_losing_failed_versions_or_clock() {
+        let fixture = Fixture::new();
+        let paths = fixture.prepare("0.0.1").unwrap();
+        let mut manifest = read_manifest(&fixture.data).unwrap();
+        manifest.yt_dlp.version = "2026.10.21".into();
+        manifest.yt_dlp.source = "updated".into();
+        manifest.yt_dlp.sha256 = Some("a".repeat(64));
+        manifest.failed_versions.push("2026.09.10".into());
+        manifest.last_update_check = Some("2026-10-28T10:00:00Z".into());
+        write_manifest(&fixture.data, &manifest).unwrap();
+        fs::write(&paths.yt_dlp, b"bad updated copy").unwrap();
+        fixture.prepare("0.0.1").unwrap();
+        let restored = read_manifest(&fixture.data).unwrap();
+        assert_eq!(restored.yt_dlp.source, "bundled");
+        assert!(restored.failed_versions.contains(&"2026.10.21".into()));
+        assert!(restored.failed_versions.contains(&"2026.09.10".into()));
+        assert_eq!(restored.last_update_check, manifest.last_update_check);
+        verify_files(&paths, &fixture.hashes()).unwrap();
+    }
+
+    #[test]
+    fn date_versions_are_compared_numerically() {
+        assert!(newer("2026.10.01", "2026.09.30"));
+        assert!(!newer("2026.08.19", "2026.08.19"));
+        assert!(!newer("2026.07.04", "2026.08.19"));
+        assert!(!newer("malformed", "2026.08.19"));
     }
 
     #[test]

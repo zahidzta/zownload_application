@@ -92,16 +92,51 @@ pub fn analyze(
     input: &str,
     cancel: &AtomicBool,
 ) -> Result<AnalyzeResult, AppError> {
-    let url = input.trim();
-    let parsed = parsed_url(url)?;
-    let args = arguments(paths, url, mode_for_url(&parsed));
-    let output = supervisor
-        .run(&paths.yt_dlp, &args, ANALYSIS_TIMEOUT, OUTPUT_LIMIT, cancel)
-        .map_err(process_error)?;
-    if !output.status.success() {
-        return Err(extraction_error(&output.stderr, output.status.code()));
-    }
-    parse_result(url, &output.stdout)
+    analyze_classified(paths, supervisor, input, cancel).0
+}
+
+pub(crate) fn analyze_classified(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    input: &str,
+    cancel: &AtomicBool,
+) -> (Result<AnalyzeResult, AppError>, bool) {
+    let mut broken = false;
+    let result = (|| {
+        let url = input.trim();
+        let parsed = parsed_url(url)?;
+        let args = arguments(paths, url, mode_for_url(&parsed));
+        let output = supervisor
+            .run(&paths.yt_dlp, &args, ANALYSIS_TIMEOUT, OUTPUT_LIMIT, cancel)
+            .map_err(|error| {
+                broken = run_failure_is_breakage(&error);
+                process_error(error)
+            })?;
+        if !output.status.success() {
+            broken = nonzero_is_breakage(output.status.code(), &output.stderr);
+            return Err(extraction_error(&output.stderr, output.status.code()));
+        }
+        if serde_json::from_slice::<Value>(&output.stdout).is_err() {
+            broken = true;
+        }
+        parse_result(url, &output.stdout)
+    })();
+    (result, broken)
+}
+
+pub(crate) fn reported_site_error(stderr: &[u8]) -> bool {
+    String::from_utf8_lossy(stderr).lines().any(|line| {
+        let line = line.trim_start();
+        line.starts_with("ERROR:") || line.starts_with("WARNING:")
+    })
+}
+
+pub(crate) fn nonzero_is_breakage(code: Option<i32>, stderr: &[u8]) -> bool {
+    code.is_none_or(|code| code < 0) || !reported_site_error(stderr)
+}
+
+pub(crate) fn run_failure_is_breakage(error: &RunError) -> bool {
+    !matches!(error, RunError::Cancelled)
 }
 
 fn process_error(error: RunError) -> AppError {
@@ -340,6 +375,21 @@ mod tests {
     const SINGLE_URL: &str = "https://www.youtube.com/watch?v=uW13KuRrg1g";
     const PLAYLIST_URL: &str = "https://www.youtube.com/playlist?list=PL6B3937A5D230E335";
     const MIXED_URL: &str = "https://www.youtube.com/watch?v=u9lj-c29dxI&list=PL6B3937A5D230E335";
+
+    #[test]
+    fn probation_distinguishes_process_breakage_from_reported_site_errors() {
+        assert!(nonzero_is_breakage(Some(7), b"plain crash"));
+        assert!(nonzero_is_breakage(None, b"ERROR: unavailable"));
+        assert!(nonzero_is_breakage(Some(-1), b"WARNING: crash"));
+        assert!(!nonzero_is_breakage(Some(2), b"ERROR: HTTP Error 403"));
+        assert!(!nonzero_is_breakage(Some(2), b"WARNING: network issue"));
+        assert!(run_failure_is_breakage(&RunError::Io(
+            std::io::Error::from(std::io::ErrorKind::NotFound)
+        )));
+        assert!(run_failure_is_breakage(&RunError::TimedOut));
+        assert!(run_failure_is_breakage(&RunError::OutputLimit));
+        assert!(!run_failure_is_breakage(&RunError::Cancelled));
+    }
 
     #[test]
     fn gate_0b_single_has_real_video_heights_and_fixed_audio_maxima() {

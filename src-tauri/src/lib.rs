@@ -52,6 +52,7 @@ pub fn run() {
                         ready,
                         supervisor,
                         data,
+                        Some(resources),
                         app.path().download_dir()?,
                         commands::queue_sink(app.handle().clone()),
                     );

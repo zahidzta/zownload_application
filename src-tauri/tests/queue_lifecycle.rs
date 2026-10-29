@@ -72,6 +72,7 @@ fn sequential_pause_resume_settlement_and_close_are_durable() {
         }),
         Supervisor::install().unwrap(),
         root.join("app-data"),
+        None,
         root.join("Downloads"),
         Arc::new(move |event| {
             let snapshot = sink_db.lock().unwrap();

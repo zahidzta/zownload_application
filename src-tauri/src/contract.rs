@@ -252,6 +252,10 @@ pub struct EngineUpdateInfo {
     pub current: String,
     pub latest: String,
     pub update_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverted_version: Option<String>,
 }
 
 // ───────────────────────── Errors ─────────────────────────
@@ -290,6 +294,23 @@ impl AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn update_status_additions_are_optional_and_camel_case() {
+        let legacy: EngineUpdateInfo = serde_json::from_value(serde_json::json!({
+            "current": "2026.08.19", "latest": "2026.10.26", "updateAvailable": true
+        }))
+        .unwrap();
+        assert!(legacy.pending_version.is_none());
+        let status = EngineUpdateInfo {
+            pending_version: Some("2026.10.26".into()),
+            reverted_version: Some("2026.10.21".into()),
+            ..legacy
+        };
+        let value = serde_json::to_value(status).unwrap();
+        assert_eq!(value["pendingVersion"], "2026.10.26");
+        assert_eq!(value["revertedVersion"], "2026.10.21");
+    }
 
     #[test]
     fn request_serializes_with_the_frontend_contract_shape() {

@@ -147,6 +147,8 @@ export interface EngineUpdateInfo {
   current: string; // yt-dlp version in use
   latest: string;
   updateAvailable: boolean;
+  pendingVersion?: string; // verified update waiting for an idle engine
+  revertedVersion?: string; // update reverted after probation
 }
 
 // ───────────────────────── Errors ─────────────────────────
