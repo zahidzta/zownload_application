@@ -391,3 +391,29 @@ media fixture, run logs, and temporary database backup are under ignored
 `work/engine/2c-04/`; only the reviewed captures are committed. See the
 [2C-04 native review](gates/evidence/2c/native-downloads.md) for outputs and
 lifecycle observations.
+
+## Gate 2D-02 through 2D-04 Windows updater setup
+
+The approved HTTPS client is pinned as `reqwest = 0.13.5` with `blocking` and
+`rustls` features in `src-tauri/Cargo.toml`; Cargo updated `Cargo.lock` when the
+direct dependency was added. No separate installer or service was needed.
+Context7 was queried for reqwest, Serde, and Tauri documentation but returned
+`Monthly quota exceeded`; the implementation used the current official
+[reqwest blocking client](https://docs.rs/reqwest/0.13.5/reqwest/blocking/),
+[redirect policy](https://docs.rs/reqwest/0.13.5/reqwest/redirect/struct.Policy.html),
+and [Serde field attributes](https://serde.rs/field-attrs.html) documentation.
+
+The local update fixture binds `127.0.0.1` on an OS-assigned port and serves
+`/latest`, `/SHA2-256SUMS`, and `/yt-dlp.exe`. The Windows activation and
+fallback tests use the existing pinned `src-tauri/resources/windows-engine`
+files and compile a local yt-dlp stub with the installed Rust toolchain. Exact
+setup: `cargo fmt --manifest-path src-tauri/Cargo.toml`, followed by the Gate
+2D V1 command and focused `cargo test --manifest-path src-tauri/Cargo.toml
+--test probation_queue`, `--test process_tree`, and `--test queue_lifecycle`.
+The [engine-update evidence](gates/evidence/2d/engine-update.md) records the
+official asset hash, local fixture behavior, native results, and limits.
+Foundation CI omits the ignored pinned binaries. To reproduce its fixture
+mode locally, set `ZOWNLOAD_TEST_NO_PINNED_ENGINE=1` for
+`cargo test --manifest-path src-tauri/Cargo.toml --test probation_queue`;
+the site-error and missing-baseline cases still run. With the binaries
+present, the same test also runs crash and malformed-JSON baseline retries.

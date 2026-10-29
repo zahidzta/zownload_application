@@ -666,6 +666,23 @@ pub fn run_single(
     observe: Arc<dyn Fn(Observation) + Send + Sync>,
     persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
 ) -> Result<Completed, AppError> {
+    run_single_classified(
+        paths, supervisor, disk, app_data, queue_id, request, cancel, observe, persist, &mut false,
+    )
+}
+
+pub(crate) fn run_single_classified(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    disk: &mut DownloadPaths,
+    app_data: &Path,
+    queue_id: &str,
+    request: &DownloadRequest,
+    cancel: &AtomicBool,
+    observe: Arc<dyn Fn(Observation) + Send + Sync>,
+    persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
+    broken: &mut bool,
+) -> Result<Completed, AppError> {
     valid_request(request)?;
     ensure_work_dir(disk, app_data, queue_id)?;
     if disk.reserved_path.is_some() {
@@ -681,9 +698,16 @@ pub fn run_single(
                 PROBE_LIMIT,
                 cancel,
             )
-            .map_err(run_error)?;
+            .map_err(|error| {
+                *broken = analysis::run_failure_is_breakage(&error);
+                run_error(error)
+            })?;
         if !metadata.status.success() {
+            *broken = analysis::nonzero_is_breakage(metadata.status.code(), &metadata.stderr);
             return Err(download_failure(&metadata.stderr, metadata.status.code()));
+        }
+        if serde_json::from_slice::<serde_json::Value>(&metadata.stdout).is_err() {
+            *broken = true;
         }
         let mut source = source_from_json(&metadata.stdout)?;
         observe(Observation::Title(source.title.clone()));
@@ -714,8 +738,12 @@ pub fn run_single(
                 cancel,
                 sink,
             )
-            .map_err(run_error)?;
+            .map_err(|error| {
+                *broken = analysis::run_failure_is_breakage(&error);
+                run_error(error)
+            })?;
         if !result.status.success() {
+            *broken = analysis::nonzero_is_breakage(result.status.code(), &result.stderr);
             return Err(download_failure(&result.stderr, result.status.code()));
         }
         observe(Observation::PostProcessing);
@@ -777,13 +805,15 @@ pub fn run_single(
             selected_height: height,
         })
     })();
-    if matches!(
-        &result,
-        Err(AppError {
-            code: ErrorCode::DiskFull | ErrorCode::PermissionDenied,
-            ..
-        })
-    ) {
+    if !*broken
+        && matches!(
+            &result,
+            Err(AppError {
+                code: ErrorCode::DiskFull | ErrorCode::PermissionDenied,
+                ..
+            })
+        )
+    {
         // A failed output cannot be resumed safely; remove only this id's files.
         let _ = disk.clean_owned(app_data);
     }

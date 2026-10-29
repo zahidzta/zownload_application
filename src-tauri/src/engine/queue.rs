@@ -4,7 +4,7 @@
 //! One Windows media worker at a time. The control lock orders user actions,
 //! phase changes and terminal settlement; SQLite commits precede every event.
 
-use super::{process::Supervisor, single, EnginePaths};
+use super::{process::Supervisor, single, updater, EnginePaths};
 use crate::{
     contract::{AppError, DownloadRequest, ErrorCode, ItemStatus, Progress, QueueItem},
     persistence::{notifications::TerminalOutcome, paths::DownloadPaths, Database},
@@ -54,6 +54,7 @@ pub struct QueueCoordinator {
     engine: Option<EnginePaths>,
     supervisor: Arc<Supervisor>,
     app_data: PathBuf,
+    resources: Option<PathBuf>,
     downloads: PathBuf,
     emit: Emit,
     control: Mutex<Control>,
@@ -69,6 +70,7 @@ impl QueueCoordinator {
         engine: Option<EnginePaths>,
         supervisor: Arc<Supervisor>,
         app_data: PathBuf,
+        resources: Option<PathBuf>,
         downloads: PathBuf,
         emit: Emit,
     ) -> Arc<Self> {
@@ -77,6 +79,7 @@ impl QueueCoordinator {
             engine,
             supervisor,
             app_data,
+            resources,
             downloads,
             emit,
             control: Mutex::new(Control::default()),
@@ -181,6 +184,11 @@ impl QueueCoordinator {
         if control.closing || control.active.is_some() || self.engine.is_none() {
             return Ok(());
         }
+        if self.app_data.join("engine/engine.json").exists() {
+            if let Err(error) = updater::activate_pending(&self.app_data) {
+                eprintln!("pending yt-dlp activation deferred: {error}");
+            }
+        }
         // Paused work needs an explicit Continue. Playlist rows do not block singles.
         let next = self
             .db()?
@@ -272,24 +280,76 @@ impl QueueCoordinator {
             )));
             let observe_self = Arc::clone(&self);
             let observed_id = id.clone();
-            let observe =
+            let observe: Arc<dyn Fn(single::Observation) + Send + Sync> =
                 Arc::new(move |signal| observe_self.observe(&observed_id, signal, &clock));
             let mut persist = |record: &DownloadPaths| {
                 self.db()?
                     .put_download_paths(record)
                     .map_err(|error| failure(error.to_string()))
             };
-            let result = single::run_single(
-                engine,
-                &self.supervisor,
-                &mut disk,
-                &self.app_data,
-                &id,
-                &item.request,
-                &cancel,
-                observe,
-                &mut persist,
-            );
+            let result = match updater::begin_invocation(&self.app_data) {
+                Ok((read_lease, _probation_guard, probation)) => {
+                    let mut broken = false;
+                    let first = single::run_single_classified(
+                        engine,
+                        &self.supervisor,
+                        &mut disk,
+                        &self.app_data,
+                        &id,
+                        &item.request,
+                        &cancel,
+                        Arc::clone(&observe),
+                        &mut persist,
+                        &mut broken,
+                    );
+                    if broken && !cancel.load(Ordering::SeqCst) && probation.is_some() {
+                        drop(read_lease);
+                        let fallback = match updater::slot().write() {
+                            Ok(write_lease) => self.resources.as_ref().map(|resources| {
+                                updater::restore_baseline_locked(
+                                    &self.app_data,
+                                    resources,
+                                    probation.as_deref().unwrap(),
+                                    &write_lease,
+                                )
+                            }),
+                            Err(_) => Some(Err("engine slot poisoned".into())),
+                        };
+                        match fallback {
+                            Some(Ok(_)) => {
+                                let mut second_broken = false;
+                                match updater::slot().read() {
+                                    Ok(_retry_lease) => single::run_single_classified(
+                                        engine,
+                                        &self.supervisor,
+                                        &mut disk,
+                                        &self.app_data,
+                                        &id,
+                                        &item.request,
+                                        &cancel,
+                                        observe,
+                                        &mut persist,
+                                        &mut second_broken,
+                                    ),
+                                    Err(_) => Err(failure("engine slot poisoned")),
+                                }
+                            }
+                            Some(Err(reason)) => {
+                                Err(AppError::new(ErrorCode::EngineMissing, Some(reason)))
+                            }
+                            None => first,
+                        }
+                    } else {
+                        if !broken && !cancel.load(Ordering::SeqCst) {
+                            if let Some(version) = probation.as_deref() {
+                                let _ = updater::mark_good(&self.app_data, version);
+                            }
+                        }
+                        first
+                    }
+                }
+                Err(reason) => Err(failure(reason)),
+            };
             (result, Some(disk))
         } else {
             (

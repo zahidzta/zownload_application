@@ -8,7 +8,7 @@ use crate::engine::{
     analysis,
     process::Supervisor,
     queue::{QueueCoordinator, QueueEvent},
-    EnginePaths, EngineStatus,
+    updater, EnginePaths, EngineStatus,
 };
 use crate::{
     contract::{
@@ -237,9 +237,46 @@ pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeRe
             .try_state::<Arc<Supervisor>>()
             .ok_or_else(|| deferred("Windows process supervisor is unavailable"))?;
         let supervisor = Arc::clone(supervisor.inner());
+        let data = paths
+            .yt_dlp
+            .parent()
+            .and_then(std::path::Path::parent)
+            .ok_or_else(|| deferred("Windows engine path is invalid"))?
+            .to_path_buf();
+        let resources = app
+            .path()
+            .resource_dir()
+            .map_err(|error| AppError::new(ErrorCode::EngineMissing, Some(error.to_string())))?
+            .join("binaries");
         // yt-dlp and JSON parsing are blocking work. Keep them off Tauri's UI thread.
         return tauri::async_runtime::spawn_blocking(move || {
-            analysis::analyze(&paths, &supervisor, &url, &AtomicBool::new(false))
+            let cancel = AtomicBool::new(false);
+            let (read_lease, _probation_guard, probation) = updater::begin_invocation(&data)
+                .map_err(|reason| AppError::new(ErrorCode::EngineMissing, Some(reason)))?;
+            let (first, broken) = analysis::analyze_classified(&paths, &supervisor, &url, &cancel);
+            if let Some(version) = probation.as_deref() {
+                if broken {
+                    drop(read_lease);
+                    let write_lease = updater::slot().write().map_err(|_| {
+                        AppError::new(
+                            ErrorCode::EngineMissing,
+                            Some("engine slot poisoned".into()),
+                        )
+                    })?;
+                    updater::restore_baseline_locked(&data, &resources, version, &write_lease)
+                        .map_err(|reason| AppError::new(ErrorCode::EngineMissing, Some(reason)))?;
+                    drop(write_lease);
+                    let _retry_lease = updater::slot().read().map_err(|_| {
+                        AppError::new(
+                            ErrorCode::EngineMissing,
+                            Some("engine slot poisoned".into()),
+                        )
+                    })?;
+                    return analysis::analyze(&paths, &supervisor, &url, &cancel);
+                }
+                let _ = updater::mark_good(&data, version);
+            }
+            first
         })
         .await
         .map_err(|error| {
