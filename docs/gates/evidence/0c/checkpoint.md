@@ -3,13 +3,14 @@
 
 # Gate 0C checkpoint evidence — task 0C-16
 
-Prepared 2026-10-21 for **owner review** against [Gate 0C](../../gate-0c.md) and
+Accepted by the owner on 2026-10-21 for **local technical feasibility only**,
+as recorded in [Gate 0C](../../gate-0c.md). This checkpoint is against
 [`PROJECT.md:687-692,734-753,814-821`](../../../../PROJECT.md). All six Android
 acceptance criteria have passing physical-device evidence at the scope stated
 below. The result is **technical feasibility on the owner's devices only**.
-Owner acceptance is **PENDING**; Phase 1 remains closed. The 0C-04A waiver
-applies only to the native corresponding-source/build-input/notice gap and does
-not authorize Android distribution.
+Phase 1 planning proceeded after acceptance. The 0C-04A waiver applies only to
+the native corresponding-source/build-input/notice gap and does not authorize
+Android distribution.
 
 ## Devices, engine and media
 
