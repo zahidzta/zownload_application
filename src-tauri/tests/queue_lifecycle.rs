@@ -99,7 +99,7 @@ fn sequential_pause_resume_settlement_and_close_are_durable() {
     let mut playlist = request("playlist");
     playlist.is_playlist = true;
     playlist.quality = Quality::Max;
-    let playlist_id = coordinator.enqueue(playlist).unwrap();
+    let playlist_id = coordinator.enqueue(playlist.clone()).unwrap();
     let first = coordinator.enqueue(request("one")).unwrap();
     until(|| {
         db.lock()
@@ -109,6 +109,17 @@ fn sequential_pause_resume_settlement_and_close_are_durable() {
             .iter()
             .any(|item| item.id == first && item.status == ItemStatus::Downloading)
     });
+    let state = db
+        .lock()
+        .unwrap()
+        .get_playlist_state(&playlist_id)
+        .unwrap()
+        .unwrap();
+    let snapshot = state.snapshot.unwrap();
+    assert!(!state.zip_enabled);
+    assert_eq!(snapshot.next_index, 0);
+    assert_eq!(snapshot.entries.len(), 2);
+    assert_eq!(snapshot.entries[0].url, "https://example.com/entry/first");
     db.lock()
         .unwrap()
         .set_settings(&Settings {
@@ -168,6 +179,29 @@ fn sequential_pause_resume_settlement_and_close_are_durable() {
         vec![second.as_str(), first.as_str(), playlist_id.as_str()]
     );
     drop(events);
+    let redownload = coordinator.enqueue(playlist).unwrap();
+    assert_ne!(redownload, playlist_id);
+    until(|| {
+        db.lock()
+            .unwrap()
+            .get_playlist_state(&redownload)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .is_some()
+    });
+    assert_eq!(
+        db.lock()
+            .unwrap()
+            .get_playlist_state(&redownload)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .unwrap()
+            .next_index,
+        0
+    );
+    coordinator.remove(&redownload).unwrap();
     let removed = coordinator.enqueue(request("remove")).unwrap();
     until(|| {
         db.lock()

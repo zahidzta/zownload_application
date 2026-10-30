@@ -452,3 +452,9 @@ Windows probation/process-tree/queue integrations, and `cargo check` passed.
 The working checkout's first exact V2 attempt hit the existing Node test
 discovery and Vite SSR timeout recorded under Gate 2C-03; the clean-checkout
 rerun passed.
+
+For 3A-02/03, a cached `src-tauri/build.rs` invocation still pointed the
+Windows test linker at a removed Gate 2D temporary worktree manifest.
+Refreshing its timestamp with `(Get-Item src-tauri/build.rs).LastWriteTime =
+Get-Date` rebuilt the linker arguments from this checkout; the focused Rust
+tests and Gate 3A V1 then passed. The command changes no tracked file content.

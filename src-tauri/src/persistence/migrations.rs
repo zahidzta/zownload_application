@@ -4,7 +4,7 @@
 use super::{Error, Result};
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i64 = 3;
+const CURRENT_VERSION: i64 = 4;
 
 const VERSION_1: &str = "
     CREATE TABLE settings (
@@ -54,12 +54,26 @@ const VERSION_3: &str = "
     );
 ";
 
+const VERSION_4: &str = "
+    CREATE TABLE playlist_state (
+        queue_id TEXT PRIMARY KEY REFERENCES queue_items(id) ON DELETE CASCADE,
+        zip_enabled INTEGER NOT NULL CHECK (zip_enabled IN (0, 1)),
+        entries TEXT,
+        next_index INTEGER NOT NULL DEFAULT 0 CHECK (next_index >= 0)
+    );
+";
+
 pub(super) fn apply(connection: &mut Connection) -> Result<()> {
     let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if !(0..=CURRENT_VERSION).contains(&version) {
         return Err(Error::UnsupportedSchema(version));
     }
-    for (next, sql) in [(1, VERSION_1), (2, VERSION_2), (3, VERSION_3)] {
+    for (next, sql) in [
+        (1, VERSION_1),
+        (2, VERSION_2),
+        (3, VERSION_3),
+        (4, VERSION_4),
+    ] {
         if version < next {
             // Schema and version advance together, so a failure leaves the prior data intact.
             let transaction = connection.transaction()?;
@@ -142,7 +156,7 @@ mod tests {
         drop(connection);
         assert!(matches!(
             Database::open_at(&path),
-            Err(Error::UnsupportedSchema(4))
+            Err(Error::UnsupportedSchema(5))
         ));
         let connection = Connection::open(&path).unwrap();
         let value: String = connection

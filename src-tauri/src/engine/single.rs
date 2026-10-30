@@ -5,7 +5,7 @@
 //! owned by 2C-03; this module owns its child tree and its private files.
 
 use super::{
-    analysis,
+    analysis::{self, PlaylistEntry},
     process::{RunError, Supervisor},
     EnginePaths,
 };
@@ -115,12 +115,6 @@ fn download_failure(stderr: &[u8], status: Option<i32>) -> AppError {
 }
 
 fn valid_request(request: &DownloadRequest) -> Result<(), AppError> {
-    if request.is_playlist {
-        return Err(error(
-            ErrorCode::Unknown,
-            "playlist work belongs to Stage 3A",
-        ));
-    }
     let parsed = Url::parse(&request.url)
         .map_err(|cause| error(ErrorCode::InvalidUrl, cause.to_string()))?;
     if request.url.len() > 8192
@@ -133,17 +127,19 @@ fn valid_request(request: &DownloadRequest) -> Result<(), AppError> {
         ));
     }
     match (&request.format, &request.quality) {
+        (Format::Mp3 | Format::Mp4, Quality::Max | Quality::Min) if request.is_playlist => Ok(()),
         (
             Format::Mp3,
             Quality::Audio {
                 bitrate: 128 | 192 | 256 | 320,
             },
-        ) => Ok(()),
-        (Format::Mp4, Quality::Video { height }) if *height > 0 && *height <= 4320 => Ok(()),
-        _ => Err(error(
-            ErrorCode::Unknown,
-            "invalid single format or quality",
-        )),
+        ) if !request.is_playlist => Ok(()),
+        (Format::Mp4, Quality::Video { height })
+            if !request.is_playlist && *height > 0 && *height <= 4320 =>
+        {
+            Ok(())
+        }
+        _ => Err(error(ErrorCode::Unknown, "invalid format or quality")),
     }
 }
 
@@ -268,8 +264,29 @@ fn download_args(
         work_dir.join("source.%(ext)s").as_os_str().into(),
     ]);
     match (request.format, &request.quality) {
-        (Format::Mp3, Quality::Audio { .. }) => {
+        (Format::Mp3, Quality::Audio { .. } | Quality::Max | Quality::Min) => {
             args.extend(["-f".into(), "ba/b".into()]);
+        }
+        (Format::Mp4, Quality::Max | Quality::Min) => {
+            let selector = if request.quality == Quality::Max {
+                "bv*+ba/b"
+            } else {
+                "wv*+ba/w"
+            };
+            args.extend([
+                "-f".into(),
+                selector.into(),
+                "--merge-output-format".into(),
+                "mp4".into(),
+                "--recode-video".into(),
+                "mp4".into(),
+                "--postprocessor-args".into(),
+                "Merger+ffmpeg_o:-c:a aac".into(),
+                "--embed-metadata".into(),
+                "--embed-thumbnail".into(),
+                "--parse-metadata".into(),
+                "%(artist,creator,uploader|)s:%(meta_artist)s".into(),
+            ]);
         }
         (Format::Mp4, Quality::Video { .. }) => {
             let selected = height.expect("validated height");
@@ -439,6 +456,7 @@ fn mp3_args(
     cover: &Path,
     output: &Path,
     bitrate: u32,
+    album: &str,
 ) -> Vec<OsString> {
     let mut args: Vec<OsString> = vec![
         "-nostdin".into(),
@@ -488,7 +506,7 @@ fn mp3_args(
     }
     args.extend([
         "-metadata".into(),
-        "album=".into(),
+        format!("album={album}").into(),
         "-f".into(),
         "mp3".into(),
         output.as_os_str().into(),
@@ -496,7 +514,7 @@ fn mp3_args(
     args
 }
 
-fn mp4_tag_args(source: &Source, input: &Path, output: &Path) -> Vec<OsString> {
+fn mp4_tag_args(source: &Source, input: &Path, output: &Path, album: &str) -> Vec<OsString> {
     // yt-dlp's selected derivative can carry a different embedded title than
     // the analyzed item. Copy every stream, including the JPEG cover, and set
     // the same title and creator used by the Queue and History.
@@ -520,7 +538,7 @@ fn mp4_tag_args(source: &Source, input: &Path, output: &Path) -> Vec<OsString> {
     }
     args.extend([
         "-metadata".into(),
-        "album=".into(),
+        format!("album={album}").into(),
         "-f".into(),
         "mp4".into(),
         output.as_os_str().into(),
@@ -625,8 +643,16 @@ fn finalize(
     ))
 }
 
-fn ensure_work_dir(disk: &DownloadPaths, app_data: &Path, queue_id: &str) -> Result<(), AppError> {
-    if disk.queue_id != queue_id || disk.work_dir != app_data.join("downloads").join(queue_id) {
+fn ensure_work_dir(
+    disk: &DownloadPaths,
+    app_data: &Path,
+    queue_id: &str,
+    entry_index: Option<usize>,
+) -> Result<(), AppError> {
+    let root = app_data.join("downloads").join(queue_id);
+    let expected =
+        entry_index.map_or_else(|| root.clone(), |index| root.join(format!("entry-{index}")));
+    if disk.queue_id != queue_id || disk.work_dir != expected {
         return Err(error(
             ErrorCode::PermissionDenied,
             "work path does not belong to queue item",
@@ -643,6 +669,16 @@ fn ensure_work_dir(disk: &DownloadPaths, app_data: &Path, queue_id: &str) -> Res
             ErrorCode::PermissionDenied,
             "work parent is a symlink",
         ));
+    }
+    if entry_index.is_some() {
+        fs::create_dir_all(&root).map_err(io_error)?;
+        if fs::symlink_metadata(&root)
+            .map_err(io_error)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(error(ErrorCode::PermissionDenied, "work root is a symlink"));
+        }
     }
     fs::create_dir_all(&disk.work_dir).map_err(io_error)?;
     if fs::symlink_metadata(&disk.work_dir)
@@ -683,8 +719,111 @@ pub(crate) fn run_single_classified(
     persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
     broken: &mut bool,
 ) -> Result<Completed, AppError> {
+    if request.is_playlist {
+        return Err(error(
+            ErrorCode::Unknown,
+            "single worker received playlist request",
+        ));
+    }
+    run_media_classified(
+        paths, supervisor, disk, app_data, queue_id, request, None, None, cancel, observe, persist,
+        broken,
+    )
+}
+
+/// One resolved entry only. The queue owns iteration and commits its index before moving on.
+pub fn run_playlist_entry(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    disk: &mut DownloadPaths,
+    app_data: &Path,
+    queue_id: &str,
+    request: &DownloadRequest,
+    entry: &PlaylistEntry,
+    index: usize,
+    playlist_title: &str,
+    cancel: &AtomicBool,
+    observe: Arc<dyn Fn(Observation) + Send + Sync>,
+    persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
+) -> Result<Completed, AppError> {
+    run_playlist_entry_classified(
+        paths,
+        supervisor,
+        disk,
+        app_data,
+        queue_id,
+        request,
+        entry,
+        index,
+        playlist_title,
+        cancel,
+        observe,
+        persist,
+        &mut false,
+    )
+}
+
+pub(crate) fn run_playlist_entry_classified(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    disk: &mut DownloadPaths,
+    app_data: &Path,
+    queue_id: &str,
+    request: &DownloadRequest,
+    entry: &PlaylistEntry,
+    index: usize,
+    playlist_title: &str,
+    cancel: &AtomicBool,
+    observe: Arc<dyn Fn(Observation) + Send + Sync>,
+    persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
+    broken: &mut bool,
+) -> Result<Completed, AppError> {
+    if !request.is_playlist || playlist_title.trim().is_empty() {
+        return Err(error(ErrorCode::Unknown, "invalid playlist entry request"));
+    }
+    analysis::PlaylistSnapshot {
+        entries: vec![entry.clone()],
+        next_index: 0,
+    }
+    .validate()?;
+    let mut entry_request = request.clone();
+    entry_request.url = entry.url.clone();
+    let root = disk.work_dir.clone();
+    disk.work_dir = root.join(format!("entry-{index}"));
+    let result = run_media_classified(
+        paths,
+        supervisor,
+        disk,
+        app_data,
+        queue_id,
+        &entry_request,
+        Some(playlist_title),
+        Some(index),
+        cancel,
+        observe,
+        persist,
+        broken,
+    );
+    disk.work_dir = root;
+    result
+}
+
+fn run_media_classified(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    disk: &mut DownloadPaths,
+    app_data: &Path,
+    queue_id: &str,
+    request: &DownloadRequest,
+    playlist_title: Option<&str>,
+    entry_index: Option<usize>,
+    cancel: &AtomicBool,
+    observe: Arc<dyn Fn(Observation) + Send + Sync>,
+    persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
+    broken: &mut bool,
+) -> Result<Completed, AppError> {
     valid_request(request)?;
-    ensure_work_dir(disk, app_data, queue_id)?;
+    ensure_work_dir(disk, app_data, queue_id, entry_index)?;
     if disk.reserved_path.is_some() {
         disk.clear_reserved().map_err(io_error)?;
         persist(disk)?;
@@ -747,8 +886,14 @@ pub(crate) fn run_single_classified(
             return Err(download_failure(&result.stderr, result.status.code()));
         }
         observe(Observation::PostProcessing);
-        let stage = match request.quality {
-            Quality::Audio { bitrate } => {
+        let stage = match (request.format, &request.quality) {
+            (Format::Mp3, quality) => {
+                let bitrate = match quality {
+                    Quality::Audio { bitrate } => *bitrate,
+                    Quality::Max => 320,
+                    Quality::Min => 128,
+                    _ => unreachable!(),
+                };
                 let input = source_file(&disk.work_dir)?;
                 if input
                     .extension()
@@ -764,6 +909,7 @@ pub(crate) fn run_single_classified(
                     &disk.work_dir.join("source.jpg"),
                     &output,
                     bitrate,
+                    playlist_title.unwrap_or(""),
                 );
                 let result = supervisor
                     .run(&paths.ffmpeg, &args, TIMEOUT, DIAGNOSTIC_LIMIT, cancel)
@@ -773,10 +919,10 @@ pub(crate) fn run_single_classified(
                 }
                 output
             }
-            Quality::Video { .. } => {
+            (Format::Mp4, _) => {
                 let input = disk.work_dir.join("source.mp4");
                 let output = disk.work_dir.join("ready.mp4");
-                let args = mp4_tag_args(&source, &input, &output);
+                let args = mp4_tag_args(&source, &input, &output, playlist_title.unwrap_or(""));
                 let result = supervisor
                     .run(&paths.ffmpeg, &args, TIMEOUT, DIAGNOSTIC_LIMIT, cancel)
                     .map_err(run_error)?;
@@ -785,7 +931,6 @@ pub(crate) fn run_single_classified(
                 }
                 output
             }
-            _ => unreachable!(),
         };
         if !stage.is_file() {
             return Err(error(
@@ -866,6 +1011,7 @@ mod tests {
             &source,
             Path::new("C:/Data/partial/source.mp4"),
             Path::new("C:/Data/partial/ready.mp4"),
+            "",
         );
         assert!(tags.windows(2).any(|pair| pair == ["-map", "0"]));
         assert!(tags.windows(2).any(|pair| pair == ["-c", "copy"]));
@@ -932,6 +1078,7 @@ mod tests {
                 Path::new("missing.jpg"),
                 Path::new("ready.mp3"),
                 192,
+                "",
             )
         };
         assert!(make(&source)
@@ -975,6 +1122,78 @@ mod tests {
             ),
             Some(128.0)
         );
+    }
+
+    #[test]
+    fn playlist_profiles_isolate_entry_url_and_set_album() {
+        let paths = EnginePaths {
+            yt_dlp: "C:/Data/engine/yt-dlp.exe".into(),
+            ffmpeg: "C:/Data/engine/ffmpeg.exe".into(),
+            quickjs: "C:/Data/engine/qjs.exe".into(),
+        };
+        let source = Source {
+            id: "one".into(),
+            title: "Track".into(),
+            artist: "Artist".into(),
+            extension: "wav".into(),
+            bitrate: None,
+            heights: vec![240, 720],
+        };
+        for (format, quality, expected) in [
+            (Format::Mp4, Quality::Max, "bv*+ba/b"),
+            (Format::Mp4, Quality::Min, "wv*+ba/w"),
+            (Format::Mp3, Quality::Max, "ba/b"),
+            (Format::Mp3, Quality::Min, "ba/b"),
+        ] {
+            let request = DownloadRequest {
+                url: "https://example.com/entry/one".into(),
+                format,
+                quality: quality.clone(),
+                is_playlist: true,
+            };
+            valid_request(&request).unwrap();
+            let args = download_args(
+                &paths,
+                &request,
+                &source,
+                Path::new("C:/Data/work/entry-0"),
+                None,
+            );
+            assert!(args.windows(2).any(|pair| pair == ["-f", expected]));
+            assert!(args.contains(&OsString::from("--no-playlist")));
+            assert_eq!(args[args.len() - 2], "--");
+            assert_eq!(args.last().unwrap(), &OsString::from(&request.url));
+            assert!(!args
+                .iter()
+                .any(|arg| arg.to_string_lossy().contains(".zip")));
+            if format == Format::Mp3 {
+                let bitrate = if quality == Quality::Max { 320 } else { 128 };
+                let tags = mp3_args(
+                    &source,
+                    Path::new("source.wav"),
+                    Path::new("missing.jpg"),
+                    Path::new("ready.mp3"),
+                    bitrate,
+                    "Playlist",
+                );
+                assert!(tags
+                    .windows(2)
+                    .any(|pair| pair == ["-metadata", "album=Playlist"]));
+                assert!(tags
+                    .windows(2)
+                    .any(|pair| pair == ["-b:a", format!("{bitrate}k").as_str()]));
+            } else {
+                let tags = mp4_tag_args(
+                    &source,
+                    Path::new("source.mp4"),
+                    Path::new("ready.mp4"),
+                    "Playlist",
+                );
+                assert!(tags
+                    .windows(2)
+                    .any(|pair| pair == ["-metadata", "album=Playlist"]));
+            }
+        }
     }
 
     #[test]
@@ -1096,7 +1315,9 @@ mod tests {
             DownloadPaths::new(&id, &app_data, None, &app_data.join("Downloads")).unwrap();
         paths.work_dir = app_data.join("somewhere-else");
         assert_eq!(
-            ensure_work_dir(&paths, &app_data, &id).unwrap_err().code,
+            ensure_work_dir(&paths, &app_data, &id, None)
+                .unwrap_err()
+                .code,
             ErrorCode::PermissionDenied
         );
     }

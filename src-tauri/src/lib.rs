@@ -10,6 +10,7 @@ pub mod contract;
 #[cfg(target_os = "windows")]
 pub mod engine;
 pub mod persistence;
+pub(crate) mod playlist;
 
 #[cfg(not(target_os = "android"))]
 use tauri::Manager;

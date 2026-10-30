@@ -13,6 +13,11 @@ fn main() {
         fs::copy(input, args.last().unwrap()).unwrap();
         return;
     }
+    if args.contains(&"--flat-playlist".into()) {
+        assert_eq!(args[args.len() - 2], "--");
+        println!("{{\"_type\":\"playlist\",\"title\":\"Playlist\",\"entries\":[{{\"title\":\"First\",\"webpage_url\":\"https://example.com/entry/first\"}},{{\"title\":\"Second\",\"webpage_url\":\"https://example.com/entry/second\"}}]}}");
+        return;
+    }
     assert!(args.contains(&"--no-playlist".into()));
     let url = args.last().unwrap();
     let id = url.rsplit('/').next().unwrap();

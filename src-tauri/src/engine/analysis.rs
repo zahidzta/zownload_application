@@ -10,6 +10,7 @@ use super::{
     EnginePaths,
 };
 use crate::contract::{AnalyzeResult, AppError, ErrorCode};
+pub use crate::playlist::{PlaylistEntry, PlaylistSnapshot, MAX_PLAYLIST_ENTRIES};
 use serde_json::Value;
 use std::{collections::BTreeSet, ffi::OsString, sync::atomic::AtomicBool, time::Duration};
 use url::Url;
@@ -122,6 +123,138 @@ pub(crate) fn analyze_classified(
         parse_result(url, &output.stdout)
     })();
     (result, broken)
+}
+
+/// Resolve flat entries once. A resumed queue item reads the stored list instead.
+pub fn expand_playlist(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    input: &str,
+    cancel: &AtomicBool,
+) -> Result<(String, PlaylistSnapshot), AppError> {
+    expand_playlist_classified(paths, supervisor, input, cancel).0
+}
+
+pub(crate) fn expand_playlist_classified(
+    paths: &EnginePaths,
+    supervisor: &Supervisor,
+    input: &str,
+    cancel: &AtomicBool,
+) -> (Result<(String, PlaylistSnapshot), AppError>, bool) {
+    let mut broken = false;
+    let result = (|| {
+        let url = input.trim();
+        parsed_url(url)?;
+        let output = supervisor
+            .run(
+                paths.yt_dlp.as_path(),
+                &arguments(paths, url, Mode::Playlist),
+                ANALYSIS_TIMEOUT,
+                OUTPUT_LIMIT,
+                cancel,
+            )
+            .map_err(|error| {
+                broken = run_failure_is_breakage(&error);
+                process_error(error)
+            })?;
+        if !output.status.success() {
+            broken = nonzero_is_breakage(output.status.code(), &output.stderr);
+            return Err(extraction_error(&output.stderr, output.status.code()));
+        }
+        if serde_json::from_slice::<Value>(&output.stdout).is_err() {
+            broken = true;
+        }
+        parse_playlist_snapshot(&output.stdout)
+    })();
+    (result, broken)
+}
+
+pub fn parse_playlist_snapshot(json: &[u8]) -> Result<(String, PlaylistSnapshot), AppError> {
+    if json.len() > OUTPUT_LIMIT {
+        return Err(AppError::new(
+            ErrorCode::Unknown,
+            Some("playlist JSON is too large".into()),
+        ));
+    }
+    let value: Value = serde_json::from_slice(json).map_err(|error| {
+        AppError::new(
+            ErrorCode::Unknown,
+            Some(format!("invalid playlist JSON: {error}")),
+        )
+    })?;
+    if nonempty(&value, "_type") != Some("playlist") {
+        return Err(AppError::new(
+            ErrorCode::Unknown,
+            Some("source is not a playlist".into()),
+        ));
+    }
+    let title = nonempty(&value, "title")
+        .ok_or_else(|| AppError::new(ErrorCode::Unknown, Some("playlist has no title".into())))?
+        .to_owned();
+    let raw = value
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::new(ErrorCode::Unknown, Some("playlist has no entries".into())))?;
+    if raw.is_empty() || raw.len() > MAX_PLAYLIST_ENTRIES {
+        return Err(AppError::new(
+            ErrorCode::Unknown,
+            Some("invalid playlist entry count".into()),
+        ));
+    }
+    let mut entries = Vec::with_capacity(raw.len());
+    for (index, entry) in raw.iter().enumerate() {
+        if nonempty(entry, "_type") == Some("playlist") {
+            return Err(AppError::new(
+                ErrorCode::Unknown,
+                Some(format!("entry {} is a nested playlist", index + 1)),
+            ));
+        }
+        let title = nonempty(entry, "title")
+            .or_else(|| nonempty(entry, "id"))
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::Unknown,
+                    Some(format!("entry {} has no title", index + 1)),
+                )
+            })?;
+        let candidate = nonempty(entry, "webpage_url")
+            .or_else(|| {
+                nonempty(entry, "url")
+                    .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
+            })
+            .map(str::to_owned)
+            .or_else(|| {
+                let key = nonempty(entry, "ie_key").or_else(|| nonempty(entry, "extractor_key"));
+                let id = nonempty(entry, "id")?;
+                if matches!(key, Some("Youtube"))
+                    && id.len() <= 64
+                    && id
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || "-_".contains(ch))
+                {
+                    Some(format!("https://www.youtube.com/watch?v={id}"))
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::Unknown,
+                    Some(format!("entry {} has no executable URL", index + 1)),
+                )
+            })?;
+        parsed_url(&candidate)?;
+        entries.push(PlaylistEntry {
+            url: candidate,
+            title: title.to_owned(),
+        });
+    }
+    let snapshot = PlaylistSnapshot {
+        entries,
+        next_index: 0,
+    };
+    snapshot.validate()?;
+    Ok((title, snapshot))
 }
 
 pub(crate) fn reported_site_error(stderr: &[u8]) -> bool {
@@ -566,5 +699,39 @@ mod tests {
         let oversized = parse_result(SINGLE_URL, &vec![b' '; OUTPUT_LIMIT + 1]).unwrap_err();
         assert_eq!(oversized.code, ErrorCode::Unknown);
         assert!(oversized.detail.unwrap().contains("exceeds"));
+    }
+
+    #[test]
+    fn flat_snapshot_resolves_ordered_urls_and_rejects_bad_entries() {
+        let value = serde_json::json!({
+            "_type": "playlist", "title": "Set", "entries": [
+                {"title": "First", "webpage_url": "https://example.com/first"},
+                {"title": "Second", "id": "abc-12", "ie_key": "Youtube", "url": "abc-12"}
+            ]
+        });
+        let (title, snapshot) =
+            parse_playlist_snapshot(&serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(title, "Set");
+        assert_eq!(snapshot.entries[0].url, "https://example.com/first");
+        assert_eq!(
+            snapshot.entries[1].url,
+            "https://www.youtube.com/watch?v=abc-12"
+        );
+        assert_eq!(snapshot.entries[1].title, "Second");
+        assert_eq!(snapshot.next_index, 0);
+        for bad in [
+            serde_json::json!({"_type":"playlist", "title":"Set", "entries": []}),
+            serde_json::json!({"_type":"playlist", "title":"Set", "entries": [null]}),
+            serde_json::json!({"_type":"playlist", "title":"Set", "entries": [{"title":"Bad", "url":"file:///secret"}]}),
+            serde_json::json!({"_type":"playlist", "title":"Set", "entries": [{"_type":"playlist", "title":"Nested", "webpage_url":"https://example.com/nested"}]}),
+        ] {
+            assert!(parse_playlist_snapshot(&serde_json::to_vec(&bad).unwrap()).is_err());
+        }
+        assert!(parse_playlist_snapshot(&vec![b' '; OUTPUT_LIMIT + 1]).is_err());
+        let too_many = PlaylistSnapshot {
+            entries: vec![snapshot.entries[0].clone(); MAX_PLAYLIST_ENTRIES + 1],
+            next_index: 0,
+        };
+        assert!(too_many.validate().is_err());
     }
 }

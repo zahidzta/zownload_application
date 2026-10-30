@@ -3,11 +3,13 @@
 ## Current checkpoint and next task
 
 - **Checkpoint (2026-10-29):** The owner accepted Gate 2D and authorized Gate 3A planning. See the [Gate 2D checkpoint](gates/evidence/2d/checkpoint.md).
-- **Next task:** The owner reviews and accepts the [Gate 3A plan](gates/gate-3a.md), including its two decisions. Then start 3A-02 on `task-3a-02`. No Gate 3A implementation has started.
+- **Next task:** 3A-04 — connect the stored playlist snapshot and entry worker to queue lifecycle, counters, partial-failure continuation, pause/resume, and one History row. Start it in a fresh session after reviewing the combined 3A-02/03 PR.
 
 ## Current gate 3A completions
 
 - Completed 3A-01: Planned sequential playlist work and recorded the resume-state and ZIP boundary decisions; commit `4d6c2c5`; [plan evidence](gates/gate-3a.md). Verification is identified as V0 there.
+- Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commits `2549665`, `b248232` (platform-neutral fix); [evidence](gates/evidence/3a/3a-02.md). V1 passed.
+- Completed 3A-03: Added per-entry Max/Min worker, playlist album metadata, and collision-safe outputs; commits `414c068`, `b248232` (CI fixture fix); [evidence](gates/evidence/3a/3a-03.md). V1 and focused CLI test passed.
 
 ## Accepted gates
 
@@ -40,7 +42,6 @@
 
 ## Open owner questions
 
-- Review and accept the two proposals in the [Gate 3A plan](gates/gate-3a.md): private SQLite playlist snapshot/index without public contract fields, and ZIP-enabled playlists remaining queued until Gate 3B.
 - Physical-device touch and assistive-technology review remains open for the accepted 1B/1C UI; see their checkpoints.
 - Gate 0B records automated VLC playback, not a human listening/viewing claim. If human playback remains required, the owner's review is not recorded; see the [checkpoint](gates/evidence/0b/checkpoint.md).
 - If Android binary replacement exceeds budget, the owner must review whether to choose the desktop-only first-release fallback. The distribution blocker remains until the source/build/notice gap is resolved.
