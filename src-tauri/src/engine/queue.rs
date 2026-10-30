@@ -4,7 +4,7 @@
 //! One Windows media worker at a time. The control lock orders user actions,
 //! phase changes and terminal settlement; SQLite commits precede every event.
 
-use super::{process::Supervisor, single, updater, EnginePaths};
+use super::{analysis, process::Supervisor, single, updater, EnginePaths};
 use crate::{
     contract::{AppError, DownloadRequest, ErrorCode, ItemStatus, Progress, QueueItem},
     persistence::{notifications::TerminalOutcome, paths::DownloadPaths, Database},
@@ -121,7 +121,7 @@ impl QueueCoordinator {
         if control.closing {
             return Err(failure("application is closing"));
         }
-        if !request.is_playlist && self.engine.is_none() {
+        if self.engine.is_none() {
             return Err(AppError::new(
                 ErrorCode::EngineMissing,
                 Some("Windows engine unavailable".into()),
@@ -149,24 +149,22 @@ impl QueueCoordinator {
             error: None,
         };
         let mut db = self.db()?;
-        let paths = if item.request.is_playlist {
-            None
-        } else {
-            let settings = db
-                .get_settings()
-                .map_err(|error| failure(error.to_string()))?;
-            Some(
-                DownloadPaths::new(
-                    &id,
-                    &self.app_data,
-                    settings.download_dir.as_deref().map(std::path::Path::new),
-                    &self.downloads,
-                )
-                .map_err(|error| failure(error.to_string()))?,
-            )
-        };
-        db.insert_queue_item_with_paths(&item, paths.as_ref())
+        let settings = db
+            .get_settings()
             .map_err(|error| failure(error.to_string()))?;
+        let paths = DownloadPaths::new(
+            &id,
+            &self.app_data,
+            settings.download_dir.as_deref().map(std::path::Path::new),
+            &self.downloads,
+        )
+        .map_err(|error| failure(error.to_string()))?;
+        db.insert_queue_item_with_options(
+            &item,
+            Some(&paths),
+            item.request.is_playlist.then_some(settings.zip_playlists),
+        )
+        .map_err(|error| failure(error.to_string()))?;
         drop(db);
         (self.emit)(QueueEvent::Updated(item));
         drop(control);
@@ -189,13 +187,27 @@ impl QueueCoordinator {
                 eprintln!("pending yt-dlp activation deferred: {error}");
             }
         }
-        // Paused work needs an explicit Continue. Playlist rows do not block singles.
-        let next = self
-            .db()?
-            .get_queue()
-            .map_err(|error| failure(error.to_string()))?
-            .into_iter()
-            .find(|item| !item.request.is_playlist && item.status == ItemStatus::Queued);
+        // A new ZIP-off playlist gets one durable expansion. Execution begins in 3A-04.
+        let db = self.db()?;
+        let queue = db.get_queue().map_err(|error| failure(error.to_string()))?;
+        let mut next = None;
+        for item in queue {
+            if item.status != ItemStatus::Queued {
+                continue;
+            }
+            if item.request.is_playlist {
+                let state = db
+                    .get_playlist_state(&item.id)
+                    .map_err(|error| failure(error.to_string()))?
+                    .ok_or_else(|| failure("playlist state missing"))?;
+                if state.zip_enabled || state.snapshot.is_some() {
+                    continue;
+                }
+            }
+            next = Some(item);
+            break;
+        }
+        drop(db);
         let Some(mut item) = next else { return Ok(()) };
         item.status = ItemStatus::Analyzing;
         self.save(&item)?;
@@ -207,8 +219,125 @@ impl QueueCoordinator {
             intent: Intent::Run,
         });
         let coordinator = Arc::clone(self);
-        thread::spawn(move || coordinator.run(item, cancel));
+        if item.request.is_playlist {
+            thread::spawn(move || coordinator.run_expansion(item, cancel));
+        } else {
+            thread::spawn(move || coordinator.run(item, cancel));
+        }
         Ok(())
+    }
+
+    fn run_expansion(self: Arc<Self>, mut item: QueueItem, cancel: Arc<AtomicBool>) {
+        let id = item.id.clone();
+        let result = if let Some(engine) = self.engine.as_ref() {
+            match updater::begin_invocation(&self.app_data) {
+                Ok((read_lease, _guard, probation)) => {
+                    let (first, broken) = analysis::expand_playlist_classified(
+                        engine,
+                        &self.supervisor,
+                        &item.request.url,
+                        &cancel,
+                    );
+                    if broken && !cancel.load(Ordering::SeqCst) && probation.is_some() {
+                        drop(read_lease);
+                        let fallback = match updater::slot().write() {
+                            Ok(write_lease) => self.resources.as_ref().map(|resources| {
+                                updater::restore_baseline_locked(
+                                    &self.app_data,
+                                    resources,
+                                    probation.as_deref().unwrap(),
+                                    &write_lease,
+                                )
+                            }),
+                            Err(_) => Some(Err("engine slot poisoned".into())),
+                        };
+                        match fallback {
+                            Some(Ok(_)) => match updater::slot().read() {
+                                Ok(_retry_lease) => analysis::expand_playlist(
+                                    engine,
+                                    &self.supervisor,
+                                    &item.request.url,
+                                    &cancel,
+                                ),
+                                Err(_) => Err(failure("engine slot poisoned")),
+                            },
+                            Some(Err(reason)) => {
+                                Err(AppError::new(ErrorCode::EngineMissing, Some(reason)))
+                            }
+                            None => first,
+                        }
+                    } else {
+                        if !broken && !cancel.load(Ordering::SeqCst) {
+                            if let Some(version) = probation.as_deref() {
+                                let _ = updater::mark_good(&self.app_data, version);
+                            }
+                        }
+                        first
+                    }
+                }
+                Err(reason) => Err(failure(reason)),
+            }
+        } else {
+            Err(failure("Windows engine unavailable"))
+        };
+        let Ok(mut control) = self.control.lock() else {
+            return;
+        };
+        let intent = control
+            .active
+            .as_ref()
+            .filter(|active| active.id == id)
+            .map(|active| active.intent);
+        if intent.is_none() {
+            return;
+        }
+        if intent == Some(Intent::Remove) {
+            if let Ok(true) = self.db().and_then(|mut db| {
+                db.remove_queue_item(&id)
+                    .map_err(|error| failure(error.to_string()))
+            }) {
+                (self.emit)(QueueEvent::Removed(id));
+            }
+        } else if !control.closing {
+            match result {
+                Ok((title, snapshot)) => {
+                    let saved = self.db().and_then(|mut db| {
+                        db.save_playlist_snapshot(&id, &title, &snapshot)
+                            .map_err(|error| failure(error.to_string()))
+                    });
+                    if matches!(saved, Ok(true)) {
+                        if let Ok(current) = self.item(&id) {
+                            item = current;
+                        }
+                        item.status = ItemStatus::Queued;
+                        let _ = self.save(&item);
+                    } else {
+                        item.status = ItemStatus::Paused;
+                        item.error = Some(failure(format!(
+                            "could not save playlist snapshot: {saved:?}"
+                        )));
+                        let _ = self.save(&item);
+                    }
+                }
+                Err(error) => {
+                    item.status = ItemStatus::Failed;
+                    item.error = Some(error.clone());
+                    if self.save(&item).is_ok() {
+                        let settled = self.db().is_ok_and(|mut db| {
+                            db.settle_queue_item(&id, TerminalOutcome::Failed(error))
+                                .is_ok()
+                        });
+                        if settled {
+                            (self.emit)(QueueEvent::NotificationsChanged);
+                            (self.emit)(QueueEvent::Removed(id));
+                        }
+                    }
+                }
+            }
+        }
+        control.active = None;
+        drop(control);
+        let _ = self.kick();
     }
 
     fn observe(

@@ -3,7 +3,14 @@
 
 use super::{paths::DownloadPaths, Database, Error, Result};
 use crate::contract::{AppError, DownloadRequest, ItemStatus, Progress, QueueItem};
-use rusqlite::params;
+use crate::engine::analysis::PlaylistSnapshot;
+use rusqlite::{params, OptionalExtension};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlaylistState {
+    pub zip_enabled: bool,
+    pub snapshot: Option<PlaylistSnapshot>,
+}
 
 fn status_text(status: ItemStatus) -> &'static str {
     match status {
@@ -65,6 +72,16 @@ impl Database {
         item: &QueueItem,
         paths: Option<&DownloadPaths>,
     ) -> Result<()> {
+        self.insert_queue_item_with_options(item, paths, None)
+    }
+
+    /// Capture folder and ZIP preference with the request; later Settings edits cannot change it.
+    pub fn insert_queue_item_with_options(
+        &mut self,
+        item: &QueueItem,
+        paths: Option<&DownloadPaths>,
+        zip_enabled: Option<bool>,
+    ) -> Result<()> {
         uuid::Uuid::parse_str(&item.id).map_err(|_| Error::InvalidInput("queue id"))?;
         let request = serde_json::to_string(&item.request)?;
         let progress = serde_json::to_string(&item.progress)?;
@@ -96,8 +113,132 @@ impl Database {
                 ],
             )?;
         }
+        if item.request.is_playlist {
+            transaction.execute(
+                "INSERT INTO playlist_state (queue_id, zip_enabled) VALUES (?1, ?2)",
+                params![item.id, i64::from(zip_enabled.unwrap_or(false))],
+            )?;
+        }
         transaction.commit()?;
         Ok(())
+    }
+
+    pub fn get_playlist_state(&self, id: &str) -> Result<Option<PlaylistState>> {
+        let row: Option<(i64, Option<String>, i64)> = self
+            .connection
+            .query_row(
+                "SELECT zip_enabled, entries, next_index FROM playlist_state WHERE queue_id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((zip, entries, index)) = row else {
+            return Ok(None);
+        };
+        if !matches!(zip, 0 | 1) || index < 0 {
+            return Err(Error::InvalidStoredValue("playlist state"));
+        }
+        let snapshot = entries
+            .map(|json| -> Result<PlaylistSnapshot> {
+                if json.len() > 16 * 1024 * 1024 {
+                    return Err(Error::InvalidStoredValue("playlist entries"));
+                }
+                let mut value: PlaylistSnapshot = serde_json::from_str(&json)?;
+                value.next_index = usize::try_from(index)
+                    .map_err(|_| Error::InvalidStoredValue("playlist index"))?;
+                value
+                    .validate()
+                    .map_err(|_| Error::InvalidStoredValue("playlist snapshot"))?;
+                Ok(value)
+            })
+            .transpose()?;
+        if snapshot.is_none() && index != 0 {
+            return Err(Error::InvalidStoredValue("playlist index"));
+        }
+        Ok(Some(PlaylistState {
+            zip_enabled: zip == 1,
+            snapshot,
+        }))
+    }
+
+    /// The first expansion is durable before any entry starts. An existing snapshot is never replaced on resume.
+    pub fn save_playlist_snapshot(
+        &mut self,
+        id: &str,
+        title: &str,
+        snapshot: &PlaylistSnapshot,
+    ) -> Result<bool> {
+        if title.trim().is_empty() || snapshot.next_index != 0 {
+            return Err(Error::InvalidInput("playlist snapshot"));
+        }
+        snapshot
+            .validate()
+            .map_err(|_| Error::InvalidInput("playlist snapshot"))?;
+        let entries = serde_json::to_string(snapshot)?;
+        if entries.len() > 16 * 1024 * 1024 {
+            return Err(Error::InvalidInput("playlist snapshot size"));
+        }
+        let progress = serde_json::to_string(&Progress::Playlist {
+            done: 0,
+            failed: 0,
+            total: snapshot.entries.len() as u32,
+            current_title: snapshot.entries.first().map(|entry| entry.title.clone()),
+            current_percent: 0.0,
+        })?;
+        let tx = self.connection.transaction()?;
+        let changed = tx.execute("UPDATE playlist_state SET entries = ?2, next_index = 0 WHERE queue_id = ?1 AND entries IS NULL", params![id, entries])?;
+        if changed != 0 {
+            tx.execute(
+                "UPDATE queue_items SET title = ?2, progress = ?3 WHERE id = ?1",
+                params![id, title, progress],
+            )?;
+        }
+        tx.commit()?;
+        Ok(changed != 0)
+    }
+
+    /// Settle one entry and its public counters in the same SQLite transaction.
+    pub fn advance_playlist(&mut self, item: &QueueItem, expected_index: usize) -> Result<bool> {
+        let next = expected_index
+            .checked_add(1)
+            .ok_or(Error::InvalidInput("playlist index"))?;
+        let state = self
+            .get_playlist_state(&item.id)?
+            .ok_or(Error::NotFound("playlist state"))?;
+        let snapshot = state
+            .snapshot
+            .ok_or(Error::InvalidStoredValue("playlist snapshot"))?;
+        if snapshot.next_index != expected_index || next > snapshot.entries.len() {
+            return Err(Error::InvalidInput("playlist index"));
+        }
+        let Progress::Playlist {
+            done,
+            failed,
+            total,
+            ..
+        } = &item.progress
+        else {
+            return Err(Error::InvalidInput("playlist progress"));
+        };
+        if *total != snapshot.entries.len() as u32
+            || u64::from(*done) + u64::from(*failed) != next as u64
+        {
+            return Err(Error::InvalidInput("playlist counters"));
+        }
+        let progress = serde_json::to_string(&item.progress)?;
+        let tx = self.connection.transaction()?;
+        let changed = tx.execute(
+            "UPDATE playlist_state SET next_index = ?3 WHERE queue_id = ?1 AND next_index = ?2",
+            params![item.id, expected_index as i64, next as i64],
+        )?;
+        if changed != 0 {
+            tx.execute(
+                "UPDATE queue_items SET progress = ?2 WHERE id = ?1",
+                params![item.id, progress],
+            )?;
+        }
+        tx.commit()?;
+        Ok(changed != 0)
     }
 
     pub fn update_queue_item(&mut self, item: &QueueItem) -> Result<bool> {
@@ -149,6 +290,125 @@ mod tests {
         contract::{ErrorCode, Format, Quality},
         persistence::test_path,
     };
+
+    #[test]
+    fn playlist_snapshot_and_index_survive_restart_and_advance_atomically() {
+        let path = test_path();
+        let mut db = Database::open_at(&path).unwrap();
+        let mut row = item(ItemStatus::Downloading);
+        row.progress = Progress::Playlist {
+            done: 0,
+            failed: 0,
+            total: 0,
+            current_title: None,
+            current_percent: 0.0,
+        };
+        db.insert_queue_item_with_options(&row, None, Some(true))
+            .unwrap();
+        let snapshot = PlaylistSnapshot {
+            entries: vec![
+                crate::engine::analysis::PlaylistEntry {
+                    url: "https://example.com/one".into(),
+                    title: "One".into(),
+                },
+                crate::engine::analysis::PlaylistEntry {
+                    url: "https://example.com/two".into(),
+                    title: "Two".into(),
+                },
+            ],
+            next_index: 0,
+        };
+        assert!(db
+            .save_playlist_snapshot(&row.id, "Set", &snapshot)
+            .unwrap());
+        assert!(!db
+            .save_playlist_snapshot(&row.id, "Changed", &snapshot)
+            .unwrap());
+        row = db.get_queue().unwrap().remove(0);
+        row.progress = Progress::Playlist {
+            done: 1,
+            failed: 0,
+            total: 2,
+            current_title: Some("Two".into()),
+            current_percent: 0.0,
+        };
+        assert!(db.advance_playlist(&row, 0).unwrap());
+        assert!(db.advance_playlist(&row, 0).is_err());
+        drop(db);
+        let mut db = Database::open_at(&path).unwrap();
+        let restored = db.get_queue().unwrap().remove(0);
+        assert_eq!(restored.status, ItemStatus::Paused);
+        assert_eq!(restored.title.as_deref(), Some("Set"));
+        assert_eq!(
+            serde_json::to_value(&restored.progress).unwrap(),
+            serde_json::to_value(&row.progress).unwrap()
+        );
+        let state = db.get_playlist_state(&row.id).unwrap().unwrap();
+        assert!(state.zip_enabled);
+        assert_eq!(state.snapshot.unwrap().next_index, 1);
+        db.remove_queue_item(&row.id).unwrap();
+        assert!(db.get_playlist_state(&row.id).unwrap().is_none());
+        drop(db);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn malformed_snapshot_is_rejected_and_new_request_expands_fresh() {
+        let path = test_path();
+        let mut db = Database::open_at(&path).unwrap();
+        let first = item(ItemStatus::Queued);
+        db.insert_queue_item_with_options(&first, None, Some(false))
+            .unwrap();
+        let second = item(ItemStatus::Queued);
+        db.insert_queue_item_with_options(&second, None, Some(false))
+            .unwrap();
+        assert!(db
+            .get_playlist_state(&second.id)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .is_none());
+        let valid = PlaylistSnapshot {
+            entries: vec![crate::engine::analysis::PlaylistEntry {
+                url: "https://example.com/one".into(),
+                title: "One".into(),
+            }],
+            next_index: 0,
+        };
+        db.save_playlist_snapshot(&first.id, "Old", &valid).unwrap();
+        assert!(db
+            .get_playlist_state(&second.id)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .is_none());
+        db.connection
+            .execute(
+                "UPDATE playlist_state SET entries = '{bad' WHERE queue_id = ?1",
+                [&first.id],
+            )
+            .unwrap();
+        assert!(db.get_playlist_state(&first.id).is_err());
+        db.connection
+            .execute(
+                "UPDATE playlist_state SET entries = ?2, next_index = 2 WHERE queue_id = ?1",
+                params![first.id, serde_json::to_string(&valid).unwrap()],
+            )
+            .unwrap();
+        assert!(db.get_playlist_state(&first.id).is_err());
+        db.connection
+            .execute(
+                "UPDATE playlist_state SET entries = ?2, next_index = 0 WHERE queue_id = ?1",
+                params![first.id, " ".repeat(16 * 1024 * 1024 + 1)],
+            )
+            .unwrap();
+        assert!(matches!(
+            db.get_playlist_state(&first.id),
+            Err(Error::InvalidStoredValue("playlist entries"))
+        ));
+        drop(db);
+        std::fs::remove_file(path).unwrap();
+    }
 
     fn item(status: ItemStatus) -> QueueItem {
         QueueItem {
