@@ -3,7 +3,7 @@
 
 # Gate 2D-07 — Native Windows update review
 
-**Observed:** 2026-10-29. **Status:** verification complete; Gate 2D owner acceptance is pending.
+**Observed:** 2026-10-29. **Status:** verification complete; the owner accepted the Gate 2D checkpoint on 2026-10-29.
 
 ## Verification setup and result
 
