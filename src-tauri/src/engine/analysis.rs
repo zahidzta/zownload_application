@@ -10,7 +10,7 @@ use super::{
     EnginePaths,
 };
 use crate::contract::{AnalyzeResult, AppError, ErrorCode};
-use serde::{Deserialize, Serialize};
+pub use crate::playlist::{PlaylistEntry, PlaylistSnapshot, MAX_PLAYLIST_ENTRIES};
 use serde_json::Value;
 use std::{collections::BTreeSet, ffi::OsString, sync::atomic::AtomicBool, time::Duration};
 use url::Url;
@@ -18,40 +18,6 @@ use url::Url;
 const ANALYSIS_TIMEOUT: Duration = Duration::from_secs(180);
 const OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
 const URL_LIMIT: usize = 8 * 1024;
-pub const MAX_PLAYLIST_ENTRIES: usize = 10_000;
-
-/// Private ordered work list. The public analyze result intentionally contains titles only.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlaylistEntry {
-    pub url: String,
-    pub title: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlaylistSnapshot {
-    pub entries: Vec<PlaylistEntry>,
-    pub next_index: usize,
-}
-
-impl PlaylistSnapshot {
-    pub fn validate(&self) -> Result<(), AppError> {
-        if self.entries.is_empty()
-            || self.entries.len() > MAX_PLAYLIST_ENTRIES
-            || self.next_index > self.entries.len()
-            || self.entries.iter().any(|entry| {
-                entry.title.trim().is_empty()
-                    || entry.title.len() > 1024
-                    || parsed_url(&entry.url).is_err()
-            })
-        {
-            return Err(AppError::new(
-                ErrorCode::Unknown,
-                Some("invalid playlist snapshot".into()),
-            ));
-        }
-        Ok(())
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {

@@ -3,7 +3,7 @@
 
 use super::{paths::DownloadPaths, Database, Error, Result};
 use crate::contract::{AppError, DownloadRequest, ItemStatus, Progress, QueueItem};
-use crate::engine::analysis::PlaylistSnapshot;
+use crate::playlist::PlaylistSnapshot;
 use rusqlite::{params, OptionalExtension};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -307,11 +307,11 @@ mod tests {
             .unwrap();
         let snapshot = PlaylistSnapshot {
             entries: vec![
-                crate::engine::analysis::PlaylistEntry {
+                crate::playlist::PlaylistEntry {
                     url: "https://example.com/one".into(),
                     title: "One".into(),
                 },
-                crate::engine::analysis::PlaylistEntry {
+                crate::playlist::PlaylistEntry {
                     url: "https://example.com/two".into(),
                     title: "Two".into(),
                 },
@@ -369,7 +369,7 @@ mod tests {
             .snapshot
             .is_none());
         let valid = PlaylistSnapshot {
-            entries: vec![crate::engine::analysis::PlaylistEntry {
+            entries: vec![crate::playlist::PlaylistEntry {
                 url: "https://example.com/one".into(),
                 title: "One".into(),
             }],

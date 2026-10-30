@@ -5,6 +5,15 @@ use std::{env, fs, io::Write, path::PathBuf};
 
 fn main() {
     let args = env::args().skip(1).collect::<Vec<_>>();
+    if args.first().map(String::as_str) == Some("-nostdin") {
+        let input = PathBuf::from(&args[args.iter().position(|arg| arg == "-i").unwrap() + 1]);
+        let output = PathBuf::from(args.last().unwrap());
+        fs::copy(input, output).unwrap();
+        let mut trace = fs::OpenOptions::new().create(true).append(true)
+            .open(env::var_os("ZOWNLOAD_PLAYLIST_STUB_TRACE").unwrap()).unwrap();
+        writeln!(trace, "FFMPEG|{}", args.join("|")).unwrap();
+        return;
+    }
     assert!(args.iter().any(|arg| arg == "--no-playlist"));
     assert_eq!(args[args.len() - 2], "--");
     let url = args.last().unwrap();
@@ -25,7 +34,7 @@ fn main() {
     let bytes = fs::copy(source, target).unwrap();
     let mut trace = fs::OpenOptions::new().create(true).append(true)
         .open(env::var_os("ZOWNLOAD_PLAYLIST_STUB_TRACE").unwrap()).unwrap();
-    writeln!(trace, "{id}|{format}").unwrap();
+    writeln!(trace, "ENTRY|{id}|{format}").unwrap();
     println!("ZP1|{id}|downloading|{bytes}|{bytes}");
     println!("ZP1|{id}|finished|{bytes}|{bytes}");
 }

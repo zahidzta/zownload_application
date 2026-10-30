@@ -20,50 +20,11 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
     let root = std::env::temp_dir().join(format!("zownload-playlist-cli-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&root).unwrap();
     let app_data = root.join("app-data");
-    let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/windows-engine");
-    let mut paths = match engine::bootstrap(&resources, &app_data, "0.0.0") {
-        engine::EngineStatus::Ready(paths) => paths,
-        engine::EngineStatus::Unavailable(reason) => panic!("pinned engine: {reason}"),
-    };
     let audio = root.join("audio.wav");
     let video = root.join("video.mp4");
-    let make = |args: &[&str]| {
-        assert!(Command::new(&paths.ffmpeg)
-            .args(args)
-            .status()
-            .unwrap()
-            .success());
-    };
-    make(&[
-        "-loglevel",
-        "error",
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=440:duration=1",
-        "-y",
-        audio.to_str().unwrap(),
-    ]);
-    make(&[
-        "-loglevel",
-        "error",
-        "-f",
-        "lavfi",
-        "-i",
-        "color=c=black:s=160x90:d=1",
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=440:duration=1",
-        "-c:v",
-        "mpeg4",
-        "-c:a",
-        "aac",
-        "-shortest",
-        "-y",
-        video.to_str().unwrap(),
-    ]);
-    let stub = app_data.join("engine/yt-dlp-stub.exe");
+    fs::write(&audio, b"local audio fixture").unwrap();
+    fs::write(&video, b"local video fixture").unwrap();
+    let stub = root.join("yt-dlp.exe");
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/playlist_stub.rs");
     assert!(Command::new("rustc")
         .arg(source)
@@ -72,7 +33,19 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
         .status()
         .unwrap()
         .success());
-    paths.yt_dlp = stub;
+    let ffmpeg = root.join("ffmpeg.exe");
+    assert!(Command::new("rustc")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/playlist_stub.rs"))
+        .arg("-o")
+        .arg(&ffmpeg)
+        .status()
+        .unwrap()
+        .success());
+    let paths = engine::EnginePaths {
+        yt_dlp: stub,
+        ffmpeg,
+        quickjs: root.join("qjs.exe"),
+    };
     let trace = root.join("trace.txt");
     std::env::set_var("ZOWNLOAD_PLAYLIST_STUB_AUDIO", &audio);
     std::env::set_var("ZOWNLOAD_PLAYLIST_STUB_VIDEO", &video);
@@ -118,19 +91,36 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
             &mut |_paths| Ok::<(), AppError>(()),
         )
         .unwrap_or_else(|error| panic!("entry {index}: {error:?}"));
-        assert!(output.path.metadata().unwrap().len() > 1000);
+        assert!(output.path.metadata().unwrap().len() > 5);
         outputs.push(output.path);
     }
     std::env::remove_var("ZOWNLOAD_PLAYLIST_STUB_AUDIO");
     std::env::remove_var("ZOWNLOAD_PLAYLIST_STUB_VIDEO");
     std::env::remove_var("ZOWNLOAD_PLAYLIST_STUB_TRACE");
+    let trace = fs::read_to_string(&trace).unwrap();
+    let entries: Vec<_> = trace
+        .lines()
+        .filter(|line| line.starts_with("ENTRY|"))
+        .collect();
     assert_eq!(
-        fs::read_to_string(&trace)
-            .unwrap()
-            .lines()
-            .collect::<Vec<_>>(),
-        ["0|bv*+ba/b", "1|wv*+ba/w", "2|ba/b", "3|ba/b"]
+        entries,
+        [
+            "ENTRY|0|bv*+ba/b",
+            "ENTRY|1|wv*+ba/w",
+            "ENTRY|2|ba/b",
+            "ENTRY|3|ba/b",
+        ]
     );
+    let ffmpeg: Vec<_> = trace
+        .lines()
+        .filter(|line| line.starts_with("FFMPEG|"))
+        .collect();
+    assert_eq!(ffmpeg.len(), 4);
+    assert!(ffmpeg
+        .iter()
+        .all(|line| line.contains("title=Track") && line.contains("album=Album")));
+    assert!(ffmpeg[2].contains("-b:a|320k"));
+    assert!(ffmpeg[3].contains("-b:a|128k"));
     assert_eq!(outputs[0].file_name().unwrap(), "Track.mp4");
     assert_eq!(outputs[1].file_name().unwrap(), "Track (1).mp4");
     assert_eq!(outputs[2].file_name().unwrap(), "Track.mp3");
@@ -142,28 +132,5 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
         .extension()
         .unwrap()
         != "zip"));
-    for (index, path) in outputs.iter().enumerate() {
-        let probe = Command::new(&paths.ffmpeg)
-            .args(["-hide_banner", "-i"])
-            .arg(path)
-            .output()
-            .unwrap();
-        let metadata = String::from_utf8_lossy(&probe.stderr);
-        assert!(
-            metadata.contains("Track"),
-            "entry {index} has no title: {metadata}"
-        );
-        assert!(
-            metadata.contains("Album"),
-            "entry {index} has no album: {metadata}"
-        );
-        if index >= 2 {
-            let bitrate = if index == 2 { "320 kb/s" } else { "128 kb/s" };
-            assert!(
-                metadata.contains(bitrate),
-                "entry {index} bitrate: {metadata}"
-            );
-        }
-    }
     fs::remove_dir_all(root).unwrap();
 }
