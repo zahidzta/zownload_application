@@ -75,6 +75,8 @@ pub(crate) struct EngineManifest {
     #[serde(default)]
     failed_versions: Vec<String>,
     #[serde(default)]
+    manual_retry_versions: Vec<String>,
+    #[serde(default)]
     last_update_check: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pending_version: Option<String>,
@@ -244,6 +246,7 @@ fn make_manifest(app_version: &str) -> Result<EngineManifest, String> {
         },
         baseline_app_version: app_version.to_owned(),
         failed_versions: Vec::new(),
+        manual_retry_versions: Vec::new(),
         last_update_check: None,
         pending_version: None,
         reverted_version: None,

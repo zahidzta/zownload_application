@@ -369,5 +369,34 @@ test('browser-backed mock storage round-trips and failed update stays typed', as
   await expect(first.call('engine_update', {})).rejects.toMatchObject({ code: 'no_internet' })
   const reloaded = createSimulatorTransport({ storage })
   expect(await reloaded.call('get_settings', {})).toEqual({ language: 'es', zipPlaylists: false, downloadDir: null })
-  expect(await reloaded.call('engine_check_update', {})).toMatchObject({ updateAvailable: true })
+  expect(await reloaded.call('engine_check_update', {})).toMatchObject({
+    updateAvailable: true, outcome: 'failed', failedVersion: '2026.10.23', manualRetryAvailable: true,
+  })
+  expect(await reloaded.call('engine_update', {})).toMatchObject({
+    updateAvailable: false, outcome: 'updated', current: '2026.10.23',
+  })
+  const afterRetry = createSimulatorTransport({ storage })
+  expect(await afterRetry.call('engine_check_update', {})).toMatchObject({
+    updateAvailable: false, outcome: 'current', current: '2026.10.23',
+  })
+})
+
+test('app update checks use an independent 24-hour clock and keep a saved action on errors', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const first = createSimulatorTransport({ clock, storage, appUpdateAvailable: true })
+  const available = await first.call('app_update_check', {})
+  expect(available).toMatchObject({ current: '0.0.1', latest: '0.0.2', updateAvailable: true })
+
+  clock.advanceBy(23 * 60 * 60 * 1000)
+  const restarted = createSimulatorTransport({ clock, storage, appUpdateAvailable: false })
+  expect(await restarted.call('app_update_check', {})).toMatchObject({ updateAvailable: true, latest: '0.0.2' })
+  await expect(createSimulatorTransport({ clock, storage, appUpdateInstallFails: true })
+    .call('app_update_install', {})).rejects.toMatchObject({ code: 'unknown' })
+
+  clock.advanceBy(60 * 60 * 1000)
+  const daily = createSimulatorTransport({ clock, storage, appUpdateAvailable: false, appUpdateCheckFails: true })
+  expect(await daily.call('app_update_check', {})).toMatchObject({
+    updateAvailable: true, latest: '0.0.2', error: 'Synthetic app update check failed.',
+  })
 })

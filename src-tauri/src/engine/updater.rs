@@ -7,6 +7,7 @@ use super::{
     hash_file, newer, read_manifest, write_manifest, EngineManifest, EnginePaths, BASELINE_HASHES,
     YT_DLP_VERSION,
 };
+use crate::contract::{EngineUpdateInfo, EngineUpdateOutcome};
 use reqwest::{blocking::Client, redirect::Policy, Url};
 use serde::Deserialize;
 use std::{
@@ -210,6 +211,75 @@ impl ReleaseClient {
         })
     }
 
+    pub(crate) fn update_info(
+        &self,
+        data: &Path,
+        latest: &str,
+    ) -> Result<EngineUpdateInfo, String> {
+        let manifest = read_manifest(data)?;
+        let failed = newer(latest, &manifest.yt_dlp.version)
+            && manifest.failed_versions.contains(&latest.to_owned());
+        let retry_available =
+            failed && !manifest.manual_retry_versions.contains(&latest.to_owned());
+        let pending = manifest.pending_version.as_deref() == Some(latest);
+        let update_available =
+            newer(latest, &manifest.yt_dlp.version) && !pending && (!failed || retry_available);
+        let outcome = if pending {
+            EngineUpdateOutcome::Pending
+        } else if manifest.reverted_version.as_deref() == Some(latest) {
+            EngineUpdateOutcome::Reverted
+        } else if update_available {
+            EngineUpdateOutcome::Available
+        } else if failed {
+            EngineUpdateOutcome::Failed
+        } else if manifest.reverted_version.is_some() {
+            EngineUpdateOutcome::Reverted
+        } else {
+            EngineUpdateOutcome::Current
+        };
+        Ok(EngineUpdateInfo {
+            current: manifest.yt_dlp.version.clone(),
+            latest: latest.to_owned(),
+            update_available,
+            outcome: Some(outcome),
+            pending_version: manifest.pending_version,
+            reverted_version: manifest.reverted_version,
+            failed_version: failed.then(|| latest.to_owned()),
+            manual_retry_available: failed.then_some(retry_available),
+        })
+    }
+
+    /// Startup checks update the clock before contacting GitHub, so a network
+    /// failure does not cause a request every time the app is opened.
+    pub(crate) fn startup_check(
+        &self,
+        data: &Path,
+        now: time::OffsetDateTime,
+    ) -> Result<bool, String> {
+        if !record_daily_check(data, now)? {
+            return Ok(false);
+        }
+        let candidate = self.latest()?;
+        let manifest = read_manifest(data)?;
+        if !newer(&candidate.version, &manifest.yt_dlp.version)
+            || manifest.failed_versions.contains(&candidate.version)
+        {
+            return Ok(false);
+        }
+        self.stage(data, &candidate)
+    }
+
+    /// A failed release is excluded from automatic checks. The Settings action
+    /// can claim exactly one retry, persisted before any download starts.
+    pub(crate) fn update_manually(
+        &self,
+        data: &Path,
+        candidate: &Candidate,
+    ) -> Result<bool, String> {
+        let retry = claim_manual_retry(data, &candidate.version)?;
+        self.stage_with_retry(data, candidate, retry, super::probe_version)
+    }
+
     fn download(&self, url: &str, target: &Path) -> Result<(), String> {
         let response = self.open(url, MAX_EXECUTABLE)?;
         let mut file = File::create(target).map_err(|error| error.to_string())?;
@@ -226,10 +296,30 @@ impl ReleaseClient {
         self.stage_with(data, candidate, super::probe_version)
     }
 
+    fn stage_with_retry(
+        &self,
+        data: &Path,
+        candidate: &Candidate,
+        allow_failed_retry: bool,
+        check: impl Fn(&Path, &str) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        self.stage_inner(data, candidate, allow_failed_retry, check)
+    }
+
     fn stage_with(
         &self,
         data: &Path,
         candidate: &Candidate,
+        check: impl Fn(&Path, &str) -> Result<(), String>,
+    ) -> Result<bool, String> {
+        self.stage_inner(data, candidate, false, check)
+    }
+
+    fn stage_inner(
+        &self,
+        data: &Path,
+        candidate: &Candidate,
+        allow_failed_retry: bool,
         check: impl Fn(&Path, &str) -> Result<(), String>,
     ) -> Result<bool, String> {
         let _manifest_guard = manifest_slot()
@@ -237,6 +327,9 @@ impl ReleaseClient {
             .map_err(|_| "manifest slot poisoned")?;
         let mut manifest = read_manifest(data)?;
         if !newer(&candidate.version, &manifest.yt_dlp.version) {
+            return Ok(false);
+        }
+        if manifest.failed_versions.contains(&candidate.version) && !allow_failed_retry {
             return Ok(false);
         }
         if manifest.pending_version.is_some() {
@@ -274,6 +367,53 @@ impl ReleaseClient {
         }
         result.map(|()| true)
     }
+}
+
+fn record_daily_check(data: &Path, now: time::OffsetDateTime) -> Result<bool, String> {
+    let _manifest_guard = manifest_slot()
+        .lock()
+        .map_err(|_| "manifest slot poisoned")?;
+    let mut manifest = read_manifest(data)?;
+    let cutoff = (now - time::Duration::hours(24))
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|error| error.to_string())?;
+    if manifest
+        .last_update_check
+        .as_deref()
+        .is_some_and(|last| last > cutoff.as_str())
+    {
+        return Ok(false);
+    }
+    manifest.last_update_check = Some(
+        now.format(&time::format_description::well_known::Rfc3339)
+            .map_err(|error| error.to_string())?,
+    );
+    write_manifest(data, &manifest)?;
+    Ok(true)
+}
+
+fn claim_manual_retry(data: &Path, version: &str) -> Result<bool, String> {
+    let _manifest_guard = manifest_slot()
+        .lock()
+        .map_err(|_| "manifest slot poisoned")?;
+    let mut manifest = read_manifest(data)?;
+    if !manifest
+        .failed_versions
+        .iter()
+        .any(|failed| failed == version)
+    {
+        return Ok(false);
+    }
+    if manifest
+        .manual_retry_versions
+        .iter()
+        .any(|retried| retried == version)
+    {
+        return Err(format!("manual retry already used for {version}"));
+    }
+    manifest.manual_retry_versions.push(version.to_owned());
+    write_manifest(data, &manifest)?;
+    Ok(true)
 }
 
 fn checksum_for(bytes: &[u8], filename: &str) -> Result<String, String> {
@@ -611,6 +751,67 @@ mod tests {
             .stage(&data, &candidate)
             .unwrap_err()
             .contains("pending activation"));
+        server.join().unwrap();
+        fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn automatic_engine_check_is_throttled_for_24_hours() {
+        let data = test_data();
+        let now = time::OffsetDateTime::from_unix_timestamp(2_000_000).unwrap();
+        assert!(record_daily_check(&data, now).unwrap());
+        assert!(!record_daily_check(&data, now + time::Duration::hours(23)).unwrap());
+        assert!(record_daily_check(&data, now + time::Duration::hours(24)).unwrap());
+        fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn automatic_checks_skip_failed_versions_and_persist_the_clock() {
+        let data = test_data();
+        let mut manifest = read_manifest(&data).unwrap();
+        manifest.failed_versions.push("2026.10.21".into());
+        write_manifest(&data, &manifest).unwrap();
+        let (base, server) = fixture_server(Vec::new(), String::new(), true, 1);
+        let client = ReleaseClient::new(&format!("{base}/latest"), false).unwrap();
+        let now = time::OffsetDateTime::from_unix_timestamp(2_000_000).unwrap();
+        assert!(!client.startup_check(&data, now).unwrap());
+        assert!(!client
+            .startup_check(&data, now + time::Duration::hours(1))
+            .unwrap());
+        assert!(read_manifest(&data).unwrap().last_update_check.is_some());
+        server.join().unwrap();
+        fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn a_failed_release_gets_one_persisted_manual_retry() {
+        let executable = b"stub executable bytes".to_vec();
+        let checksum = format!("{:x}", Sha256::digest(&executable));
+        let (base, server) = fixture_server(executable, checksum, true, 3);
+        let client = ReleaseClient::new(&format!("{base}/latest"), false).unwrap();
+        let candidate = client.latest().unwrap();
+        let data = test_data();
+        let mut manifest = read_manifest(&data).unwrap();
+        manifest.failed_versions.push(candidate.version.clone());
+        write_manifest(&data, &manifest).unwrap();
+
+        assert!(claim_manual_retry(&data, &candidate.version).unwrap());
+        assert!(claim_manual_retry(&data, &candidate.version).is_err());
+        let info = client.update_info(&data, &candidate.version).unwrap();
+        assert_eq!(info.outcome, Some(EngineUpdateOutcome::Failed));
+        assert_eq!(
+            info.failed_version.as_deref(),
+            Some(candidate.version.as_str())
+        );
+        assert_eq!(info.manual_retry_available, Some(false));
+        assert!(!info.update_available);
+        assert!(client
+            .stage_with_retry(&data, &candidate, true, |_, _| Ok(()))
+            .unwrap());
+        assert!(read_manifest(&data)
+            .unwrap()
+            .manual_retry_versions
+            .contains(&candidate.version));
         server.join().unwrap();
         fs::remove_dir_all(data).unwrap();
     }

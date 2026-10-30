@@ -417,3 +417,38 @@ mode locally, set `ZOWNLOAD_TEST_NO_PINNED_ENGINE=1` for
 `cargo test --manifest-path src-tauri/Cargo.toml --test probation_queue`;
 the site-error and missing-baseline cases still run. With the binaries
 present, the same test also runs crash and malformed-JSON baseline retries.
+
+## Gate 2D-05 and 2D-06 desktop updater setup
+
+The app updater is pinned to `tauri-plugin-updater = 2.13.0`. Its release
+endpoint is the static `latest.json` from the repository's latest GitHub
+release, with distinct `windows-x86_64-nsis` and `windows-x86_64-msi` targets.
+The implementation follows Tauri's [static updater format](https://v2.tauri.app/plugin/updater/).
+The test fixture server binds `127.0.0.1` on an OS-assigned port and serves
+`/latest.json` plus the selected installer asset. The test verifies that the
+signed fixture downloads for both targets and that changed artifact bytes are
+rejected.
+
+The public test key and signed artifact fixtures are under
+`tests/fixtures/app-updates/`; SHA-256 values are:
+
+- `update-fixture.bin`: `D3E0F8C2BB269586791EA0E78ED990EF3B6B8D63A6B04DB19623726CBFF77A54`
+- `update-fixture.bin.sig`: `D5B822112FD2906F7C6E629B52B8943A119F502CADD222B3726CB3586E85994A`
+- `test-key.pub`: `45B3D65461A62151C0028B9E3C60C8AC82101594406D48CE19EBE09E9A3D2710`
+
+The test signing key was created in the OS temporary directory, used to sign
+the fixture with app version `1.2.0`, then deleted. The updater public key in
+`tauri.conf.json` is only for the test fixture; 3C must replace it with the
+production release key. `src-tauri/build.rs` embeds the Common Controls v6
+manifest into Windows test binaries because they lack the packaged app
+manifest used by the dialog dependency.
+
+Exact V2 passed in a detached clean checkout using the pinned Node `24.22.0`,
+`npm ci`, the copied ignored Windows engine fixtures, and
+`CARGO_TARGET_DIR` pointing at the main checkout's `src-tauri/target`. Results:
+production build, 60 interactive tests, contract checks, 18 Node tests, Rust
+format check, 75 Rust unit tests, signed NSIS/MSI fixture integration, the
+Windows probation/process-tree/queue integrations, and `cargo check` passed.
+The working checkout's first exact V2 attempt hit the existing Node test
+discovery and Vite SSR timeout recorded under Gate 2C-03; the clean-checkout
+rerun passed.

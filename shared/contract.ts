@@ -143,12 +143,25 @@ export interface Settings {
 
 // ───────────────────────── Engine updates ─────────────────────────
 
+export type EngineUpdateOutcome = 'current' | 'available' | 'pending' | 'updated' | 'failed' | 'reverted'
+
 export interface EngineUpdateInfo {
   current: string; // yt-dlp version in use
   latest: string;
   updateAvailable: boolean;
+  outcome?: EngineUpdateOutcome;
   pendingVersion?: string; // verified update waiting for an idle engine
   revertedVersion?: string; // update reverted after probation
+  failedVersion?: string; // latest release failed a health check or probation
+  manualRetryAvailable?: boolean; // one explicit retry remains for failedVersion
+}
+
+export interface AppUpdateInfo {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean;
+  checkedAt: number | null; // Unix seconds, independent of the engine update clock
+  error: string | null;
 }
 
 // ───────────────────────── Errors ─────────────────────────
@@ -195,6 +208,8 @@ export interface Commands {
 
   engine_check_update: { args: Record<string, never>; result: EngineUpdateInfo };
   engine_update: { args: Record<string, never>; result: EngineUpdateInfo };
+  app_update_check: { args: Record<string, never>; result: AppUpdateInfo };
+  app_update_install: { args: Record<string, never>; result: void };
 }
 
 // ───────────────────────── Events (Rust -> UI) ─────────────────────────

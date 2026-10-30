@@ -38,6 +38,9 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
   const engineInfo = useStore(flowStore, (state) => state.engineInfo)
   const engineBusy = useStore(flowStore, (state) => state.engineBusy)
   const engineError = useStore(flowStore, (state) => state.engineError)
+  const appUpdateInfo = useStore(flowStore, (state) => state.appUpdateInfo)
+  const appUpdateBusy = useStore(flowStore, (state) => state.appUpdateBusy)
+  const appUpdateError = useStore(flowStore, (state) => state.appUpdateError)
   const actionError = useStore(flowStore, (state) => state.actionError)
   const [picking, setPicking] = useState(false)
   const [pickerError, setPickerError] = useState(false)
@@ -102,16 +105,41 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
             <div className="flex flex-wrap gap-compact">
               <Button label={engineBusy === 'checking' ? t(locale, 'settings.checking') : t(locale, 'settings.checkEngine')}
                 disabled={engineBusy !== null} onClick={() => { void flowStore.getState().checkEngineUpdate() }} className={actionClass} />
-              <Button label={engineBusy === 'updating' ? t(locale, 'settings.updating') : t(locale, 'settings.updateEngine')}
-                disabled={engineBusy !== null} onClick={() => { void flowStore.getState().updateEngine() }} className={actionClass} />
+              <Button label={engineBusy === 'updating' ? t(locale, 'settings.updating')
+                : engineInfo?.failedVersion && engineInfo.manualRetryAvailable
+                  ? t(locale, 'settings.retryEngine') : t(locale, 'settings.updateEngine')}
+                disabled={engineBusy !== null || (engineInfo?.failedVersion !== undefined && !engineInfo.manualRetryAvailable)}
+                onClick={() => { void flowStore.getState().updateEngine() }} className={actionClass} />
             </div>
-            {engineInfo && <p role="status" className="text-small">{t(locale, engineInfo.updateAvailable ? 'settings.engineAvailable' : 'settings.engineCurrent')}
-              {' '}{engineInfo.current}{engineInfo.updateAvailable ? ` → ${engineInfo.latest}` : ''}</p>}
+            {engineInfo && <p role="status" className="text-small">
+              {engineError ? t(locale, 'settings.engineFailed')
+                : engineInfo.outcome === 'updated' ? t(locale, 'settings.engineUpdated')
+                  : engineInfo.outcome === 'pending' || engineInfo.pendingVersion ? t(locale, 'settings.enginePending')
+                    : engineInfo.outcome === 'failed' || engineInfo.failedVersion ? engineInfo.manualRetryAvailable
+                      ? t(locale, 'settings.engineRetryAvailable') : t(locale, 'settings.engineRetryUsed')
+                      : engineInfo.outcome === 'reverted' || engineInfo.revertedVersion ? t(locale, 'settings.engineReverted')
+                        : engineInfo.outcome === 'available' || engineInfo.updateAvailable
+                          ? t(locale, 'settings.engineAvailable') : t(locale, 'settings.engineCurrent')}
+              {' '}{engineInfo.revertedVersion && <>{engineInfo.revertedVersion} → </>}
+              {engineInfo.failedVersion && <>{engineInfo.failedVersion} · </>}
+              {engineInfo.pendingVersion ?? engineInfo.current}
+              {engineInfo.updateAvailable && !engineInfo.failedVersion ? ` → ${engineInfo.latest}` : ''}
+            </p>}
             {engineError && <p role="alert" className="text-small text-danger">{t(locale, `errors.${engineError.code}`)}</p>}
           </section>
           <section aria-labelledby="settings-app-heading" className="space-y-compact border-t border-border pt-section">
             <h3 id="settings-app-heading" className="font-medium text-text-strong">{t(locale, 'settings.appUpdates')}</h3>
             <p className="text-small">{t(locale, 'settings.appUpdatesDescription')}</p>
+            {appUpdateInfo && <p role="status" className="text-small">
+              {appUpdateInfo.error ? t(locale, 'settings.appUpdateCheckFailed')
+                : appUpdateInfo.updateAvailable ? t(locale, 'settings.appUpdateAvailable')
+                  : t(locale, 'settings.appUpToDate')}
+              {appUpdateInfo.latest ? ` ${appUpdateInfo.current} → ${appUpdateInfo.latest}` : ''}
+            </p>}
+            {appUpdateError && <p role="alert" className="text-small text-danger">{t(locale, 'settings.appUpdateFailed')}</p>}
+            {appUpdateInfo?.updateAvailable && <Button
+              label={appUpdateBusy ? t(locale, 'settings.appUpdateInstalling') : t(locale, 'settings.updateApp')}
+              disabled={appUpdateBusy} onClick={() => { void flowStore.getState().installAppUpdate() }} className={actionClass} />}
           </section>
           <section aria-labelledby="settings-developer-heading" className="space-y-compact border-t border-border pt-section">
             <h3 id="settings-developer-heading" className="font-medium text-text-strong">{t(locale, 'settings.developer')}</h3>

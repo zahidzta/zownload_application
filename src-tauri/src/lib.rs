@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 // Keep the shared contract in the Rust build before commands are implemented.
 pub mod android_spike;
+#[cfg(target_os = "windows")]
+pub mod app_update;
 #[cfg(not(target_os = "android"))]
 mod commands;
 pub mod contract;
@@ -42,6 +44,7 @@ pub fn run() {
                     if let engine::EngineStatus::Unavailable(reason) = &status {
                         eprintln!("Windows engine unavailable: {reason}");
                     }
+                    let engine_ready = matches!(status, engine::EngineStatus::Ready(_));
                     let ready = match &status {
                         engine::EngineStatus::Ready(paths) => Some(paths.clone()),
                         engine::EngineStatus::Unavailable(_) => None,
@@ -51,7 +54,7 @@ pub fn run() {
                         database,
                         ready,
                         supervisor,
-                        data,
+                        data.clone(),
                         Some(resources),
                         app.path().download_dir()?,
                         commands::queue_sink(app.handle().clone()),
@@ -59,6 +62,29 @@ pub fn run() {
                     app.manage(std::sync::Arc::clone(&queue));
                     if let Err(error) = queue.kick() {
                         eprintln!("could not start saved queue: {error:?}");
+                    }
+                    if engine_ready {
+                        let data = data.clone();
+                        let queue = std::sync::Arc::clone(&queue);
+                        std::thread::spawn(move || {
+                            let checked =
+                                engine::updater::ReleaseClient::official().and_then(|client| {
+                                    client.startup_check(&data, time::OffsetDateTime::now_utc())
+                                });
+                            match checked {
+                                Ok(true) => {
+                                    if let Err(error) = queue.kick() {
+                                        eprintln!(
+                                            "could not activate startup yt-dlp update: {error:?}"
+                                        );
+                                    }
+                                }
+                                Ok(false) => (),
+                                Err(error) => {
+                                    eprintln!("startup yt-dlp update check failed: {error}")
+                                }
+                            }
+                        });
                     }
                 }
             }
@@ -81,6 +107,8 @@ pub fn run() {
             #[cfg(not(target_os = "windows"))]
             let _ = (window, event);
         });
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         android_spike::enqueue_download,
@@ -104,7 +132,9 @@ pub fn run() {
         commands::get_settings,
         commands::set_settings,
         commands::engine_check_update,
-        commands::engine_update
+        commands::engine_update,
+        commands::app_update_check,
+        commands::app_update_install
     ]);
     builder
         .run(tauri::generate_context!())

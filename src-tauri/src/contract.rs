@@ -21,6 +21,8 @@
 //!   set_settings(settings: Settings)            -> ()
 //!   engine_check_update()                       -> EngineUpdateInfo
 //!   engine_update()                             -> EngineUpdateInfo
+//!   app_update_check()                           -> AppUpdateInfo
+//!   app_update_install()                         -> void
 //!
 //! Events emitted with app.emit(...):
 //!   "queue:item-updated"  payload: QueueItem   (throttled, ~5/s per item)
@@ -246,6 +248,17 @@ pub struct Settings {
 
 // ───────────────────────── Engine updates ─────────────────────────
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EngineUpdateOutcome {
+    Current,
+    Available,
+    Pending,
+    Updated,
+    Failed,
+    Reverted,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineUpdateInfo {
@@ -253,9 +266,25 @@ pub struct EngineUpdateInfo {
     pub latest: String,
     pub update_available: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<EngineUpdateOutcome>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pending_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reverted_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manual_retry_available: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateInfo {
+    pub current: String,
+    pub latest: Option<String>,
+    pub update_available: bool,
+    pub checked_at: Option<i64>,
+    pub error: Option<String>,
 }
 
 // ───────────────────────── Errors ─────────────────────────
@@ -305,11 +334,30 @@ mod tests {
         let status = EngineUpdateInfo {
             pending_version: Some("2026.10.26".into()),
             reverted_version: Some("2026.10.21".into()),
+            failed_version: Some("2026.10.26".into()),
+            manual_retry_available: Some(true),
             ..legacy
         };
         let value = serde_json::to_value(status).unwrap();
         assert_eq!(value["pendingVersion"], "2026.10.26");
         assert_eq!(value["revertedVersion"], "2026.10.21");
+        assert_eq!(value["failedVersion"], "2026.10.26");
+        assert_eq!(value["manualRetryAvailable"], true);
+    }
+
+    #[test]
+    fn app_update_status_uses_its_own_clock_and_error_field() {
+        let status = AppUpdateInfo {
+            current: "1.0.0".into(),
+            latest: Some("1.1.0".into()),
+            update_available: true,
+            checked_at: Some(1_800_000_000),
+            error: None,
+        };
+        let value = serde_json::to_value(status).unwrap();
+        assert_eq!(value["updateAvailable"], true);
+        assert_eq!(value["checkedAt"], 1_800_000_000_i64);
+        assert!(value["error"].is_null());
     }
 
     #[test]
