@@ -1,12 +1,10 @@
-Before anything else, read docs/STATE.md and the current gate file.
-
+Before anything else, read docs/STATE.md and the current gate file. Never read docs/STATE-ARCHIVE.md unless the owner asks.
 # Zownload agent instructions
 - The owner uses OpenAI Codex, knows React/TypeScript, and has little Rust/Tauri experience. Explain Rust changes plainly; keep Rust simple, commented, and based on established crates.
 - Authority: `shared/contract.ts` and `src-tauri/src/contract.rs` govern field names and types; `PROJECT.md` governs behavior and intent; confirmed images indexed by `docs/design/README.md` govern visuals. Report conflicts to the owner.
 - Use `docs/PROJECT-INDEX.md` to locate relevant specification lines. Never load all of `PROJECT.md` automatically.
 - Before writing code that uses a library or framework, consult its current documentation through context7.
 - New hand-written source files must start with the SPDX header (GPL-3.0-or-later, zahidzta, 2026).
-
 ## Session protocol
 1. One task per session. Read this file, `docs/STATE.md`, the current gate file, and only the `PROJECT.md` ranges listed for that task.
 2. Use subagents or parallel work only for independent tasks and only when the tool supports them. Otherwise work sequentially, one task per session. Delegated results are at most 10 lines: changes, files touched, test status, blockers.
@@ -14,13 +12,13 @@ Before anything else, read docs/STATE.md and the current gate file.
 4. If `PROJECT.md` is ambiguous or contradicts another authority, ask the owner; do not silently decide.
 5. When verification passes, commit the task, update `docs/STATE.md`, commit that update, then stop and tell the owner to start a fresh session.
 6. Respect Appendix A's delivery rule: do not start the next stage until the owner accepts the checkpoint.
-
+7. Keep `docs/STATE.md` at or below 70 lines and about 1,500 words. Each `Completed <id>:` entry is at most two lines, with the change, commit hash, and evidence link; refer to gate V-names instead of repeating command strings. At gate exit, move that gate's task entries to `docs/gates/evidence/<gate>/tasks.md` and leave one accepted-gate summary line in `STATE.md`.
 ## Build, test, and delivery
 - No app build/test scripts exist yet. Once Gate 0A creates them, use the current gate task's exact commands and record setup commands in `docs/toolchain.md`.
 - Work on one `task-<id>` branch per task. After verification, commit and open a PR with `gh pr create`. Never merge, force-push, or create releases; the owner does that.
 - For CI failures use `gh run list --limit 5` and `gh run view <id> --log-failed | tail -50`. Never print full logs.
 
-Stage mode (when the prompt says so): commit each task on the current stage branch; do not create task branches or PRs; never push or merge. Record completion in docs/STATE.md as "Completed <id>: ...", and never delete the "Completed <id>" lines of the current gate (move older gates' details to docs/gates/evidence/).
+Stage mode (when the prompt says so): commit each task on the current stage branch; do not create task branches or PRs; never push or merge. Record completion in `docs/STATE.md` as `Completed <id>: ...`; keep task entries through the gate, then move them to `docs/gates/evidence/<gate>/tasks.md` and leave one accepted-gate summary line in `STATE.md`.
 
 ### Execute Without Asking
 You may autonomously:

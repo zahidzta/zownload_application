@@ -129,4 +129,4 @@ Gate 0A accepted by the owner on 2026-10-18 (CI run 39177425523, PR #14 merged).
 | Versions and OS matrix | Exact Tauri, Rust, Node, npm, Corretto, Android SDK/NDK, Gradle and plugin versions, source links, setup commands, and the selected OS matrix are in `docs/toolchain.md`. |
 | Legal and design inventory | `LICENSE` contains MIT text; `docs/THIRD-PARTY-NOTICES.md` provides the engine notice template. The hosted design check passed for all nine indexed, tracked PNG paths and dimensions. No production UI or download engine was added in Gate 0A. |
 
-The evidence meets the Gate 0A technical checks. Owner review and explicit checkpoint acceptance remain pending; do not begin Gate 0B until acceptance is recorded in `docs/STATE.md`.
+The evidence meets the Gate 0A technical checks. The owner accepted Gate 0A on 2026-10-18; Gate 0B proceeded after that checkpoint acceptance.

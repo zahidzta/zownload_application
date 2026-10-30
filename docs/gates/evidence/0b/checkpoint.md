@@ -1,9 +1,10 @@
 # Gate 0B checkpoint evidence — task 0B-21
 
-Prepared 2026-10-20 for owner review. This record freezes the tested Windows
-CLI commands in [the command matrix](../../../ytdlp-commands.md). It does not
-record owner acceptance. The task verifier checks local artifacts and evidence;
-it does not redownload media or replace the owner's playback review.
+Accepted by the owner on 2026-10-20 after PR #45 merged, as recorded in the
+[Gate 0B record](../../gate-0b.md). This freezes the tested Windows CLI commands
+in [the command matrix](../../../ytdlp-commands.md). The task verifier checks
+local artifacts and evidence; it does not redownload media or replace the
+owner's playback review.
 
 ## Source, builds and redistribution
 
@@ -53,11 +54,11 @@ need the same transport check before a support claim.
 ## Corrections and limits for owner review
 
 - Appendix B's `--audio-quality` proposal did not re-encode an already-MP3
-  128 kbps Archive source at a requested 320K. The original 0B-14/15 result
+ 128 kbps Archive source at a requested 320K. The original 0B-14/15 result
   remains in [single](mp3-singles.txt) and [playlist](mp3-playlist.txt) evidence.
-  The owner-approved non-MP3 fixtures prove the preset rates for Vorbis/WAV
-  inputs. Product handling of already-MP3 sources is an open Phase 1/2 choice;
-  the matrix makes no unconditional preset claim for those sources.
+  The owner later resolved already-MP3 handling in 1B-02: copy sources at or
+  below the requested maximum, reencode higher-bitrate MP3, and encode
+  non-MP3 sources to the requested maximum; see the [1B checkpoint](../1b/checkpoint.md).
 - MP4 merge alone preserved Opus. The tested `Merger+ffmpeg_o:-c:a aac` override
   produced AAC for the selected non-AAC source. The Archive PNG had to be
   fetched explicitly and converted locally to a JPEG cover.
@@ -73,5 +74,5 @@ need the same transport check before a support claim.
   QuickJS was inspected as an ELF, not executed on a device in Gate 0B.
 
 Verification entrypoint: `powershell -NoProfile -File scripts/gate-0b/verify-gate.ps1`.
-Gate 0C stays closed until the owner explicitly accepts this checkpoint in
-`docs/STATE.md`.
+The owner accepted Gate 0B on 2026-10-20; Gate 0C proceeded after that
+acceptance, recorded in `docs/STATE.md`.
