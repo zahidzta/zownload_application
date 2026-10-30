@@ -3,11 +3,12 @@
 ## Current checkpoint and next task
 
 - **Checkpoint (2026-10-29):** The owner accepted Gate 2D and authorized Gate 3A planning. See the [Gate 2D checkpoint](gates/evidence/2d/checkpoint.md).
-- **Next task:** The owner reviews and accepts the [Gate 3A plan](gates/gate-3a.md), including its two decisions. Then start 3A-02 on `task-3a-02`. No Gate 3A implementation has started.
+- **Next task:** 3A-03 — implement and verify the sequential playlist entry worker on `task-3a-02`; include 3A-02 and 3A-03 in one PR, as the owner requested.
 
 ## Current gate 3A completions
 
 - Completed 3A-01: Planned sequential playlist work and recorded the resume-state and ZIP boundary decisions; commit `4d6c2c5`; [plan evidence](gates/gate-3a.md). Verification is identified as V0 there.
+- Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commit `2549665`; [evidence](gates/evidence/3a/3a-02.md). V1 passed.
 
 ## Accepted gates
 
@@ -40,7 +41,6 @@
 
 ## Open owner questions
 
-- Review and accept the two proposals in the [Gate 3A plan](gates/gate-3a.md): private SQLite playlist snapshot/index without public contract fields, and ZIP-enabled playlists remaining queued until Gate 3B.
 - Physical-device touch and assistive-technology review remains open for the accepted 1B/1C UI; see their checkpoints.
 - Gate 0B records automated VLC playback, not a human listening/viewing claim. If human playback remains required, the owner's review is not recorded; see the [checkpoint](gates/evidence/0b/checkpoint.md).
 - If Android binary replacement exceeds budget, the owner must review whether to choose the desktop-only first-release fallback. The distribution blocker remains until the source/build/notice gap is resolved.
