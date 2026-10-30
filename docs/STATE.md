@@ -8,8 +8,8 @@
 ## Current gate 3A completions
 
 - Completed 3A-01: Planned sequential playlist work and recorded the resume-state and ZIP boundary decisions; commit `4d6c2c5`; [plan evidence](gates/gate-3a.md). Verification is identified as V0 there.
-- Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commit `2549665`; [evidence](gates/evidence/3a/3a-02.md). V1 passed.
-- Completed 3A-03: Added per-entry Max/Min worker, playlist album metadata, and collision-safe outputs; commit `414c068`; [evidence](gates/evidence/3a/3a-03.md). V1 and focused CLI test passed.
+- Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commits `2549665`, `b248232` (platform-neutral fix); [evidence](gates/evidence/3a/3a-02.md). V1 passed.
+- Completed 3A-03: Added per-entry Max/Min worker, playlist album metadata, and collision-safe outputs; commits `414c068`, `b248232` (CI fixture fix); [evidence](gates/evidence/3a/3a-03.md). V1 and focused CLI test passed.
 
 ## Accepted gates
 
