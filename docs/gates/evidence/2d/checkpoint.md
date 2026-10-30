@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- SPDX-FileCopyrightText: 2026 zahidzta -->
 
-# Gate 2D checkpoint — owner review pending
+# Gate 2D checkpoint — accepted 2026-10-29
 
-**Status:** implementation and verification evidence are complete; explicit owner acceptance is required before Gate 3A.
+**Status:** accepted by the owner on 2026-10-29; Gate 3A may begin.
 
 The [native Windows review](native-review.md) records the exact V3 result, official stable yt-dlp checksum/health observation, local release fixtures, stub-engine behavior, and test limits. No product source or contract changes were needed for 2D-07.
 
@@ -21,6 +21,6 @@ The exact V3 command and focused Windows app-update, probation, process-tree, an
 
 ## Owner decision
 
-Please review the Settings update outcomes and this evidence, then explicitly accept or return the Gate 2D checkpoint. Do not start the next stage before acceptance. After acceptance, the next implementation stage is **Gate 3A — Sequential playlists**.
+The owner explicitly accepted the Gate 2D checkpoint on 2026-10-29 and directed work to begin on **Gate 3A — Sequential playlists**.
 
 The installed NSIS/MSI update flow remains scheduled for 3C. The Android distribution blocker remains open as recorded in [STATE.md](../../../STATE.md#release-blocker--android-distribution).
