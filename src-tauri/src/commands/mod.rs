@@ -14,8 +14,9 @@ use crate::engine::{
 };
 use crate::{
     contract::{
-        AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, EngineUpdateOutcome, ErrorCode,
-        ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings,
+        AnalyzeResult, AppError, AppUpdateInfo, DownloadRequest, EngineUpdateInfo,
+        EngineUpdateOutcome, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality,
+        QueueItem, Settings,
     },
     persistence::Database,
 };
@@ -527,6 +528,43 @@ pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
     ))
 }
 
+#[cfg(target_os = "windows")]
+fn app_update_error(reason: String) -> AppError {
+    AppError::new(ErrorCode::Unknown, Some(reason))
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn app_update_check(app: AppHandle) -> CommandResult<AppUpdateInfo> {
+    crate::app_update::check_daily(&app)
+        .await
+        .map_err(app_update_error)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn app_update_install(app: AppHandle) -> CommandResult<()> {
+    crate::app_update::install_available(&app)
+        .await
+        .map_err(app_update_error)
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn app_update_check() -> CommandResult<AppUpdateInfo> {
+    Err(deferred(
+        "app updates are currently supported on Windows only",
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn app_update_install() -> CommandResult<()> {
+    Err(deferred(
+        "app updates are currently supported on Windows only",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,6 +633,8 @@ mod tests {
             "set_settings",
             "engine_check_update",
             "engine_update",
+            "app_update_check",
+            "app_update_install",
         ];
         assert_eq!(names, expected);
     }

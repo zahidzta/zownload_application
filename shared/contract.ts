@@ -156,6 +156,14 @@ export interface EngineUpdateInfo {
   manualRetryAvailable?: boolean; // one explicit retry remains for failedVersion
 }
 
+export interface AppUpdateInfo {
+  current: string;
+  latest: string | null;
+  updateAvailable: boolean;
+  checkedAt: number | null; // Unix seconds, independent of the engine update clock
+  error: string | null;
+}
+
 // ───────────────────────── Errors ─────────────────────────
 
 /** UI maps `code` to an i18n key: `errors.<code>` and shows it in red under the input. */
@@ -200,6 +208,8 @@ export interface Commands {
 
   engine_check_update: { args: Record<string, never>; result: EngineUpdateInfo };
   engine_update: { args: Record<string, never>; result: EngineUpdateInfo };
+  app_update_check: { args: Record<string, never>; result: AppUpdateInfo };
+  app_update_install: { args: Record<string, never>; result: void };
 }
 
 // ───────────────────────── Events (Rust -> UI) ─────────────────────────

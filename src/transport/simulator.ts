@@ -155,12 +155,17 @@ function requestKey(request: DownloadRequest): string {
 export type MockOutcome = 'success' | 'partial' | 'failed'
 
 /** Offline queue lifecycle. The clock owns every transition, including event delivery. */
-export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {}, engineUpdateFails = false }: {
+export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {}, engineUpdateFails = false,
+  appUpdateAvailable = false, appUpdateVersion = '0.0.2', appUpdateCheckFails = false, appUpdateInstallFails = false }: {
   clock?: SimulatorClock
   storage?: MockStorage
   outcomes?: Record<string, MockOutcome>
   availableVideoHeights?: Record<string, number[]>
   engineUpdateFails?: boolean
+  appUpdateAvailable?: boolean
+  appUpdateVersion?: string
+  appUpdateCheckFails?: boolean
+  appUpdateInstallFails?: boolean
 } = {}): AppTransport {
   const saved = storage.load()
   const queue: QueueItem[] = saved?.queue.map(copyQueueItem) ?? []
@@ -180,10 +185,16 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
   let pendingEngineVersion = saved?.pendingEngineVersion ?? null
   const revertedEngineVersion = saved?.revertedEngineVersion ?? null
   const latestEngineVersion = '2026.10.23'
+  let appVersion = saved?.appVersion ?? '0.0.1'
+  let latestAppVersion = saved?.latestAppVersion ?? null
+  let appUpdateIsAvailable = saved?.appUpdateIsAvailable ?? false
+  let appUpdateCheckedAt = saved?.appUpdateCheckedAt ?? null
+  let appUpdateError = saved?.appUpdateError ?? null
 
   function persist() {
     storage.save({ queue, history, notifications, settings, nextQueueId, nextHistoryId, engineVersion,
-      failedEngineVersions, manualEngineRetries, pendingEngineVersion, revertedEngineVersion })
+      failedEngineVersions, manualEngineRetries, pendingEngineVersion, revertedEngineVersion, appVersion,
+      latestAppVersion, appUpdateIsAvailable, appUpdateCheckedAt, appUpdateError })
   }
 
   // A recreated transport models a process restart: interrupted work waits for Continue.
@@ -371,6 +382,38 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
           throw syntheticError('unknown', 'Invalid mock settings.')
         }
         settings = { ...next }
+        persist()
+        return undefined as Commands[K]['result']
+      }
+      if (command === 'app_update_check') {
+        const now = clock.now()
+        if (appUpdateCheckedAt === null || now - appUpdateCheckedAt >= 24 * 60 * 60 * 1000) {
+          appUpdateCheckedAt = now
+          if (appUpdateCheckFails) {
+            appUpdateError = 'Synthetic app update check failed.'
+          } else {
+            latestAppVersion = appUpdateAvailable ? appUpdateVersion : null
+            appUpdateIsAvailable = appUpdateAvailable
+            appUpdateError = null
+          }
+          persist()
+        }
+        return {
+          current: appVersion,
+          latest: latestAppVersion,
+          updateAvailable: appUpdateIsAvailable && latestAppVersion !== appVersion,
+          checkedAt: appUpdateCheckedAt === null ? null : Math.floor(appUpdateCheckedAt / 1000),
+          error: appUpdateError,
+        } as Commands[K]['result']
+      }
+      if (command === 'app_update_install') {
+        if (!appUpdateIsAvailable || latestAppVersion === null || latestAppVersion === appVersion) {
+          throw syntheticError('unknown', 'No app update is available.')
+        }
+        if (appUpdateInstallFails) throw syntheticError('unknown', 'Mock app update installation failed.')
+        appVersion = latestAppVersion
+        appUpdateIsAvailable = false
+        appUpdateError = null
         persist()
         return undefined as Commands[K]['result']
       }

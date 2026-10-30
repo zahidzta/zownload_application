@@ -38,6 +38,9 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
   const engineInfo = useStore(flowStore, (state) => state.engineInfo)
   const engineBusy = useStore(flowStore, (state) => state.engineBusy)
   const engineError = useStore(flowStore, (state) => state.engineError)
+  const appUpdateInfo = useStore(flowStore, (state) => state.appUpdateInfo)
+  const appUpdateBusy = useStore(flowStore, (state) => state.appUpdateBusy)
+  const appUpdateError = useStore(flowStore, (state) => state.appUpdateError)
   const actionError = useStore(flowStore, (state) => state.actionError)
   const [picking, setPicking] = useState(false)
   const [pickerError, setPickerError] = useState(false)
@@ -127,6 +130,16 @@ export function SettingsShell({ locale, onBack, onChangeLanguage, flowStore,
           <section aria-labelledby="settings-app-heading" className="space-y-compact border-t border-border pt-section">
             <h3 id="settings-app-heading" className="font-medium text-text-strong">{t(locale, 'settings.appUpdates')}</h3>
             <p className="text-small">{t(locale, 'settings.appUpdatesDescription')}</p>
+            {appUpdateInfo && <p role="status" className="text-small">
+              {appUpdateInfo.error ? t(locale, 'settings.appUpdateCheckFailed')
+                : appUpdateInfo.updateAvailable ? t(locale, 'settings.appUpdateAvailable')
+                  : t(locale, 'settings.appUpToDate')}
+              {appUpdateInfo.latest ? ` ${appUpdateInfo.current} → ${appUpdateInfo.latest}` : ''}
+            </p>}
+            {appUpdateError && <p role="alert" className="text-small text-danger">{t(locale, 'settings.appUpdateFailed')}</p>}
+            {appUpdateInfo?.updateAvailable && <Button
+              label={appUpdateBusy ? t(locale, 'settings.appUpdateInstalling') : t(locale, 'settings.updateApp')}
+              disabled={appUpdateBusy} onClick={() => { void flowStore.getState().installAppUpdate() }} className={actionClass} />}
           </section>
           <section aria-labelledby="settings-developer-heading" className="space-y-compact border-t border-border pt-section">
             <h3 id="settings-developer-heading" className="font-medium text-text-strong">{t(locale, 'settings.developer')}</h3>

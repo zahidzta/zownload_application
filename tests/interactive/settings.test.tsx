@@ -9,7 +9,7 @@ import { AppView } from '../../src/App'
 import type { Locale } from '../../src/i18n'
 import { createDownloadFlowStore } from '../../src/state/downloadFlow'
 import { createMemoryMockStorage } from '../../src/transport/mockStorage'
-import { createSimulatorTransport } from '../../src/transport/simulator'
+import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
 
 test('Settings choices persist, picker cancellation leaves the path alone, and language changes immediately', async () => {
   const storage = createMemoryMockStorage()
@@ -63,10 +63,38 @@ test('Android hides folder selection and engine update remains separate from app
   expect(screen.queryByRole('button', { name: 'Choose folder' })).toBeNull()
   expect(screen.queryByText('Download folder')).toBeNull()
   await userEvent.setup().click(screen.getByRole('button', { name: 'Check engine update' }))
-  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Engine update available:'))
+  await waitFor(() => {
+    expect(screen.getAllByRole('status').some((status) =>
+      status.textContent?.includes('Engine update available:'))).toBe(true)
+  })
   await userEvent.setup().click(screen.getByRole('button', { name: 'Update engine' }))
-  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Engine update completed:'))
+  await waitFor(() => {
+    expect(screen.getAllByRole('status').some((status) =>
+      status.textContent?.includes('Engine update completed:'))).toBe(true)
+  })
   expect(screen.getByRole('heading', { name: 'Zownload updates' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Update Zownload' })).toBeNull()
   userAgent.mockRestore()
+})
+
+test('stable app update action persists across UI recreation and runs only after the user clicks it', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const first = createSimulatorTransport({ clock, storage, appUpdateAvailable: true })
+  const firstStore = createDownloadFlowStore(first)
+  const firstView = render(<AppView locale="en" page="settings" flowStore={firstStore}
+    onBack={() => {}} onOpenSettings={() => {}} onToggleLocale={() => {}} />)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Update Zownload' })).toBeTruthy())
+  expect(screen.getByRole('status').textContent).toContain('0.0.1 → 0.0.2')
+  firstView.unmount()
+
+  const reopened = createSimulatorTransport({ clock, storage, appUpdateAvailable: false })
+  const reopenedStore = createDownloadFlowStore(reopened)
+  render(<AppView locale="en" page="settings" flowStore={reopenedStore}
+    onBack={() => {}} onOpenSettings={() => {}} onToggleLocale={() => {}} />)
+  const user = userEvent.setup()
+  const updateButton = await screen.findByRole('button', { name: 'Update Zownload' })
+  await user.click(updateButton)
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Zownload is up to date.'))
+  expect(screen.queryByRole('button', { name: 'Update Zownload' })).toBeNull()
 })

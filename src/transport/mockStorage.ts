@@ -16,6 +16,11 @@ export interface MockSnapshot {
   manualEngineRetries?: string[]
   pendingEngineVersion?: string | null
   revertedEngineVersion?: string | null
+  appVersion?: string
+  latestAppVersion?: string | null
+  appUpdateIsAvailable?: boolean
+  appUpdateCheckedAt?: number | null
+  appUpdateError?: string | null
 }
 
 export interface MockStorage {

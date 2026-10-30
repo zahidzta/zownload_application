@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 import { createStore } from 'zustand/vanilla'
-import type { AnalyzeResult, AppError, EngineUpdateInfo, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings } from '../../shared/contract'
+import type { AnalyzeResult, AppError, AppUpdateInfo, EngineUpdateInfo, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings } from '../../shared/contract'
 import type { AppTransport, Unsubscribe } from '../transport/types'
 
 export type DownloadStep = 'input' | 'download'
@@ -23,6 +23,9 @@ export interface DownloadFlowState {
   engineInfo: EngineUpdateInfo | null
   engineBusy: 'checking' | 'updating' | null
   engineError: AppError | null
+  appUpdateInfo: AppUpdateInfo | null
+  appUpdateBusy: boolean
+  appUpdateError: AppError | null
   syncError: AppError | null
   actionError: AppError | null
   queueActionId: string | null
@@ -49,6 +52,8 @@ export interface DownloadFlowState {
   saveSettings: (patch: Partial<Settings>) => Promise<boolean>
   checkEngineUpdate: () => Promise<void>
   updateEngine: () => Promise<void>
+  checkAppUpdate: () => Promise<void>
+  installAppUpdate: () => Promise<void>
   retryActivity: () => Promise<void>
   connectActivity: () => Unsubscribe
 }
@@ -117,6 +122,9 @@ export function createDownloadFlowStore(transport: AppTransport) {
     engineInfo: null,
     engineBusy: null,
     engineError: null,
+    appUpdateInfo: null,
+    appUpdateBusy: false,
+    appUpdateError: null,
     syncError: null,
     actionError: null,
     queueActionId: null,
@@ -375,6 +383,32 @@ export function createDownloadFlowStore(transport: AppTransport) {
         set({ engineBusy: null })
       }
     },
+    async checkAppUpdate() {
+      if (get().appUpdateBusy) return
+      set({ appUpdateBusy: true, appUpdateError: null })
+      try {
+        const appUpdateInfo = await transport.call('app_update_check', {})
+        set({ appUpdateInfo, appUpdateError: appUpdateInfo.error
+          ? { code: 'unknown', detail: appUpdateInfo.error } : null })
+      } catch (reason) {
+        set({ appUpdateError: appError(reason) })
+      } finally {
+        set({ appUpdateBusy: false })
+      }
+    },
+    async installAppUpdate() {
+      if (get().appUpdateBusy || !get().appUpdateInfo?.updateAvailable) return
+      set({ appUpdateBusy: true, appUpdateError: null })
+      try {
+        await transport.call('app_update_install', {})
+        const info = get().appUpdateInfo
+        if (info?.latest) set({ appUpdateInfo: { ...info, current: info.latest, updateAvailable: false } })
+      } catch (reason) {
+        set({ appUpdateError: appError(reason) })
+      } finally {
+        set({ appUpdateBusy: false })
+      }
+    },
     async retryActivity() {
       set({ syncError: null })
       await Promise.all([
@@ -384,6 +418,7 @@ export function createDownloadFlowStore(transport: AppTransport) {
     connectActivity() {
       connectionUsers++
       if (connectionUsers === 1) {
+        void get().checkAppUpdate()
         const version = ++connectionVersion
         void (async () => {
           const offs: Unsubscribe[] = []
