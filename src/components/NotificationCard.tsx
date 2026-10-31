@@ -39,10 +39,17 @@ export function NotificationCard({ locale, notifications, busyId = null, onDismi
       <ul className="mt-3 mb-0 space-y-3 p-0">
         {notifications.map((note) => {
           const title = note.title ?? t(locale, 'notifications.untitled')
+          const summary = /^playlist_summary:(\d+):(\d+)$/.exec(note.error.detail ?? '')
+          const counts = summary
+            ? t(locale, 'queue.failureSummary').replace('{done}', summary[1]).replace('{failed}', summary[2])
+            : null
+          const message = counts && note.error.code !== 'unknown'
+            ? `${t(locale, `errors.${note.error.code}`)} ${counts}`
+            : counts ?? t(locale, `errors.${note.error.code}`)
           return (
             <li key={note.id} className="notification-error min-w-0 list-none rounded-control bg-field px-3 py-2">
               <p role="alert" className="m-0 wrap-break-word text-small text-text-strong">
-                <span className="font-medium">{title}: </span>{t(locale, `errors.${note.error.code}`)}
+                <span className="font-medium">{title}: </span>{message}
               </p>
               <div className="mt-1 flex justify-end">
                 <IconButton label={t(locale, 'notifications.dismissFor').replace('{title}', title)}

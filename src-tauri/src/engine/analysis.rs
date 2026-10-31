@@ -217,11 +217,11 @@ pub fn parse_playlist_snapshot(json: &[u8]) -> Result<(String, PlaylistSnapshot)
                     Some(format!("entry {} has no title", index + 1)),
                 )
             })?;
-        let candidate = nonempty(entry, "webpage_url")
-            .or_else(|| {
-                nonempty(entry, "url")
-                    .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
-            })
+        // Flat generic playlists can put the playlist page in webpage_url for every
+        // entry. An absolute entry URL is the executable target in that case.
+        let candidate = nonempty(entry, "url")
+            .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
+            .or_else(|| nonempty(entry, "webpage_url"))
             .map(str::to_owned)
             .or_else(|| {
                 let key = nonempty(entry, "ie_key").or_else(|| nonempty(entry, "extractor_key"));
@@ -706,7 +706,8 @@ mod tests {
         let value = serde_json::json!({
             "_type": "playlist", "title": "Set", "entries": [
                 {"title": "First", "webpage_url": "https://example.com/first"},
-                {"title": "Second", "id": "abc-12", "ie_key": "Youtube", "url": "abc-12"}
+                {"title": "Second", "id": "abc-12", "ie_key": "Youtube", "url": "abc-12"},
+                {"title": "Direct", "url": "https://example.com/direct.mp4", "webpage_url": "https://example.com/playlist"}
             ]
         });
         let (title, snapshot) =
@@ -718,6 +719,7 @@ mod tests {
             "https://www.youtube.com/watch?v=abc-12"
         );
         assert_eq!(snapshot.entries[1].title, "Second");
+        assert_eq!(snapshot.entries[2].url, "https://example.com/direct.mp4");
         assert_eq!(snapshot.next_index, 0);
         for bad in [
             serde_json::json!({"_type":"playlist", "title":"Set", "entries": []}),

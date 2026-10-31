@@ -76,20 +76,26 @@ impl Database {
 
     pub fn settle_queue_item(&mut self, id: &str, outcome: TerminalOutcome) -> Result<()> {
         let transaction = self.connection.transaction()?;
-        let stored: Option<(String, Option<String>, String)> = transaction
+        let stored: Option<(String, Option<String>, String, Option<String>)> = transaction
             .query_row(
-                "SELECT request, title, status FROM queue_items WHERE id = ?1",
+                "SELECT request, title, status, error FROM queue_items WHERE id = ?1",
                 [id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()?;
-        let (request, title, status) = stored.ok_or(Error::NotFound("queue item"))?;
+        let (request, title, status, stored_error) = stored.ok_or(Error::NotFound("queue item"))?;
         match outcome {
             TerminalOutcome::Completed { successful_files }
                 if status == "done" && successful_files > 0 =>
             {
                 let request: DownloadRequest = serde_json::from_str(&request)?;
                 record_in_transaction(&transaction, &request, title.as_deref())?;
+                if let Some(error) = stored_error {
+                    transaction.execute(
+                        "INSERT INTO error_notifications (id, title, error) VALUES (?1, ?2, ?3)",
+                        params![id, title, error],
+                    )?;
+                }
             }
             TerminalOutcome::Failed(error) if status == "failed" => {
                 transaction.execute(
@@ -181,14 +187,12 @@ mod tests {
             current_title: None,
             current_percent: 100.0,
         };
+        partial.error = Some(AppError::new(
+            ErrorCode::Unknown,
+            Some("playlist_summary:2:1".into()),
+        ));
         db.insert_queue_item(&partial).unwrap();
-        db.settle_queue_item(
-            &partial.id,
-            TerminalOutcome::Completed {
-                successful_files: 2,
-            },
-        )
-        .unwrap();
+        // Reopen simulates a crash after the terminal row committed but before settlement.
         drop(db);
         let db = Database::open_at(&path).unwrap();
         let history = db.get_history().unwrap();
@@ -196,6 +200,7 @@ mod tests {
         assert!(history[1].id > first_history_id);
         assert_eq!(history[1].title.as_deref(), Some("New title"));
         assert!(history[0].request.is_playlist);
+        assert_eq!(db.get_error_notifications().unwrap()[0].id, partial.id);
         assert!(db.get_queue().unwrap().is_empty());
         drop(db);
         std::fs::remove_file(path).unwrap();

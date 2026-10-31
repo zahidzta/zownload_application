@@ -2,14 +2,16 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint (2026-10-29):** The owner accepted Gate 2D and authorized Gate 3A planning. See the [Gate 2D checkpoint](gates/evidence/2d/checkpoint.md).
-- **Next task:** 3A-04 — connect the stored playlist snapshot and entry worker to queue lifecycle, counters, partial-failure continuation, pause/resume, and one History row. Start it in a fresh session after reviewing the combined 3A-02/03 PR.
+- **Checkpoint (2026-10-30):** Gate 2D was accepted on 2026-10-29; Gate 3A implementation and evidence are ready for owner review, with explicit acceptance pending. See the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md) and [Gate 2D checkpoint](gates/evidence/2d/checkpoint.md).
+- **Next task:** 3B-01 — implement ZIP packaging and bounded-storage behavior after the owner explicitly accepts the Gate 3A checkpoint.
 
 ## Current gate 3A completions
 
 - Completed 3A-01: Planned sequential playlist work and recorded the resume-state and ZIP boundary decisions; commit `4d6c2c5`; [plan evidence](gates/gate-3a.md). Verification is identified as V0 there.
 - Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commits `2549665`, `b248232` (platform-neutral fix); [evidence](gates/evidence/3a/3a-02.md). V1 passed.
 - Completed 3A-03: Added per-entry Max/Min worker, playlist album metadata, and collision-safe outputs; commits `414c068`, `b248232` (CI fixture fix); [evidence](gates/evidence/3a/3a-03.md). V1 and focused CLI test passed.
+- Completed 3A-04: Connected ZIP-off playlists to queue lifecycle, counters, partial-failure continuation, pause/resume, and one History row; commit `1bb328d`; [V2 evidence](gates/evidence/3a/3a-04.md).
+- Completed 3A-05: Passed V3 and completed the native Windows playlist review; commit `5151862`; [checkpoint and observations](gates/evidence/3a/checkpoint.md).
 
 ## Accepted gates
 

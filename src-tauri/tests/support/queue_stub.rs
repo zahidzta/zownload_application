@@ -15,7 +15,18 @@ fn main() {
     }
     if args.contains(&"--flat-playlist".into()) {
         assert_eq!(args[args.len() - 2], "--");
-        println!("{{\"_type\":\"playlist\",\"title\":\"Playlist\",\"entries\":[{{\"title\":\"First\",\"webpage_url\":\"https://example.com/entry/first\"}},{{\"title\":\"Second\",\"webpage_url\":\"https://example.com/entry/second\"}}]}}");
+        let url = args.last().unwrap();
+        let names: &[&str] = if url.ends_with("all-failed") {
+            &["fail", "fail2"]
+        } else if url.ends_with("fatal") {
+            &["first", "diskfull", "second"]
+        } else if url.ends_with("mixed") {
+            &["first", "fail", "second"]
+        } else {
+            &["first", "second"]
+        };
+        let entries = names.iter().map(|name| format!("{{\"title\":\"{name}\",\"webpage_url\":\"https://example.com/entry/{name}\"}}")).collect::<Vec<_>>().join(",");
+        println!("{{\"_type\":\"playlist\",\"title\":\"Playlist\",\"entries\":[{entries}]}}");
         return;
     }
     assert!(args.contains(&"--no-playlist".into()));
@@ -25,7 +36,11 @@ fn main() {
         println!("{{\"id\":\"{id}\",\"title\":\"{id}\",\"ext\":\"mp4\",\"formats\":[{{\"ext\":\"mp4\",\"height\":240,\"vcodec\":\"h264\"}}]}}");
         return;
     }
-    if id == "fail" {
+    if id == "diskfull" {
+        eprintln!("ERROR: No space left on device");
+        std::process::exit(1);
+    }
+    if id.starts_with("fail") {
         eprintln!("ERROR: simulated source failure");
         std::process::exit(4);
     }
