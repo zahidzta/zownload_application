@@ -233,8 +233,8 @@ impl Database {
         )?;
         if changed != 0 {
             tx.execute(
-                "UPDATE queue_items SET progress = ?2 WHERE id = ?1",
-                params![item.id, progress],
+                "UPDATE queue_items SET progress = ?2, status = ?3 WHERE id = ?1",
+                params![item.id, progress, status_text(item.status)],
             )?;
         }
         tx.commit()?;

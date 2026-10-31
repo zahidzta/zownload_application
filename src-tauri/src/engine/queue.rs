@@ -8,6 +8,7 @@ use super::{analysis, process::Supervisor, single, updater, EnginePaths};
 use crate::{
     contract::{AppError, DownloadRequest, ErrorCode, ItemStatus, Progress, QueueItem},
     persistence::{notifications::TerminalOutcome, paths::DownloadPaths, Database},
+    playlist::PlaylistEntry,
 };
 use std::{
     path::PathBuf,
@@ -187,7 +188,6 @@ impl QueueCoordinator {
                 eprintln!("pending yt-dlp activation deferred: {error}");
             }
         }
-        // A new ZIP-off playlist gets one durable expansion. Execution begins in 3A-04.
         let db = self.db()?;
         let queue = db.get_queue().map_err(|error| failure(error.to_string()))?;
         let mut next = None;
@@ -195,31 +195,41 @@ impl QueueCoordinator {
             if item.status != ItemStatus::Queued {
                 continue;
             }
+            let mut expanded = false;
             if item.request.is_playlist {
                 let state = db
                     .get_playlist_state(&item.id)
                     .map_err(|error| failure(error.to_string()))?
                     .ok_or_else(|| failure("playlist state missing"))?;
-                if state.zip_enabled || state.snapshot.is_some() {
+                if state.zip_enabled {
                     continue;
                 }
+                expanded = state.snapshot.is_some();
             }
-            next = Some(item);
+            next = Some((item, expanded));
             break;
         }
         drop(db);
-        let Some(mut item) = next else { return Ok(()) };
-        item.status = ItemStatus::Analyzing;
+        let Some((mut item, expanded)) = next else {
+            return Ok(());
+        };
+        item.status = if expanded {
+            ItemStatus::Queued
+        } else {
+            ItemStatus::Analyzing
+        };
         self.save(&item)?;
         let cancel = Arc::new(AtomicBool::new(false));
         control.active = Some(Active {
             id: item.id.clone(),
             cancel: Arc::clone(&cancel),
-            phase: ItemStatus::Analyzing,
+            phase: item.status,
             intent: Intent::Run,
         });
         let coordinator = Arc::clone(self);
-        if item.request.is_playlist {
+        if item.request.is_playlist && expanded {
+            thread::spawn(move || coordinator.run_playlist(item, cancel));
+        } else if item.request.is_playlist {
             thread::spawn(move || coordinator.run_expansion(item, cancel));
         } else {
             thread::spawn(move || coordinator.run(item, cancel));
@@ -338,6 +348,369 @@ impl QueueCoordinator {
         control.active = None;
         drop(control);
         let _ = self.kick();
+    }
+
+    fn observe_playlist(&self, id: &str, observation: single::Observation, clock: &Mutex<Instant>) {
+        let Ok(mut control) = self.control.lock() else {
+            return;
+        };
+        if control.closing {
+            return;
+        }
+        let Some(active) = control.active.as_mut().filter(|active| active.id == id) else {
+            return;
+        };
+        if active.intent != Intent::Run {
+            return;
+        }
+        let Ok(mut item) = self.item(id) else { return };
+        match observation {
+            // The source title belongs to the entry. The queue and History keep the playlist title.
+            single::Observation::Title(_) => {}
+            single::Observation::Downloaded { percent, .. } => {
+                if active.phase == ItemStatus::PostProcessing {
+                    return;
+                }
+                let changed_phase = active.phase != ItemStatus::Downloading;
+                let now = Instant::now();
+                let Ok(mut last) = clock.lock() else { return };
+                if !changed_phase && now.duration_since(*last) < Duration::from_millis(200) {
+                    return;
+                }
+                *last = now;
+                active.phase = ItemStatus::Downloading;
+                item.status = ItemStatus::Downloading;
+                if let Progress::Playlist {
+                    current_percent, ..
+                } = &mut item.progress
+                {
+                    *current_percent = percent as f32;
+                }
+                // Every public playlist event follows its durable progress checkpoint.
+                let _ = self.save(&item);
+            }
+            single::Observation::PostProcessing => {
+                active.phase = ItemStatus::PostProcessing;
+                item.status = ItemStatus::PostProcessing;
+                let _ = self.save(&item);
+            }
+        }
+    }
+
+    fn playlist_entry(
+        self: &Arc<Self>,
+        engine: &EnginePaths,
+        disk: &mut DownloadPaths,
+        item: &QueueItem,
+        entry: &PlaylistEntry,
+        index: usize,
+        cancel: &AtomicBool,
+    ) -> Result<single::Completed, AppError> {
+        let observed = Arc::clone(self);
+        let id = item.id.clone();
+        let clock = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(1)));
+        let observe: Arc<dyn Fn(single::Observation) + Send + Sync> =
+            Arc::new(move |signal| observed.observe_playlist(&id, signal, &clock));
+        let mut persist = |paths: &DownloadPaths| {
+            self.db()?
+                .put_download_paths(paths)
+                .map_err(|error| failure(error.to_string()))
+        };
+        let (read_lease, _guard, probation) =
+            updater::begin_invocation(&self.app_data).map_err(failure)?;
+        let mut broken = false;
+        let first = single::run_playlist_entry_classified(
+            engine,
+            &self.supervisor,
+            disk,
+            &self.app_data,
+            &item.id,
+            &item.request,
+            entry,
+            index,
+            item.title.as_deref().unwrap_or(""),
+            cancel,
+            Arc::clone(&observe),
+            &mut persist,
+            &mut broken,
+        );
+        if broken && !cancel.load(Ordering::SeqCst) && probation.is_some() {
+            drop(read_lease);
+            let fallback = match updater::slot().write() {
+                Ok(write_lease) => self.resources.as_ref().map(|resources| {
+                    updater::restore_baseline_locked(
+                        &self.app_data,
+                        resources,
+                        probation.as_deref().unwrap(),
+                        &write_lease,
+                    )
+                }),
+                Err(_) => Some(Err("engine slot poisoned".into())),
+            };
+            match fallback {
+                Some(Ok(_)) => match updater::slot().read() {
+                    Ok(_retry_lease) => single::run_playlist_entry(
+                        engine,
+                        &self.supervisor,
+                        disk,
+                        &self.app_data,
+                        &item.id,
+                        &item.request,
+                        entry,
+                        index,
+                        item.title.as_deref().unwrap_or(""),
+                        cancel,
+                        observe,
+                        &mut persist,
+                    ),
+                    Err(_) => Err(failure("engine slot poisoned")),
+                },
+                Some(Err(reason)) => Err(AppError::new(ErrorCode::EngineMissing, Some(reason))),
+                None => first,
+            }
+        } else {
+            if !broken && !cancel.load(Ordering::SeqCst) {
+                if let Some(version) = probation.as_deref() {
+                    let _ = updater::mark_good(&self.app_data, version);
+                }
+            }
+            first
+        }
+    }
+
+    fn run_playlist(self: Arc<Self>, item: QueueItem, cancel: Arc<AtomicBool>) {
+        let id = item.id.clone();
+        if let Err(error) = self.process_playlist(&id, &cancel) {
+            if let Ok(control) = self.control.lock() {
+                if !control.closing {
+                    if let Ok(mut current) = self.item(&id) {
+                        if matches!(current.status, ItemStatus::Done | ItemStatus::Failed) {
+                            // A failed settlement can be retried by terminal recovery on reopen.
+                            eprintln!("playlist settlement deferred: {error:?}");
+                        } else {
+                            let successful_files = match current.progress {
+                                Progress::Playlist { done, .. } => done,
+                                _ => 0,
+                            };
+                            current.status = if successful_files > 0 {
+                                ItemStatus::Done
+                            } else {
+                                ItemStatus::Failed
+                            };
+                            current.error = Some(error.clone());
+                            let outcome = if successful_files > 0 {
+                                TerminalOutcome::Completed { successful_files }
+                            } else {
+                                TerminalOutcome::Failed(error)
+                            };
+                            if self.save(&current).is_ok()
+                                && self
+                                    .db()
+                                    .is_ok_and(|mut db| db.settle_queue_item(&id, outcome).is_ok())
+                            {
+                                if successful_files > 0 {
+                                    (self.emit)(QueueEvent::HistoryChanged);
+                                }
+                                (self.emit)(QueueEvent::NotificationsChanged);
+                                (self.emit)(QueueEvent::Removed(id.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Ok(mut control) = self.control.lock() {
+            control.active = None;
+        }
+        let _ = self.kick();
+    }
+
+    fn process_playlist(self: &Arc<Self>, id: &str, cancel: &AtomicBool) -> Result<(), AppError> {
+        let state = self
+            .db()?
+            .get_playlist_state(id)
+            .map_err(|error| failure(error.to_string()))?
+            .ok_or_else(|| failure("playlist state missing"))?;
+        let snapshot = state
+            .snapshot
+            .ok_or_else(|| failure("playlist snapshot missing"))?;
+        let mut disk = self
+            .db()?
+            .get_download_paths(id)
+            .map_err(|error| failure(error.to_string()))?
+            .ok_or_else(|| failure("download paths missing"))?;
+        let engine = self
+            .engine
+            .as_ref()
+            .ok_or_else(|| failure("Windows engine unavailable"))?;
+        let mut stopped_early = false;
+        let mut fatal_error = None;
+        for index in snapshot.next_index..snapshot.entries.len() {
+            let current = self.item(id)?;
+            let result = self.playlist_entry(
+                engine,
+                &mut disk,
+                &current,
+                &snapshot.entries[index],
+                index,
+                cancel,
+            );
+            let mut control = self
+                .control
+                .lock()
+                .map_err(|_| failure("queue control lock poisoned"))?;
+            let closing = control.closing;
+            let active = control
+                .active
+                .as_mut()
+                .filter(|active| active.id == id)
+                .ok_or_else(|| failure("active playlist missing"))?;
+            if active.intent == Intent::Remove {
+                if let Ok(completed) = &result {
+                    let _ = std::fs::remove_file(&completed.path);
+                }
+                disk.clean_owned(&self.app_data)
+                    .map_err(|error| failure(error.to_string()))?;
+                if self
+                    .db()?
+                    .remove_queue_item(id)
+                    .map_err(|error| failure(error.to_string()))?
+                {
+                    (self.emit)(QueueEvent::Removed(id.into()));
+                }
+                return Ok(());
+            }
+            if (closing || active.intent == Intent::Pause) && result.is_err() {
+                if !closing {
+                    let mut current = self.item(id)?;
+                    current.status = ItemStatus::Paused;
+                    self.save(&current)?;
+                }
+                return Ok(());
+            }
+            let pause_after_entry = closing || active.intent == Intent::Pause;
+            active.phase = ItemStatus::Queued;
+            let mut current = self.item(id)?;
+            let fatal = matches!(
+                &result,
+                Err(AppError {
+                    code: ErrorCode::DiskFull | ErrorCode::PermissionDenied,
+                    ..
+                })
+            );
+            if fatal {
+                fatal_error = result.as_ref().err().cloned();
+            }
+            if let Progress::Playlist {
+                done,
+                failed,
+                current_title,
+                current_percent,
+                ..
+            } = &mut current.progress
+            {
+                if result.is_ok() {
+                    *done += 1
+                } else {
+                    *failed += 1
+                }
+                *current_title = snapshot
+                    .entries
+                    .get(index + 1)
+                    .map(|entry| entry.title.clone());
+                *current_percent = 0.0;
+            }
+            current.status = ItemStatus::Queued;
+            if !self
+                .db()?
+                .advance_playlist(&current, index)
+                .map_err(|error| failure(error.to_string()))?
+            {
+                return Err(failure("playlist row was removed"));
+            }
+            (self.emit)(QueueEvent::Updated(current.clone()));
+            if pause_after_entry {
+                current.status = ItemStatus::Paused;
+                self.save(&current)?;
+                return Ok(());
+            }
+            if fatal {
+                stopped_early = true;
+                break;
+            }
+        }
+        let control = self
+            .control
+            .lock()
+            .map_err(|_| failure("queue control lock poisoned"))?;
+        if control
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == id && active.intent == Intent::Remove)
+        {
+            disk.clean_owned(&self.app_data)
+                .map_err(|error| failure(error.to_string()))?;
+            if self
+                .db()?
+                .remove_queue_item(id)
+                .map_err(|error| failure(error.to_string()))?
+            {
+                (self.emit)(QueueEvent::Removed(id.into()));
+            }
+            return Ok(());
+        }
+        let mut current = self.item(id)?;
+        let Progress::Playlist {
+            done,
+            failed,
+            current_title,
+            current_percent,
+            ..
+        } = &mut current.progress
+        else {
+            return Err(failure("playlist progress missing"));
+        };
+        *current_title = None;
+        *current_percent = 100.0;
+        let (done, failed) = (*done, *failed);
+        current.error = (failed > 0).then(|| {
+            let mut error = fatal_error
+                .take()
+                .unwrap_or_else(|| failure(format!("playlist_summary:{done}:{failed}")));
+            error.detail = Some(format!("playlist_summary:{done}:{failed}"));
+            error
+        });
+        current.status = if done > 0 {
+            ItemStatus::Done
+        } else {
+            ItemStatus::Failed
+        };
+        self.save(&current)?;
+        let outcome = if done > 0 {
+            TerminalOutcome::Completed {
+                successful_files: done,
+            }
+        } else {
+            TerminalOutcome::Failed(
+                current
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| failure("empty playlist")),
+            )
+        };
+        self.db()?
+            .settle_queue_item(id, outcome)
+            .map_err(|error| failure(error.to_string()))?;
+        if done > 0 {
+            (self.emit)(QueueEvent::HistoryChanged);
+        }
+        if failed > 0 || stopped_early {
+            (self.emit)(QueueEvent::NotificationsChanged);
+        }
+        (self.emit)(QueueEvent::Removed(id.into()));
+        drop(control);
+        let _ = disk.clean_owned(&self.app_data);
+        Ok(())
     }
 
     fn observe(
@@ -613,8 +986,8 @@ impl QueueCoordinator {
             .lock()
             .map_err(|_| failure("queue control lock poisoned"))?;
         let mut item = self.item(id)?;
-        if item.status != ItemStatus::Paused || item.request.is_playlist {
-            return Err(failure("only a paused single can continue in Stage 2C"));
+        if item.status != ItemStatus::Paused {
+            return Err(failure("only a paused item can continue"));
         }
         if self.engine.is_none() {
             return Err(AppError::new(

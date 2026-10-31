@@ -5,6 +5,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
 import { AppView } from '../../src/App'
+import { NotificationCard } from '../../src/components/NotificationCard'
 import { createDownloadFlowStore } from '../../src/state/downloadFlow'
 import { analysisUrls } from '../../src/transport/fixtures'
 import { createMemoryMockStorage } from '../../src/transport/mockStorage'
@@ -16,6 +17,22 @@ const request = {
   quality: { type: 'audio' as const, bitrate: 128 }, isPlaylist: false,
 }
 const viewProps = { page: 'main' as const, onBack: () => {}, onToggleLocale: () => {}, onOpenSettings: () => {} }
+
+test('playlist failure notification shows durable counts in both languages', () => {
+  const notifications = [
+    { id: 'playlist', title: 'Album', error: { code: 'unknown' as const, detail: 'playlist_summary:2:1' } },
+    { id: 'disk-full', title: 'Album', error: { code: 'disk_full' as const, detail: 'playlist_summary:1:1' } },
+  ]
+  const view = render(<NotificationCard locale="en" notifications={notifications} />)
+  const english = screen.getAllByRole('alert')
+  expect(english[0].textContent).toContain('2 correct, 1 failed')
+  expect(english[1].textContent).toContain('Not enough storage space. 1 correct, 1 failed')
+  view.rerender(<NotificationCard locale="es" notifications={notifications} />)
+  const spanish = screen.getAllByRole('alert')
+  expect(spanish[0].textContent).toContain('2 correctos, 1 fallidos')
+  expect(spanish[1].textContent).toContain('No hay suficiente espacio de almacenamiento. 1 correctos, 1 fallidos')
+  view.unmount()
+})
 
 test('terminal failure stays announced after queue removal, UI recreation, and mock transport restart', async () => {
   const storage = createMemoryMockStorage()
