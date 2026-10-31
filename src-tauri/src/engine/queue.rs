@@ -4,7 +4,7 @@
 //! One Windows media worker at a time. The control lock orders user actions,
 //! phase changes and terminal settlement; SQLite commits precede every event.
 
-use super::{analysis, process::Supervisor, single, updater, EnginePaths};
+use super::{analysis, process::Supervisor, single, updater, zip_output::ZipOutput, EnginePaths};
 use crate::{
     contract::{AppError, DownloadRequest, ErrorCode, ItemStatus, Progress, QueueItem},
     persistence::{notifications::TerminalOutcome, paths::DownloadPaths, Database},
@@ -65,6 +65,15 @@ fn failure(detail: impl Into<String>) -> AppError {
     AppError::new(ErrorCode::Unknown, Some(detail.into()))
 }
 
+fn zip_failure(context: &str, cause: std::io::Error) -> AppError {
+    let mut error = single::io_error(cause);
+    error.detail = Some(format!(
+        "{context}: {}",
+        error.detail.as_deref().unwrap_or("I/O error")
+    ));
+    error
+}
+
 impl QueueCoordinator {
     pub fn new(
         database: Arc<Mutex<Database>>,
@@ -100,6 +109,40 @@ impl QueueCoordinator {
             .into_iter()
             .find(|item| item.id == id)
             .ok_or_else(|| failure("queue item not found"))
+    }
+
+    fn playlist_paths(&self, id: &str) -> Result<DownloadPaths, AppError> {
+        let mut paths = self
+            .db()?
+            .get_download_paths(id)
+            .map_err(|error| failure(error.to_string()))?
+            .ok_or_else(|| failure("download paths missing"))?;
+        let root = self.app_data.join("downloads").join(id);
+        if paths.work_dir != root {
+            // Older playlist workers persisted their active entry directory.
+            // Accept only that exact child of this queue's private root.
+            let old_entry = paths.work_dir.parent() == Some(root.as_path())
+                && paths
+                    .work_dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        name.strip_prefix("entry-").is_some_and(|index| {
+                            !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
+                        })
+                    });
+            if !old_entry {
+                return Err(AppError::new(
+                    ErrorCode::PermissionDenied,
+                    Some("playlist work path is outside its queue root".into()),
+                ));
+            }
+            paths.work_dir = root;
+            self.db()?
+                .put_download_paths(&paths)
+                .map_err(|error| failure(error.to_string()))?;
+        }
+        Ok(paths)
     }
 
     fn save(&self, item: &QueueItem) -> Result<(), AppError> {
@@ -201,9 +244,6 @@ impl QueueCoordinator {
                     .get_playlist_state(&item.id)
                     .map_err(|error| failure(error.to_string()))?
                     .ok_or_else(|| failure("playlist state missing"))?;
-                if state.zip_enabled {
-                    continue;
-                }
                 expanded = state.snapshot.is_some();
             }
             next = Some((item, expanded));
@@ -404,6 +444,7 @@ impl QueueCoordinator {
         item: &QueueItem,
         entry: &PlaylistEntry,
         index: usize,
+        zip_mode: bool,
         cancel: &AtomicBool,
     ) -> Result<single::Completed, AppError> {
         let observed = Arc::clone(self);
@@ -433,6 +474,7 @@ impl QueueCoordinator {
             Arc::clone(&observe),
             &mut persist,
             &mut broken,
+            zip_mode,
         );
         if broken && !cancel.load(Ordering::SeqCst) && probation.is_some() {
             drop(read_lease);
@@ -462,6 +504,7 @@ impl QueueCoordinator {
                         cancel,
                         observe,
                         &mut persist,
+                        zip_mode,
                     ),
                     Err(_) => Err(failure("engine slot poisoned")),
                 },
@@ -481,13 +524,51 @@ impl QueueCoordinator {
     fn run_playlist(self: Arc<Self>, item: QueueItem, cancel: Arc<AtomicBool>) {
         let id = item.id.clone();
         if let Err(error) = self.process_playlist(&id, &cancel) {
-            if let Ok(control) = self.control.lock() {
+            if let Ok(mut control) = self.control.lock() {
                 if !control.closing {
                     if let Ok(mut current) = self.item(&id) {
                         if matches!(current.status, ItemStatus::Done | ItemStatus::Failed) {
                             // A failed settlement can be retried by terminal recovery on reopen.
                             eprintln!("playlist settlement deferred: {error:?}");
                         } else {
+                            let zip_enabled = self
+                                .db()
+                                .ok()
+                                .and_then(|db| db.get_playlist_state(&id).ok().flatten())
+                                .is_some_and(|state| state.zip_enabled);
+                            if zip_enabled
+                                || matches!(
+                                    error.code,
+                                    ErrorCode::DiskFull | ErrorCode::PermissionDenied
+                                )
+                            {
+                                cancel.store(true, Ordering::SeqCst);
+                                if let Ok(disk) = self.playlist_paths(&id) {
+                                    if let Ok(zip) = ZipOutput::open(
+                                        &disk.output_dir,
+                                        &disk.work_dir,
+                                        current.title.as_deref().unwrap_or("playlist"),
+                                    ) {
+                                        let _ = zip.remove_owned();
+                                    }
+                                    let _ = disk.clean_owned(&self.app_data);
+                                }
+                                current.status = ItemStatus::Failed;
+                                current.error = Some(error.clone());
+                                if self.save(&current).is_ok()
+                                    && self.db().is_ok_and(|mut db| {
+                                        db.settle_queue_item(&id, TerminalOutcome::Failed(error))
+                                            .is_ok()
+                                    })
+                                {
+                                    (self.emit)(QueueEvent::NotificationsChanged);
+                                    (self.emit)(QueueEvent::Removed(id.clone()));
+                                }
+                                control.active = None;
+                                drop(control);
+                                let _ = self.kick();
+                                return;
+                            }
                             let successful_files = match current.progress {
                                 Progress::Playlist { done, .. } => done,
                                 _ => 0,
@@ -534,18 +615,59 @@ impl QueueCoordinator {
         let snapshot = state
             .snapshot
             .ok_or_else(|| failure("playlist snapshot missing"))?;
-        let mut disk = self
-            .db()?
-            .get_download_paths(id)
-            .map_err(|error| failure(error.to_string()))?
-            .ok_or_else(|| failure("download paths missing"))?;
+        let mut disk = self.playlist_paths(id)?;
         let engine = self
             .engine
             .as_ref()
             .ok_or_else(|| failure("Windows engine unavailable"))?;
-        let mut stopped_early = false;
-        let mut fatal_error = None;
-        for index in snapshot.next_index..snapshot.entries.len() {
+        let mut archive = state
+            .zip_enabled
+            .then(|| {
+                ZipOutput::open(
+                    &disk.output_dir,
+                    &disk.work_dir,
+                    self.item(id)?.title.as_deref().unwrap_or("playlist"),
+                )
+                .map_err(single::io_error)
+            })
+            .transpose()?;
+        let mut next_index = snapshot.next_index;
+        if let Some(zip) = &archive {
+            // The archive journal can be one commit ahead of SQLite if the app
+            // exited between the verified ZIP append and the progress write.
+            while zip
+                .committed_entries()
+                .iter()
+                .any(|entry| entry.index == next_index)
+            {
+                let mut current = self.item(id)?;
+                if let Progress::Playlist {
+                    done,
+                    current_title,
+                    current_percent,
+                    ..
+                } = &mut current.progress
+                {
+                    *done += 1;
+                    *current_title = snapshot
+                        .entries
+                        .get(next_index + 1)
+                        .map(|entry| entry.title.clone());
+                    *current_percent = 0.0;
+                }
+                current.status = ItemStatus::Queued;
+                if !self
+                    .db()?
+                    .advance_playlist(&current, next_index)
+                    .map_err(|error| failure(error.to_string()))?
+                {
+                    return Err(failure("playlist row was removed"));
+                }
+                (self.emit)(QueueEvent::Updated(current));
+                next_index += 1;
+            }
+        }
+        for index in next_index..snapshot.entries.len() {
             let current = self.item(id)?;
             let result = self.playlist_entry(
                 engine,
@@ -553,8 +675,46 @@ impl QueueCoordinator {
                 &current,
                 &snapshot.entries[index],
                 index,
+                state.zip_enabled,
                 cancel,
             );
+            let result = match (archive.as_mut(), result) {
+                (Some(zip), Ok(completed)) => {
+                    {
+                        let mut control = self
+                            .control
+                            .lock()
+                            .map_err(|_| failure("queue control lock poisoned"))?;
+                        let active = control
+                            .active
+                            .as_mut()
+                            .filter(|active| active.id == id)
+                            .ok_or_else(|| failure("active playlist missing"))?;
+                        active.phase = ItemStatus::Packaging;
+                        let mut current = self.item(id)?;
+                        current.status = ItemStatus::Packaging;
+                        self.save(&current)?;
+                    }
+                    zip.append_entry(index, &completed.title, &completed.path)
+                        .map_err(|cause| zip_failure("ZIP append", cause))?;
+                    std::fs::remove_dir_all(disk.work_dir.join(format!("entry-{index}")))
+                        .map_err(|cause| zip_failure("entry cleanup", cause))?;
+                    Ok(completed)
+                }
+                (Some(_), Err(error))
+                    if !matches!(
+                        error.code,
+                        ErrorCode::DiskFull | ErrorCode::PermissionDenied
+                    ) =>
+                {
+                    let entry_dir = disk.work_dir.join(format!("entry-{index}"));
+                    if entry_dir.exists() {
+                        std::fs::remove_dir_all(entry_dir).map_err(single::io_error)?;
+                    }
+                    Err(error)
+                }
+                (_, result) => result,
+            };
             let mut control = self
                 .control
                 .lock()
@@ -569,6 +729,9 @@ impl QueueCoordinator {
                 if let Ok(completed) = &result {
                     let _ = std::fs::remove_file(&completed.path);
                 }
+                if let Some(zip) = &archive {
+                    zip.remove_owned().map_err(single::io_error)?;
+                }
                 disk.clean_owned(&self.app_data)
                     .map_err(|error| failure(error.to_string()))?;
                 if self
@@ -580,7 +743,14 @@ impl QueueCoordinator {
                 }
                 return Ok(());
             }
-            if (closing || active.intent == Intent::Pause) && result.is_err() {
+            let fatal = matches!(
+                &result,
+                Err(AppError {
+                    code: ErrorCode::DiskFull | ErrorCode::PermissionDenied,
+                    ..
+                })
+            );
+            if (closing || active.intent == Intent::Pause) && result.is_err() && !fatal {
                 if !closing {
                     let mut current = self.item(id)?;
                     current.status = ItemStatus::Paused;
@@ -591,15 +761,8 @@ impl QueueCoordinator {
             let pause_after_entry = closing || active.intent == Intent::Pause;
             active.phase = ItemStatus::Queued;
             let mut current = self.item(id)?;
-            let fatal = matches!(
-                &result,
-                Err(AppError {
-                    code: ErrorCode::DiskFull | ErrorCode::PermissionDenied,
-                    ..
-                })
-            );
             if fatal {
-                fatal_error = result.as_ref().err().cloned();
+                return Err(result.err().expect("fatal result is an error"));
             }
             if let Progress::Playlist {
                 done,
@@ -634,10 +797,6 @@ impl QueueCoordinator {
                 self.save(&current)?;
                 return Ok(());
             }
-            if fatal {
-                stopped_early = true;
-                break;
-            }
         }
         let control = self
             .control
@@ -648,6 +807,9 @@ impl QueueCoordinator {
             .as_ref()
             .is_some_and(|active| active.id == id && active.intent == Intent::Remove)
         {
+            if let Some(zip) = &archive {
+                zip.remove_owned().map_err(single::io_error)?;
+            }
             disk.clean_owned(&self.app_data)
                 .map_err(|error| failure(error.to_string()))?;
             if self
@@ -658,6 +820,11 @@ impl QueueCoordinator {
                 (self.emit)(QueueEvent::Removed(id.into()));
             }
             return Ok(());
+        }
+        if let Some(zip) = archive.as_mut() {
+            // ZIP publication happens after every entry has reached a durable
+            // SQLite boundary. A restart after rename can repeat this safely.
+            zip.finalize().map_err(single::io_error)?;
         }
         let mut current = self.item(id)?;
         let Progress::Playlist {
@@ -674,9 +841,7 @@ impl QueueCoordinator {
         *current_percent = 100.0;
         let (done, failed) = (*done, *failed);
         current.error = (failed > 0).then(|| {
-            let mut error = fatal_error
-                .take()
-                .unwrap_or_else(|| failure(format!("playlist_summary:{done}:{failed}")));
+            let mut error = failure(format!("playlist_summary:{done}:{failed}"));
             error.detail = Some(format!("playlist_summary:{done}:{failed}"));
             error
         });
@@ -704,7 +869,7 @@ impl QueueCoordinator {
         if done > 0 {
             (self.emit)(QueueEvent::HistoryChanged);
         }
-        if failed > 0 || stopped_early {
+        if failed > 0 {
             (self.emit)(QueueEvent::NotificationsChanged);
         }
         (self.emit)(QueueEvent::Removed(id.into()));
@@ -1015,12 +1180,31 @@ impl QueueCoordinator {
             active.cancel.store(true, Ordering::SeqCst);
             return Ok(());
         }
-        let _item = self.item(id)?;
-        let disk = self
-            .db()?
-            .get_download_paths(id)
-            .map_err(|error| failure(error.to_string()))?;
+        let item = self.item(id)?;
+        let disk = if item.request.is_playlist {
+            Some(self.playlist_paths(id)?)
+        } else {
+            self.db()?
+                .get_download_paths(id)
+                .map_err(|error| failure(error.to_string()))?
+        };
         if let Some(disk) = disk {
+            if item.request.is_playlist
+                && self
+                    .db()?
+                    .get_playlist_state(id)
+                    .map_err(|error| failure(error.to_string()))?
+                    .is_some_and(|state| state.zip_enabled && state.snapshot.is_some())
+            {
+                ZipOutput::open(
+                    &disk.output_dir,
+                    &disk.work_dir,
+                    item.title.as_deref().unwrap_or("playlist"),
+                )
+                .map_err(single::io_error)?
+                .remove_owned()
+                .map_err(single::io_error)?;
+            }
             disk.clean_owned(&self.app_data)
                 .map_err(|error| failure(error.to_string()))?;
         }

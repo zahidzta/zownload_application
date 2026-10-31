@@ -89,6 +89,7 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
             &AtomicBool::new(false),
             Arc::new(|_| {}),
             &mut |_paths| Ok::<(), AppError>(()),
+            false,
         )
         .unwrap_or_else(|error| panic!("entry {index}: {error:?}"));
         assert!(output.path.metadata().unwrap().len() > 5);

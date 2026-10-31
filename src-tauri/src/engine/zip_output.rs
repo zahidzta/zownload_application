@@ -148,6 +148,8 @@ impl ZipOutput {
             .map_err(zip_error)?;
         let mut media = File::open(media_path)?;
         io::copy(&mut media, &mut writer)?;
+        // Windows cannot delete the temporary media while this read handle is open.
+        drop(media);
         let archive = writer.finish().map_err(zip_error)?;
         archive.sync_all()?;
 
@@ -245,6 +247,19 @@ impl ZipOutput {
             }
         }
         Ok(())
+    }
+
+    /// Cancel a queue item after a rename but before History settlement. The
+    /// recovered final path is verified against this item's journal first.
+    pub fn remove_owned(&self) -> io::Result<()> {
+        if let Some(path) = &self.finalized {
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(cause) if cause.kind() == io::ErrorKind::NotFound => {}
+                Err(cause) => return Err(cause),
+            }
+        }
+        self.remove_incomplete()
     }
 
     fn recover(&mut self) -> io::Result<()> {
@@ -824,6 +839,24 @@ mod tests {
         assert_eq!(fs::read_dir(root.output()).unwrap().count(), 1);
         let archive = ZipArchive::new(File::open(final_path).unwrap()).unwrap();
         assert_eq!(archive.len(), 1);
+    }
+
+    #[test]
+    fn removing_a_queue_after_rename_cleans_only_its_verified_archive() {
+        let root = TempRoot::new();
+        let media = root.media("ready.mp4", b"track bytes");
+        let mut output = ZipOutput::open(&root.output(), &root.work(), "Set").unwrap();
+        output.append_entry(0, "Track", &media).unwrap();
+        let published = output.finalize().unwrap().unwrap();
+        let foreign = root.output().join("Other.zip");
+        fs::write(&foreign, b"someone else's archive").unwrap();
+        drop(output);
+
+        let recovered = ZipOutput::open(&root.output(), &root.work(), "ignored").unwrap();
+        recovered.remove_owned().unwrap();
+        assert!(!published.exists());
+        assert_eq!(fs::read(foreign).unwrap(), b"someone else's archive");
+        assert_eq!(fs::read_dir(root.work()).unwrap().count(), 0);
     }
 
     #[test]
