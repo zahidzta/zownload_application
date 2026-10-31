@@ -2,16 +2,12 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint (2026-10-30):** Gate 2D was accepted on 2026-10-29; Gate 3A implementation and evidence are ready for owner review, with explicit acceptance pending. See the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md) and [Gate 2D checkpoint](gates/evidence/2d/checkpoint.md).
-- **Next task:** 3B-01 — implement ZIP packaging and bounded-storage behavior after the owner explicitly accepts the Gate 3A checkpoint.
+- **Checkpoint:** Gate 3A was accepted on 2026-10-30; see the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md).
+- **Next task:** Owner review and acceptance of the [Gate 3B plan](gates/gate-3b.md) before implementation.
 
-## Current gate 3A completions
+## Current Gate 3B completions
 
-- Completed 3A-01: Planned sequential playlist work and recorded the resume-state and ZIP boundary decisions; commit `4d6c2c5`; [plan evidence](gates/gate-3a.md). Verification is identified as V0 there.
-- Completed 3A-02: Added private playlist snapshots, ZIP preference capture, and durable index/counter transactions; commits `2549665`, `b248232` (platform-neutral fix); [evidence](gates/evidence/3a/3a-02.md). V1 passed.
-- Completed 3A-03: Added per-entry Max/Min worker, playlist album metadata, and collision-safe outputs; commits `414c068`, `b248232` (CI fixture fix); [evidence](gates/evidence/3a/3a-03.md). V1 and focused CLI test passed.
-- Completed 3A-04: Connected ZIP-off playlists to queue lifecycle, counters, partial-failure continuation, pause/resume, and one History row; commit `1bb328d`; [V2 evidence](gates/evidence/3a/3a-04.md).
-- Completed 3A-05: Passed V3 and completed the native Windows playlist review; commit `5151862`; [checkpoint and observations](gates/evidence/3a/checkpoint.md).
+- Completed 3B-01: Planned bounded ZIP packaging, recovery, collisions, and filesystem failure handling; commit `86433d9`; [plan and V0 evidence](gates/gate-3b.md). Owner review pending.
 
 ## Accepted gates
 
@@ -25,6 +21,7 @@
 - 2B — accepted 2026-10-26; [checkpoint](gates/evidence/2b/checkpoint.md).
 - 2C — accepted 2026-10-28; [checkpoint](gates/evidence/2c/checkpoint.md).
 - 2D — accepted 2026-10-29; [checkpoint](gates/evidence/2d/checkpoint.md).
+- 3A — accepted 2026-10-30; [checkpoint](gates/evidence/3a/checkpoint.md) and [task evidence](gates/evidence/3a/tasks.md).
 
 ## Standing decisions
 
