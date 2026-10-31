@@ -3,11 +3,12 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3A was accepted on 2026-10-30; see the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md).
-- **Next task:** Owner review and acceptance of the [Gate 3B plan](gates/gate-3b.md) before implementation.
+- **Next task:** 3B-03 — ZIP queue lifecycle, resume, and fatal storage errors; see [Gate 3B](gates/gate-3b.md).
 
 ## Current Gate 3B completions
 
-- Completed 3B-01: Planned bounded ZIP packaging, recovery, collisions, and filesystem failure handling; commit `86433d9`; [plan and V0 evidence](gates/gate-3b.md). Owner review pending.
+- Completed 3B-01: Gate 3B plan accepted by owner on 2026-10-30; commit `86433d9`; [plan and V0 evidence](gates/gate-3b.md).
+- Completed 3B-02: Added bounded recoverable ZIP writing, per-entry durable recovery, safe name collisions, and no-overwrite finalization; commit `de3ed5e`; [V1 evidence](gates/gate-3b.md#verification).
 
 ## Accepted gates
 
