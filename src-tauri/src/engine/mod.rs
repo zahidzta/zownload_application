@@ -17,6 +17,7 @@ pub mod process;
 pub mod queue;
 pub mod single;
 pub mod updater;
+pub mod zip_output;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
 const YT_DLP_HASH: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
