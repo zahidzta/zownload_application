@@ -3,7 +3,7 @@
 
 # Gate 3A — Sequential playlists checkpoint
 
-**Status:** Ready for owner review; explicit acceptance is pending.
+**Status:** Accepted by the owner on 2026-10-30.
 
 ## Acceptance mapping
 
@@ -19,4 +19,4 @@
 
 V2 passed in a clean detached checkout: build, 61 UI tests, contract fixtures, 18 Node tests, Rust format, 79 Rust unit tests, all eligible CLI/queue/process-tree integrations, and Cargo check. V3 passed in a separate clean checkout: 61 UI tests, 18 Node tests, Rust format, frontend build, contract fixtures, 79 Rust unit tests, all eligible integrations, and the nine-image design inventory. V3 logs the expected existing `restore_baseline` dead-code warning. Two real-engine single CLI tests remained intentionally ignored because their test inputs are separately provisioned. See [3A-04 verification evidence](3a-04.md) and [native Windows review](native-review.md).
 
-Gate 3A is limited to sequential ZIP-off playlist processing on Windows. ZIP packaging, bounded storage, filesystem stress, disk/permission integration stress, and ZIP-entry collisions remain in Gate 3B. Do not start Gate 3B until the owner explicitly accepts this checkpoint.
+Gate 3A is limited to sequential ZIP-off playlist processing on Windows. ZIP packaging, bounded storage, filesystem stress, disk/permission integration stress, and ZIP-entry collisions remain in Gate 3B. The owner accepted this checkpoint on 2026-10-30, clearing the handoff to plan Gate 3B; implementation remains gated on owner review and acceptance of the [Gate 3B plan](../../gate-3b.md).
