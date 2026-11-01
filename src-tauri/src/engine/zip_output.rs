@@ -5,12 +5,14 @@
 //!
 //! The journal is the commit record. An archive append is not committed until
 //! it has been flushed, read back (including CRC verification), and journaled.
-//! On restart, bytes after the last journaled boundary are discarded.
+//! Appending overwrites the previous ZIP central directory. A small recovery
+//! sidecar preserves that directory until the new entry is journaled; restart
+//! restores it before discarding an interrupted append.
 
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
-    io::{self, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
 };
 use zip::{
@@ -21,6 +23,7 @@ use zip::{
 
 const MANIFEST_FILE: &str = "playlist-zip.json";
 const JOURNAL_FILE: &str = "playlist-zip.journal";
+const RECOVERY_FILE: &str = "playlist-zip.recovery";
 const MAX_SUFFIX: u32 = 10_000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,6 +143,9 @@ impl ZipOutput {
         let name = unique_entry_name(title, &extension, &self.entries);
         let committed = CommittedEntry { index, name };
         let part_path = self.pending_path();
+        // ZipWriter::new_append reuses the old central-directory space. Keep
+        // those metadata bytes until the new archive and journal are durable.
+        backup_central_directory(&part_path, &self.work_dir.join(RECOVERY_FILE))?;
         let file = open_regular_file(&part_path, true)?;
         let mut writer = ZipWriter::new_append(file).map_err(zip_error)?;
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -168,6 +174,7 @@ impl ZipOutput {
         self.entries.push(committed.clone());
         self.archive_len = archive_len;
         fs::remove_file(media_path)?;
+        fs::remove_file(self.work_dir.join(RECOVERY_FILE))?;
         Ok(committed)
     }
 
@@ -238,6 +245,7 @@ impl ZipOutput {
         for path in [
             self.pending_path(),
             self.work_dir.join(JOURNAL_FILE),
+            self.work_dir.join(RECOVERY_FILE),
             self.work_dir.join(MANIFEST_FILE),
         ] {
             match fs::remove_file(path) {
@@ -262,10 +270,35 @@ impl ZipOutput {
         self.remove_incomplete()
     }
 
+    /// If recovery itself fails, remove only the pending name recorded in this
+    /// queue item's private manifest. The caller then removes the work dir.
+    pub fn remove_unrecoverable_pending(output_dir: &Path, work_dir: &Path) -> io::Result<()> {
+        let manifest_path = work_dir.join(MANIFEST_FILE);
+        if !manifest_path.exists() {
+            return Ok(());
+        }
+        let manifest = read_manifest(&manifest_path, output_dir)?;
+        let part_path = output_dir.join(manifest.part_name);
+        let metadata = match fs::symlink_metadata(&part_path) {
+            Ok(metadata) => metadata,
+            Err(cause) if cause.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(cause) => return Err(cause),
+        };
+        if !metadata.file_type().is_file() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "pending ZIP path is not a regular file",
+            ));
+        }
+        fs::remove_file(part_path)?;
+        sync_directory(output_dir)
+    }
+
     fn recover(&mut self) -> io::Result<()> {
         let part_path = self.pending_path();
         let final_path = self.output_dir.join(&self.manifest.final_name);
         let journal_path = self.work_dir.join(JOURNAL_FILE);
+        let recovery_path = self.work_dir.join(RECOVERY_FILE);
 
         if !part_path.exists() && final_path.exists() {
             let (records, _) = read_journal(&journal_path)?;
@@ -316,7 +349,7 @@ impl ZipOutput {
             }
         }
         let mut part = open_regular_file(&part_path, true)?;
-        let Some(initial) = records.first() else {
+        let Some(_initial) = records.first() else {
             part.set_len(0)?;
             part.seek(SeekFrom::Start(0))?;
             let archive = ZipWriter::new(part).finish().map_err(zip_error)?;
@@ -328,18 +361,17 @@ impl ZipOutput {
         };
 
         let archive_len = fs::metadata(&part_path)?.len();
-        if archive_len < initial.archive_len {
+        let committed_len = records
+            .last()
+            .expect("initial journal record exists")
+            .archive_len;
+        if archive_len < committed_len {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "pending ZIP is shorter than its durable recovery point",
             ));
         }
-        part.set_len(
-            records
-                .last()
-                .expect("initial journal record exists")
-                .archive_len,
-        )?;
+        part.set_len(committed_len)?;
         part.sync_all()?;
         drop(part);
         if valid_journal_len < fs::metadata(&journal_path)?.len() {
@@ -352,11 +384,18 @@ impl ZipOutput {
             .iter()
             .filter_map(|record| record.entry.clone())
             .collect();
-        self.archive_len = records
-            .last()
-            .expect("initial journal record exists")
-            .archive_len;
-        verify_archive(&part_path, &self.entries, 0)?;
+        self.archive_len = committed_len;
+        if let Err(original) = verify_archive(&part_path, &self.entries, 0) {
+            if !recovery_path.exists() {
+                return Err(original);
+            }
+            let mut part = open_regular_file(&part_path, true)?;
+            restore_central_directory(&mut part, &recovery_path, committed_len)?;
+            verify_archive(&part_path, &self.entries, 0)?;
+        }
+        if recovery_path.exists() {
+            fs::remove_file(recovery_path)?;
+        }
         Ok(())
     }
 
@@ -426,6 +465,70 @@ fn write_manifest(path: &Path, manifest: &Manifest) -> io::Result<()> {
 fn create_empty_archive(path: &Path) -> io::Result<()> {
     let file = OpenOptions::new().write(true).create_new(true).open(path)?;
     let archive = ZipWriter::new(file).finish().map_err(zip_error)?;
+    archive.sync_all()
+}
+
+/// Save only the old central directory and footer, never the media payload.
+fn backup_central_directory(archive_path: &Path, recovery_path: &Path) -> io::Result<()> {
+    let archive = ZipArchive::new(File::open(archive_path)?).map_err(zip_error)?;
+    let start = archive.central_directory_start();
+    let mut source = archive.into_inner();
+    let archive_len = source.metadata()?.len();
+    if start > archive_len {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "ZIP central directory starts beyond the archive",
+        ));
+    }
+    source.seek(SeekFrom::Start(start))?;
+    let mut recovery = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(recovery_path)?;
+    recovery.write_all(&archive_len.to_le_bytes())?;
+    recovery.write_all(&start.to_le_bytes())?;
+    if io::copy(&mut source, &mut recovery)? != archive_len - start {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "ZIP central directory changed during backup",
+        ));
+    }
+    recovery.sync_all()?;
+    sync_directory(recovery_path.parent().unwrap_or_else(|| Path::new(".")))
+}
+
+fn restore_central_directory(
+    archive: &mut File,
+    recovery_path: &Path,
+    committed_len: u64,
+) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(recovery_path)?;
+    if !metadata.file_type().is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "ZIP recovery path is not a regular file",
+        ));
+    }
+    let mut recovery = File::open(recovery_path)?;
+    let mut header = [0_u8; 16];
+    recovery.read_exact(&mut header)?;
+    let saved_len = u64::from_le_bytes(header[..8].try_into().expect("fixed header"));
+    let start = u64::from_le_bytes(header[8..].try_into().expect("fixed header"));
+    let expected_len = 16_u64.checked_add(saved_len.saturating_sub(start));
+    if saved_len != committed_len || start > saved_len || expected_len != Some(metadata.len()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "ZIP recovery directory does not match the committed boundary",
+        ));
+    }
+    archive.seek(SeekFrom::Start(start))?;
+    if io::copy(&mut recovery, archive)? != saved_len - start {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "ZIP recovery directory is incomplete",
+        ));
+    }
+    archive.set_len(saved_len)?;
     archive.sync_all()
 }
 
@@ -796,23 +899,32 @@ mod tests {
     }
 
     #[test]
-    fn recovery_discards_an_interrupted_archive_append_and_keeps_last_commit() {
+    fn recovery_restores_a_central_directory_overwritten_during_append() {
         let root = TempRoot::new();
         let first = root.media("first.mp3", b"first track");
         let mut output = ZipOutput::open(&root.output(), &root.work(), "Set").unwrap();
         output.append_entry(0, "First", &first).unwrap();
         let committed_len = output.archive_len;
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(output.pending_path())
+        let part_path = output.pending_path();
+        let directory_start = ZipArchive::new(File::open(&part_path).unwrap())
+            .unwrap()
+            .central_directory_start();
+        let recovery_path = root.work().join(RECOVERY_FILE);
+        backup_central_directory(&part_path, &recovery_path).unwrap();
+        assert!(fs::metadata(&recovery_path).unwrap().len() < 1024);
+        let mut file = OpenOptions::new().write(true).open(&part_path).unwrap();
+        file.seek(SeekFrom::Start(directory_start)).unwrap();
+        file.write_all(&vec![0xA5; (committed_len - directory_start) as usize])
             .unwrap();
         file.write_all(b"interrupted entry bytes").unwrap();
         file.sync_all().unwrap();
         drop(file);
+        assert!(verify_archive(&part_path, &output.entries, 0).is_err());
         drop(output);
 
         let mut resumed = ZipOutput::open(&root.output(), &root.work(), "ignored title").unwrap();
         assert_eq!(resumed.committed_entries().len(), 1);
+        assert!(!recovery_path.exists());
         assert_eq!(
             fs::metadata(resumed.pending_path()).unwrap().len(),
             committed_len
@@ -823,6 +935,43 @@ mod tests {
         let final_path = resumed.finalize().unwrap().unwrap();
         let archive = ZipArchive::new(File::open(final_path).unwrap()).unwrap();
         assert_eq!(archive.len(), 2);
+    }
+
+    #[test]
+    fn recovery_discards_an_incomplete_backup_when_archive_is_intact() {
+        let root = TempRoot::new();
+        let first = root.media("first.mp3", b"first track");
+        let mut output = ZipOutput::open(&root.output(), &root.work(), "Set").unwrap();
+        output.append_entry(0, "First", &first).unwrap();
+        let recovery_path = root.work().join(RECOVERY_FILE);
+        fs::write(&recovery_path, b"interrupted backup").unwrap();
+        drop(output);
+
+        let resumed = ZipOutput::open(&root.output(), &root.work(), "ignored title").unwrap();
+        assert_eq!(resumed.committed_entries().len(), 1);
+        assert!(!recovery_path.exists());
+    }
+
+    #[test]
+    fn unrecoverable_pending_cleanup_keeps_an_unrelated_final_archive() {
+        let root = TempRoot::new();
+        fs::create_dir_all(root.output()).unwrap();
+        fs::write(root.output().join("Set.zip"), b"another owner's archive").unwrap();
+        let first = root.media("first.mp3", b"first track");
+        let mut output = ZipOutput::open(&root.output(), &root.work(), "Set").unwrap();
+        output.append_entry(0, "First", &first).unwrap();
+        let pending = output.pending_path();
+        assert_eq!(pending.file_name().unwrap(), "Set (1).zip.part");
+        fs::write(&pending, b"corrupt pending archive").unwrap();
+        drop(output);
+
+        assert!(ZipOutput::open(&root.output(), &root.work(), "Set").is_err());
+        ZipOutput::remove_unrecoverable_pending(&root.output(), &root.work()).unwrap();
+        assert!(!pending.exists());
+        assert_eq!(
+            fs::read(root.output().join("Set.zip")).unwrap(),
+            b"another owner's archive"
+        );
     }
 
     #[test]
