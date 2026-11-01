@@ -129,6 +129,13 @@ jobs:
           $executable = ./scripts/install-minisign.ps1
           "path=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
+      - name: Prepare verified Windows engine resources for both source revisions
+        shell: pwsh
+        working-directory: candidate
+        run: |
+          ./scripts/prepare-windows-engine.ps1 `
+            -Destinations @('src-tauri/resources/windows-engine', '../previous/src-tauri/resources/windows-engine')
+
       - name: Install frontend dependencies for previous source
         shell: pwsh
         working-directory: previous

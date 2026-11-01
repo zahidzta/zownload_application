@@ -8,7 +8,10 @@ on:
     paths:
       - '.github/workflows/windows-release.yml'
       - 'scripts/install-minisign.ps1'
+      - 'scripts/prepare-windows-engine.ps1'
       - 'scripts/verify-windows-release.ps1'
+      - 'scripts/gate-0b/**'
+      - 'scripts/gate-2b/stage-windows-engine.ps1'
       - 'src-tauri/**'
       - 'package.json'
       - 'package-lock.json'
@@ -53,6 +56,10 @@ jobs:
       - name: Enable VBSCRIPT for WiX MSI bundling
         shell: pwsh
         run: ./scripts/enable-vbscript.ps1
+
+      - name: Prepare verified Windows engine resources
+        shell: pwsh
+        run: ./scripts/prepare-windows-engine.ps1
 
       - name: Install frontend dependencies
         run: npm ci
@@ -135,6 +142,10 @@ jobs:
           if ($release.assets.Count -ne 0) {
             throw 'Use an empty draft release so the Windows asset allowlist can be verified exactly.'
           }
+
+      - name: Prepare verified Windows engine resources
+        shell: pwsh
+        run: ./scripts/prepare-windows-engine.ps1
 
       - name: Install frontend dependencies
         run: npm ci
