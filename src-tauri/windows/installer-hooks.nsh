@@ -13,6 +13,7 @@
     Push $3
     Push $R4
     Push $R5
+    Push $R6
     StrCpy $R5 0
     ${Do}
       !insertmacro RestartManager_StartSession $R4
@@ -29,8 +30,11 @@
         StrCpy $3 0
         System::Call 'RSTRTMGR::RmGetList(i R4, *i .r1, *i .r2, p 0, *i .r3) i .r0'
       ${EndIf}
+      ; Ending the session also writes its result to $0, so preserve the
+      ; RmGetList result before closing the session.
+      StrCpy $R6 $0
       !insertmacro RestartManager_EndSession $R4
-      ${If} $0 <> ${ERROR_MORE_DATA}
+      ${If} $R6 <> ${ERROR_MORE_DATA}
       ${OrIf} $R5 >= 120
         ${Break}
       ${EndIf}
@@ -40,6 +44,7 @@
       IntOp $R5 $R5 + 1
       Sleep 250
     ${Loop}
+    Pop $R6
     Pop $R5
     Pop $R4
     Pop $3
