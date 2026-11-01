@@ -53,8 +53,12 @@ Fetch-LockedSources
 
 $gcc = Join-Path $toolRoot 'w64devkit/bin/gcc.exe'
 if (-not (Test-Path -LiteralPath $gcc -PathType Leaf)) {
-    & $toolArchive -y "-o$toolRoot"
-    Assert-Engine ($LASTEXITCODE -eq 0) 'w64devkit extraction failed'
+    $quotedToolRoot = '"{0}"' -f $toolRoot
+    $extractor = Start-Process -FilePath $toolArchive `
+        -ArgumentList @('-y', "-o$quotedToolRoot") `
+        -WindowStyle Hidden -Wait -PassThru
+    Assert-Engine ($extractor.ExitCode -eq 0) 'w64devkit extraction failed'
+    Assert-Engine (Test-Path -LiteralPath $gcc -PathType Leaf) 'w64devkit extraction did not produce the pinned GCC path'
 }
 
 Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-quickjs.ps1') @{ Target = 'windows-x64'; Verify = $true }
