@@ -267,8 +267,14 @@ try {
 
     $serverLog = Join-Path $fixtureDirectory 'server-error.log'
     $serverOutput = Join-Path $fixtureDirectory 'server-output.log'
+    $fixtureServerScript = Join-Path $PSScriptRoot 'windows-updater-fixture-server.py'
     $server = Start-Process -FilePath 'python.exe' `
-        -ArgumentList @('-m', 'http.server', [string]$port, '--bind', '127.0.0.1', '--directory', $fixtureDirectory) `
+        -ArgumentList @(
+            ('"' + $fixtureServerScript + '"'),
+            '--port', [string]$port,
+            '--bind', '127.0.0.1',
+            '--directory', ('"' + $fixtureDirectory + '"')
+        ) `
         -WorkingDirectory $fixtureDirectory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $serverOutput -RedirectStandardError $serverLog
 
@@ -330,13 +336,37 @@ try {
         $processState = if ($appProcess) { "app process $($appProcess.Id) is still running" } else { 'app process has exited' }
         try {
             # The package request is logged before its large response body
-            # finishes downloading, so allow time for download and installation.
-            $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 600 `
-                "Format $($scenario.Format); $processState; updater requests: $serverRequests."
+            # finishes downloading. Wait for the byte-counted transfer before
+            # allowing time for Windows Installer to register the new version.
+            $candidateRecord = $null
+            $transferComplete = $false
+            $downloadDeadline = [DateTime]::UtcNow.AddSeconds(600)
+            do {
+                $candidateRecord = Get-ZownloadInstallRecord $CandidateVersion
+                if ($candidateRecord) { break }
+
+                $serverRequests = if (Test-Path -LiteralPath $serverLog) {
+                    Get-Content -LiteralPath $serverLog -Raw
+                } else { '' }
+                $transferComplete = $serverRequests.Contains("TRANSFER $expectedRequest complete bytes=")
+                if ($transferComplete) { break }
+                Start-Sleep -Seconds 2
+            } while ([DateTime]::UtcNow -lt $downloadDeadline)
+
+            if (!$candidateRecord -and !$transferComplete) {
+                throw "$($scenario.Format) updater package transfer did not complete within 600 seconds."
+            }
+            if (!$candidateRecord) {
+                $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 180 `
+                    "Format $($scenario.Format); package transfer completed; $processState."
+            }
         }
         catch {
+            $serverRequests = if (Test-Path -LiteralPath $serverLog) {
+                (Get-Content -LiteralPath $serverLog -Tail 20) -join ' | '
+            } else { '(no updater server log)' }
             $installDiagnostics = Get-UpgradeInstallDiagnostics $activeApp
-            throw "$($_.Exception.Message) $installDiagnostics"
+            throw "$($_.Exception.Message) $installDiagnostics Latest updater server log: $serverRequests."
         }
         if (Get-ZownloadInstallRecord $PreviousVersion) {
             throw "$($scenario.Format) update left the previous-version uninstall entry in place."
