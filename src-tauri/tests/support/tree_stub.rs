@@ -7,6 +7,15 @@ fn main() {
     let args: Vec<_> = env::args_os().collect();
     let mode = args[1].to_string_lossy();
     let marker = &args[2];
+    if mode == "installer" {
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !std::path::Path::new(marker).with_extension("continue").exists() {
+            assert!(std::time::Instant::now() < deadline, "app did not exit");
+            thread::sleep(Duration::from_millis(20));
+        }
+        fs::write(std::path::Path::new(marker).with_extension("installed"), b"installed").unwrap();
+        return;
+    }
     if mode == "echo" {
         println!("{}", marker.to_string_lossy());
         return;

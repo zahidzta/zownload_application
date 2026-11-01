@@ -28,7 +28,7 @@ use windows_sys::Win32::{
         JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
             SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
         },
         Threading::{
             GetCurrentProcess, OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
@@ -50,11 +50,19 @@ impl Job {
             return Err(io::Error::last_os_error());
         }
         let job = Self(handle);
+        job.set_installer_breakaway(false)?;
+        Ok(job)
+    }
+
+    fn set_installer_breakaway(&self, enabled: bool) -> io::Result<()> {
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if enabled {
+            limits.BasicLimitInformation.LimitFlags |= JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK;
+        }
         let ok = unsafe {
             SetInformationJobObject(
-                job.0,
+                self.0,
                 JobObjectExtendedLimitInformation,
                 &limits as *const _ as _,
                 std::mem::size_of_val(&limits) as u32,
@@ -63,7 +71,7 @@ impl Job {
         if ok == 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(job)
+        Ok(())
     }
 
     fn assign(&self, process: HANDLE) -> io::Result<()> {
@@ -155,7 +163,8 @@ impl std::fmt::Display for RunError {
 pub struct Supervisor {
     // Held until process exit; closing it while this app is still a member
     // would also terminate the app, so window close terminates nested jobs.
-    _root: Job,
+    root: Job,
+    launch_lock: Mutex<()>,
     active: Mutex<HashMap<u64, Arc<Job>>>,
     next_id: AtomicU64,
     closing: AtomicBool,
@@ -175,13 +184,31 @@ impl Supervisor {
         let root = Job::new()?;
         root.assign(unsafe { GetCurrentProcess() })?;
         let supervisor = Arc::new(Self {
-            _root: root,
+            root,
+            launch_lock: Mutex::new(()),
             active: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
             closing: AtomicBool::new(false),
         });
         *guard = Some(Arc::clone(&supervisor));
         Ok(supervisor)
+    }
+
+    /// Tauri launches the verified installer and then exits this process.
+    /// Let that new process leave our root job so app exit cannot kill it.
+    /// Existing children remain in the job, and supervised media commands
+    /// still enter their own non-breakaway jobs before they can execute.
+    pub fn launch_installer<T>(&self, launch: impl FnOnce() -> T) -> io::Result<T> {
+        let _launch_guard = self
+            .launch_lock
+            .lock()
+            .map_err(|_| io::Error::other("process launch lock poisoned"))?;
+        self.root.set_installer_breakaway(true)?;
+        let result = launch();
+        // Successful Tauri installation exits the app without returning here.
+        // Restore normal inheritance when launch fails or a test returns.
+        self.root.set_installer_breakaway(false)?;
+        Ok(result)
     }
 
     pub fn shutdown(&self) {
@@ -237,6 +264,12 @@ impl Supervisor {
         if self.closing.load(Ordering::SeqCst) || cancel.load(Ordering::SeqCst) {
             return Err(RunError::Cancelled);
         }
+        // Do not create a suspended media child while installer breakaway is
+        // enabled: app death before job assignment must still contain it.
+        let launch_guard = self
+            .launch_lock
+            .lock()
+            .map_err(|_| RunError::Io(io::Error::other("process launch lock poisoned")))?;
         let job = Arc::new(Job::new().map_err(RunError::Io)?);
         let mut command = Command::new(executable);
         command
@@ -251,6 +284,7 @@ impl Supervisor {
             let _ = child.wait();
             return Err(RunError::Io(error));
         }
+        drop(launch_guard);
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         {
             let mut active = self.active.lock().map_err(|_| RunError::Cancelled)?;

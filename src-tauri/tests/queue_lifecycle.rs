@@ -673,6 +673,9 @@ fn zip_restart_reconciles_a_committed_entry_before_downloading_the_next() {
     assert_eq!(archive.by_index(1).unwrap().name().unwrap(), "second.mp4");
     drop(archive);
     drop(coordinator);
+    // Queue settlement precedes worker exit. Wait for its coordinator (and
+    // SQLite reference) to be released before deleting the Windows test root.
+    until(|| Arc::strong_count(&db) == 1);
     drop(db);
     fs::remove_dir_all(root).unwrap();
 }

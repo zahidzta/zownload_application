@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       previous_ref:
-        description: Controlled source revision for the older package
+        description: Controlled source revision with the installer job exception for the older package
         required: true
-        default: main
+        default: task-3c-02-03
         type: string
       candidate_ref:
         description: Controlled source revision for the candidate package
