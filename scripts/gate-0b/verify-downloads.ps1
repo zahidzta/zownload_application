@@ -14,6 +14,14 @@ function Assert-Download([bool]$condition, [string]$message) {
     if (-not $condition) { throw "Engine download verification failed: $message" }
 }
 
+function Get-DownloadUrls([string]$primary, [object[]]$fallbacks) {
+    $urls = @($primary)
+    foreach ($fallback in @($fallbacks)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$fallback)) { $urls += [string]$fallback }
+    }
+    return ,$urls
+}
+
 $source = Get-Content -LiteralPath $sourcePath -Raw
 $blocks = [regex]::Matches($source, '(?s)```json source-lock\r?\n(.*?)\r?\n```')
 Assert-Download ($blocks.Count -eq 1) 'expected one source-lock block'
@@ -23,21 +31,21 @@ Assert-Download ($lock.schema -eq 1) 'unexpected source-lock schema'
 # All network destinations come from the reviewed source lock. Each name is
 # fixed here so a changed URL cannot write to an arbitrary local path.
 $items = @(
-    [pscustomobject]@{ Name = 'yt-dlp.tar.gz'; Url = $lock.ytDlp.source.url; Hash = $lock.ytDlp.source.sha256 },
-    [pscustomobject]@{ Name = 'SHA2-256SUMS'; Url = $lock.ytDlp.checksumManifest.url; Hash = $lock.ytDlp.checksumManifest.sha256 },
-    [pscustomobject]@{ Name = 'SHA2-256SUMS.sig'; Url = $lock.ytDlp.checksumManifest.signatureUrl; Hash = $lock.ytDlp.checksumManifest.signatureSha256 },
-    [pscustomobject]@{ Name = 'yt-dlp.exe'; Url = $lock.ytDlp.binaries.windowsX64.url; Hash = $lock.ytDlp.binaries.windowsX64.sha256 },
-    [pscustomobject]@{ Name = 'yt-dlp_linux'; Url = $lock.ytDlp.binaries.linuxX64.url; Hash = $lock.ytDlp.binaries.linuxX64.sha256 },
-    [pscustomobject]@{ Name = 'yt-dlp_macos'; Url = $lock.ytDlp.binaries.macosUniversal.url; Hash = $lock.ytDlp.binaries.macosUniversal.sha256 },
-    [pscustomobject]@{ Name = 'yt_dlp_ejs-0.8.0.tar.gz'; Url = $lock.ejs.source.url; Hash = $lock.ejs.source.sha256 },
-    [pscustomobject]@{ Name = 'yt_dlp_ejs-0.8.0-py3-none-any.whl'; Url = $lock.ejs.wheel.url; Hash = $lock.ejs.wheel.sha256 },
-    [pscustomobject]@{ Name = 'quickjs-2026-06-04.tar.xz'; Url = $lock.quickjs.source.url; Hash = $lock.quickjs.source.sha256 },
-    [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz'; Url = $lock.ffmpeg.source.url; Hash = $lock.ffmpeg.source.sha256 },
-    [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz.asc'; Url = $lock.ffmpeg.source.signatureUrl; Hash = $lock.ffmpeg.source.signatureSha256 },
-    [pscustomobject]@{ Name = 'lame-3.100.tar.gz'; Url = $lock.lame.source.url; Hash = $lock.lame.source.sha256 },
-    [pscustomobject]@{ Name = 'zlib-1.3.2.tar.gz'; Url = $lock.zlib.source.url; Hash = $lock.zlib.source.sha256 },
-    [pscustomobject]@{ Name = 'yt-dlp-public.key'; Url = $lock.ytDlp.signingKey.url; Hash = $lock.ytDlp.signingKey.sha256 },
-    [pscustomobject]@{ Name = 'ffmpeg-devel.asc'; Url = $lock.ffmpeg.signingKey.url; Hash = $lock.ffmpeg.signingKey.sha256 }
+    [pscustomobject]@{ Name = 'yt-dlp.tar.gz'; Urls = (Get-DownloadUrls $lock.ytDlp.source.url $lock.ytDlp.source.fallbackUrls); Hash = $lock.ytDlp.source.sha256 },
+    [pscustomobject]@{ Name = 'SHA2-256SUMS'; Urls = (Get-DownloadUrls $lock.ytDlp.checksumManifest.url $lock.ytDlp.checksumManifest.fallbackUrls); Hash = $lock.ytDlp.checksumManifest.sha256 },
+    [pscustomobject]@{ Name = 'SHA2-256SUMS.sig'; Urls = (Get-DownloadUrls $lock.ytDlp.checksumManifest.signatureUrl $lock.ytDlp.checksumManifest.signatureFallbackUrls); Hash = $lock.ytDlp.checksumManifest.signatureSha256 },
+    [pscustomobject]@{ Name = 'yt-dlp.exe'; Urls = (Get-DownloadUrls $lock.ytDlp.binaries.windowsX64.url $lock.ytDlp.binaries.windowsX64.fallbackUrls); Hash = $lock.ytDlp.binaries.windowsX64.sha256 },
+    [pscustomobject]@{ Name = 'yt-dlp_linux'; Urls = (Get-DownloadUrls $lock.ytDlp.binaries.linuxX64.url $lock.ytDlp.binaries.linuxX64.fallbackUrls); Hash = $lock.ytDlp.binaries.linuxX64.sha256 },
+    [pscustomobject]@{ Name = 'yt-dlp_macos'; Urls = (Get-DownloadUrls $lock.ytDlp.binaries.macosUniversal.url $lock.ytDlp.binaries.macosUniversal.fallbackUrls); Hash = $lock.ytDlp.binaries.macosUniversal.sha256 },
+    [pscustomobject]@{ Name = 'yt_dlp_ejs-0.8.0.tar.gz'; Urls = (Get-DownloadUrls $lock.ejs.source.url $lock.ejs.source.fallbackUrls); Hash = $lock.ejs.source.sha256 },
+    [pscustomobject]@{ Name = 'yt_dlp_ejs-0.8.0-py3-none-any.whl'; Urls = (Get-DownloadUrls $lock.ejs.wheel.url $lock.ejs.wheel.fallbackUrls); Hash = $lock.ejs.wheel.sha256 },
+    [pscustomobject]@{ Name = 'quickjs-2026-06-04.tar.xz'; Urls = (Get-DownloadUrls $lock.quickjs.source.url $lock.quickjs.source.fallbackUrls); Hash = $lock.quickjs.source.sha256 },
+    [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz'; Urls = (Get-DownloadUrls $lock.ffmpeg.source.url $lock.ffmpeg.source.fallbackUrls); Hash = $lock.ffmpeg.source.sha256 },
+    [pscustomobject]@{ Name = 'ffmpeg-8.1.3.tar.xz.asc'; Urls = (Get-DownloadUrls $lock.ffmpeg.source.signatureUrl $lock.ffmpeg.source.signatureFallbackUrls); Hash = $lock.ffmpeg.source.signatureSha256 },
+    [pscustomobject]@{ Name = 'lame-3.100.tar.gz'; Urls = (Get-DownloadUrls $lock.lame.source.url $lock.lame.source.fallbackUrls); Hash = $lock.lame.source.sha256 },
+    [pscustomobject]@{ Name = 'zlib-1.3.2.tar.gz'; Urls = (Get-DownloadUrls $lock.zlib.source.url $lock.zlib.source.fallbackUrls); Hash = $lock.zlib.source.sha256 },
+    [pscustomobject]@{ Name = 'yt-dlp-public.key'; Urls = (Get-DownloadUrls $lock.ytDlp.signingKey.url $lock.ytDlp.signingKey.fallbackUrls); Hash = $lock.ytDlp.signingKey.sha256 },
+    [pscustomobject]@{ Name = 'ffmpeg-devel.asc'; Urls = (Get-DownloadUrls $lock.ffmpeg.signingKey.url $lock.ffmpeg.signingKey.fallbackUrls); Hash = $lock.ffmpeg.signingKey.sha256 }
 )
 
 Assert-Download (Test-Path -LiteralPath $evidencePath) 'missing source-hashes.txt'
@@ -56,19 +64,35 @@ if ($FetchMissing) { New-Item -ItemType Directory -Path $downloadDir -Force | Ou
 Assert-Download (Test-Path -LiteralPath $downloadDir) 'downloads directory is absent; run fetch-sources.ps1'
 
 foreach ($item in $items) {
-    Assert-Download ($item.Url -match '^https://') "$($item.Name) URL is not HTTPS"
+    Assert-Download ($item.Urls.Count -gt 0) "$($item.Name) has no download URLs"
+    foreach ($url in $item.Urls) { Assert-Download ($url -match '^https://') "$($item.Name) URL is not HTTPS" }
     Assert-Download ($item.Hash -match '^[a-f0-9]{64}$') "$($item.Name) is missing a locked SHA-256"
     Assert-Download ($attested.ContainsKey($item.Name)) "$($item.Name) is missing from evidence"
     Assert-Download ($attested[$item.Name] -eq $item.Hash) "$($item.Name) evidence disagrees with the source lock"
     $path = Join-Path $downloadDir $item.Name
     if (-not (Test-Path -LiteralPath $path) -and $FetchMissing) {
         $partial = "$path.partial"
-        Write-Output "Fetching $($item.Name)"
-        & curl.exe --silent --show-error --fail --location --retry 3 --proto '=https' --proto-redir '=https' --output $partial $item.Url
-        Assert-Download ($LASTEXITCODE -eq 0) "curl failed for $($item.Name) (exit $LASTEXITCODE)"
-        $partialHash = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant()
-        Assert-Download ($partialHash -eq $item.Hash) "$($item.Name) downloaded SHA-256 disagrees with lock"
-        Move-Item -LiteralPath $partial -Destination $path
+        $fetched = $false
+        for ($urlIndex = 0; $urlIndex -lt $item.Urls.Count; $urlIndex++) {
+            if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+            $url = $item.Urls[$urlIndex]
+            Write-Output "Fetching $($item.Name) from source URL $($urlIndex + 1) of $($item.Urls.Count)"
+            & curl.exe --silent --show-error --fail --location --retry 3 --proto '=https' --proto-redir '=https' --output $partial $url
+            if ($LASTEXITCODE -ne 0) {
+                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                if ($urlIndex -eq ($item.Urls.Count - 1)) {
+                    Assert-Download $false "curl failed for $($item.Name) at every locked URL"
+                }
+                Write-Warning "Download failed for $($item.Name); trying its next locked URL."
+                continue
+            }
+            $partialHash = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant()
+            Assert-Download ($partialHash -eq $item.Hash) "$($item.Name) downloaded SHA-256 disagrees with lock"
+            Move-Item -LiteralPath $partial -Destination $path
+            $fetched = $true
+            break
+        }
+        Assert-Download $fetched "could not fetch $($item.Name) from its locked URLs"
     }
     Assert-Download (Test-Path -LiteralPath $path -PathType Leaf) "missing $($item.Name); run fetch-sources.ps1"
     $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()

@@ -22,6 +22,14 @@ function Assert-Digest([string]$digest, [string]$label) {
     Assert-Lock ($digest -match '^[a-f0-9]{64}$') "$label needs a 64-character lowercase SHA-256"
 }
 
+function Assert-FallbackUrls($urls, [string]$label) {
+    if ($null -eq $urls) { return }
+    foreach ($url in @($urls)) {
+        Assert-Lock ($url -match '^https://') "$label fallback must use HTTPS"
+        Assert-Lock ($url -notmatch '(?i)/latest/|/master/|/main/|/nightly/') "$label fallback must not use a moving URL"
+    }
+}
+
 $markdown = Get-Content -LiteralPath $sourcePath -Raw
 $matches = [regex]::Matches($markdown, '(?s)```json source-lock\r?\n(.*?)\r?\n```')
 Assert-Lock ($matches.Count -eq 1) 'expected exactly one json source-lock block'
@@ -67,9 +75,15 @@ foreach ($target in @('windowsX64', 'linuxX64', 'macosUniversal')) {
 Assert-Url $lock.ejs.wheel.url $lock.ejs.version 'ejs wheel URL'
 Assert-Digest $lock.ejs.wheel.sha256 'ejs wheel'
 Assert-Url $lock.ffmpeg.source.signatureUrl $lock.ffmpeg.version 'FFmpeg signature URL'
+Assert-FallbackUrls $lock.ffmpeg.source.fallbackUrls 'FFmpeg source'
+Assert-FallbackUrls $lock.ffmpeg.source.signatureFallbackUrls 'FFmpeg signature'
 Assert-Digest $lock.ffmpeg.source.sha256 'FFmpeg source'
 Assert-Digest $lock.ffmpeg.source.signatureSha256 'FFmpeg signature'
 Assert-Lock ($lock.ffmpeg.signingKey.url -eq 'https://ffmpeg.org/ffmpeg-devel.asc') 'FFmpeg key URL must be official'
+Assert-FallbackUrls $lock.ffmpeg.signingKey.fallbackUrls 'FFmpeg key'
+Assert-Lock ($lock.ffmpeg.source.fallbackUrls -contains 'https://mirror.math.princeton.edu/pub/macports/distfiles/ffmpeg/ffmpeg-8.1.3.tar.xz') 'FFmpeg source mirror must remain the reviewed pinned MacPorts distfile'
+Assert-Lock ($lock.ffmpeg.source.signatureFallbackUrls -contains 'https://mirrors.mit.edu/gentoo-distfiles/distfiles/85/ffmpeg-8.1.3.tar.xz.asc') 'FFmpeg signature mirror must remain the reviewed pinned Gentoo distfile'
+Assert-Lock ($lock.ffmpeg.signingKey.fallbackUrls -contains 'https://raw.githubusercontent.com/FFmpeg/web/2d2f5f72996cdbc9420a5f0dc9c22a97d54871ae/htdocs/ffmpeg-devel.asc') 'FFmpeg key mirror must remain pinned to an immutable project mirror commit'
 Assert-Digest $lock.ffmpeg.signingKey.sha256 'FFmpeg signing key'
 Assert-Lock ($lock.ffmpeg.signingKey.fingerprint -eq 'FCF986EA15E6E293A5644F10B4322F04D67658D8') 'FFmpeg signer fingerprint disagrees with upstream'
 Assert-Lock ($lock.zlib.source.url -eq "https://zlib.net/fossils/zlib-$($lock.zlib.version).tar.gz") 'zlib must use the official versioned fossil archive'
@@ -82,9 +96,9 @@ foreach ($target in $requiredQuickJsTargets) {
 }
 
 $notice = Get-Content -LiteralPath $noticePath -Raw
-Assert-Lock ($notice -match 'GPLv3\+') 'notices must describe official yt-dlp binary license'
-Assert-Lock ($notice -match 'mpglib.*GPL') 'notices must flag the LAME GPL decoder'
-Assert-Lock ($notice -match 'yt-dlp-ejs' -and $notice -match 'LAME MP3') 'notices need ejs and LAME sections'
-Assert-Lock ($notice -match 'zlib compression library') 'notices need the zlib section'
+Assert-Lock ($notice -match 'GPL-3\.0-or-later') 'notices must describe official yt-dlp binary license'
+Assert-Lock ($notice -match 'GPL-only.{0,20}mpglib') 'notices must flag the LAME GPL decoder'
+Assert-Lock ($notice -match 'yt-dlp-ejs' -and $notice -match 'LAME 3\.100 encoder') 'notices need ejs and LAME sections'
+Assert-Lock ($notice -match 'zlib 1\.3\.2') 'notices need the zlib section'
 
 Write-Output 'Source lock: 6 components, matching yt-dlp/ejs versions, 3 desktop yt-dlp artifacts, 5 QuickJS targets, URLs, SHA-256 values, signing keys and license notices passed.'

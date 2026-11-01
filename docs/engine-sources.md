@@ -71,12 +71,21 @@ versioned release or an immutable commit; no moving release channel is a pin.
     "license": "LGPL-2.1-or-later only if configuration and linked libraries pass 0B-10/12",
     "source": {
       "url": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz",
+      "fallbackUrls": [
+        "https://mirror.math.princeton.edu/pub/macports/distfiles/ffmpeg/ffmpeg-8.1.3.tar.xz"
+      ],
       "signatureUrl": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz.asc",
+      "signatureFallbackUrls": [
+        "https://mirrors.mit.edu/gentoo-distfiles/distfiles/85/ffmpeg-8.1.3.tar.xz.asc"
+      ],
       "signatureSha256": "5f2880c7fea01f8694d30cb9d06362f77241ee67ce5926b157a226b18f08a538",
       "sha256": "7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3"
     },
     "signingKey": {
       "url": "https://ffmpeg.org/ffmpeg-devel.asc",
+      "fallbackUrls": [
+        "https://raw.githubusercontent.com/FFmpeg/web/2d2f5f72996cdbc9420a5f0dc9c22a97d54871ae/htdocs/ffmpeg-devel.asc"
+      ],
       "sha256": "397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5",
       "fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8"
     },
@@ -102,6 +111,12 @@ versioned release or an immutable commit; no moving release channel is a pin.
   }
 }
 ```
+
+The Windows source workflow falls back to the pinned MacPorts and Gentoo
+distfile mirrors for the FFmpeg archive and detached signature when the
+canonical host is unavailable. It can also read the signing key from the
+FFmpeg project's immutable GitHub web-mirror commit. The existing locked
+SHA-256 values and detached FFmpeg signature remain mandatory before a build.
 
 ## Source and license evidence
 
