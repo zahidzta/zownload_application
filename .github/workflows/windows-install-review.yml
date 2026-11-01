@@ -1,0 +1,174 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
+
+name: Windows installed upgrade review
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_ref:
+        description: Controlled source revision for the older package
+        required: true
+        default: main
+        type: string
+      candidate_ref:
+        description: Controlled source revision for the candidate package
+        required: true
+        type: string
+      previous_version:
+        description: Older package version used in the isolated test
+        required: true
+        default: 0.0.0
+        type: string
+      candidate_version:
+        description: Candidate package version
+        required: true
+        default: 0.0.1
+        type: string
+
+jobs:
+  installed-upgrades:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      PREVIOUS_REF: ${{ inputs.previous_ref }}
+      CANDIDATE_REF: ${{ inputs.candidate_ref }}
+      PREVIOUS_VERSION: ${{ inputs.previous_version }}
+      CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+      FIXTURE_PORT: '38547'
+    steps:
+      - name: Check out candidate source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_ref }}
+          path: candidate
+
+      - name: Check out previous source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.previous_ref }}
+          path: previous
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable VBSCRIPT for WiX MSI bundling
+        shell: pwsh
+        run: |
+          $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          if ($feature.State -ne 'Enabled') {
+            Enable-WindowsOptionalFeature -Online -FeatureName VBSCRIPT -All -NoRestart | Out-Null
+            $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          }
+          if ($feature.State -ne 'Enabled') {
+            throw 'VBSCRIPT is required to build the WiX MSI package.'
+          }
+
+      - name: Validate inputs and create temporary updater configurations
+        id: test-config
+        shell: pwsh
+        run: |
+          $previous = [version]$env:PREVIOUS_VERSION
+          $candidate = [version]$env:CANDIDATE_VERSION
+          if ($candidate -le $previous) { throw 'The candidate version must be newer than the previous version.' }
+          $candidateConfig = Get-Content -LiteralPath 'candidate/src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          if ([version]$candidateConfig.version -ne $candidate) {
+            throw 'The candidate version input must match src-tauri/tauri.conf.json.'
+          }
+          $endpoint = "http://127.0.0.1:$env:FIXTURE_PORT/latest.json"
+          $updater = @{
+            pubkey = $candidateConfig.plugins.updater.pubkey
+            endpoints = @($endpoint)
+            dangerousInsecureTransportProtocol = $true
+          }
+          $previousConfig = @{
+            version = $env:PREVIOUS_VERSION
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = $updater }
+          } | ConvertTo-Json -Depth 8 -Compress
+          $candidateOverride = @{
+            bundle = @{ createUpdaterArtifacts = $true }
+            plugins = @{ updater = $updater }
+          } | ConvertTo-Json -Depth 8 -Compress
+          $previousPath = Join-Path $env:RUNNER_TEMP 'tauri-previous-test.json'
+          $candidatePath = Join-Path $env:RUNNER_TEMP 'tauri-candidate-test.json'
+          Set-Content -LiteralPath $previousPath -Value $previousConfig -Encoding utf8
+          Set-Content -LiteralPath $candidatePath -Value $candidateOverride -Encoding utf8
+          "previous=$previousPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "candidate=$candidatePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install pinned Minisign verifier
+        id: minisign
+        shell: pwsh
+        working-directory: candidate
+        run: |
+          $executable = ./scripts/install-minisign.ps1
+          "path=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Install frontend dependencies for previous source
+        shell: pwsh
+        working-directory: previous
+        run: |
+          npm ci *> (Join-Path $env:RUNNER_TEMP 'previous-npm.log')
+          if ($LASTEXITCODE -ne 0) { Get-Content (Join-Path $env:RUNNER_TEMP 'previous-npm.log') -Tail 50; throw 'npm ci failed for the previous source ref.' }
+
+      - name: Build previous NSIS and MSI packages
+        shell: pwsh
+        working-directory: previous
+        env:
+          TEST_CONFIG: ${{ steps.test-config.outputs.previous }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw 'The TAURI_SIGNING_PRIVATE_KEY Actions secret is required.' }
+          npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi --config $env:TEST_CONFIG *> (Join-Path $env:RUNNER_TEMP 'previous-build.log')
+          if ($LASTEXITCODE -ne 0) { Get-Content (Join-Path $env:RUNNER_TEMP 'previous-build.log') -Tail 50; throw 'The previous-version package build failed.' }
+          Write-Output 'Previous NSIS and MSI packages built.'
+
+      - name: Install frontend dependencies for candidate source
+        shell: pwsh
+        working-directory: candidate
+        run: |
+          npm ci *> (Join-Path $env:RUNNER_TEMP 'candidate-npm.log')
+          if ($LASTEXITCODE -ne 0) { Get-Content (Join-Path $env:RUNNER_TEMP 'candidate-npm.log') -Tail 50; throw 'npm ci failed for the candidate source ref.' }
+
+      - name: Build candidate NSIS and MSI packages
+        shell: pwsh
+        working-directory: candidate
+        env:
+          TEST_CONFIG: ${{ steps.test-config.outputs.candidate }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw 'The TAURI_SIGNING_PRIVATE_KEY Actions secret is required.' }
+          npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi --config $env:TEST_CONFIG *> (Join-Path $env:RUNNER_TEMP 'candidate-build.log')
+          if ($LASTEXITCODE -ne 0) { Get-Content (Join-Path $env:RUNNER_TEMP 'candidate-build.log') -Tail 50; throw 'The candidate package build failed.' }
+          Write-Output 'Candidate NSIS and MSI packages built.'
+
+      - name: Run clean install, matching updater, relaunch, and uninstall scenarios
+        shell: pwsh
+        working-directory: candidate
+        run: |
+          ./scripts/test-windows-upgrade.ps1 `
+            -PreviousBundleRoot '../previous/src-tauri/target/release/bundle' `
+            -CandidateBundleRoot 'src-tauri/target/release/bundle' `
+            -CandidateConfigPath 'src-tauri/tauri.conf.json' `
+            -MinisignPath '${{ steps.minisign.outputs.path }}' `
+            -PreviousVersion $env:PREVIOUS_VERSION `
+            -CandidateVersion $env:CANDIDATE_VERSION `
+            -PreviousRef $env:PREVIOUS_REF `
+            -CandidateRef $env:CANDIDATE_REF `
+            -FixturePort ([int]$env:FIXTURE_PORT)
+
+      - name: Preserve native review evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installed-upgrade-evidence
+          if-no-files-found: error
+          path: candidate/docs/gates/evidence/3c/3c-03.md
