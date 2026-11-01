@@ -178,6 +178,46 @@ function Wait-ForInstalledVersion(
     throw "The installed package did not reach version $Version. $DiagnosticContext Current entries: $($records -join '; ')."
 }
 
+function Get-UpgradeInstallDiagnostics($ExpectedAppProcess) {
+    $trackedProcess = '(tracked app process is unavailable)'
+    $trackedProcessId = -1
+    if ($ExpectedAppProcess) {
+        $trackedProcessId = $ExpectedAppProcess.Id
+        try {
+            $current = Get-Process -Id $ExpectedAppProcess.Id -ErrorAction Stop
+            $sameStartTime = $current.StartTime -eq $ExpectedAppProcess.StartTime
+            $trackedProcess = "tracked PID $($ExpectedAppProcess.Id) name=$($current.ProcessName) path=$($current.Path) sameStartTime=$sameStartTime"
+        }
+        catch {
+            $trackedProcess = "tracked PID $($ExpectedAppProcess.Id) has exited"
+        }
+    }
+
+    $installEntries = @(Get-ZownloadInstallRecords | ForEach-Object {
+        $record = $_
+        try {
+            $executable = Get-ZownloadExecutable $record
+            $productVersion = if ($executable.VersionInfo.ProductVersion) { $executable.VersionInfo.ProductVersion } else { '(no file version)' }
+            "$($record.DisplayVersion) at $($record.InstallLocation); exe=$($executable.FullName); productVersion=$productVersion"
+        }
+        catch {
+            "$($record.DisplayVersion) at $($record.InstallLocation); executable lookup failed: $($_.Exception.Message)"
+        }
+    })
+    if ($installEntries.Count -eq 0) { $installEntries = @('(no Zownload uninstall entries)') }
+
+    $relatedProcesses = @(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.ProcessId -eq $trackedProcessId -or
+            $_.Name -match '(?i)zownload|msiexec|setup'
+        } |
+        Select-Object -First 12 ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine |
+        ConvertTo-Json -Compress -Depth 3)
+    if ($relatedProcesses.Count -eq 0) { $relatedProcesses = @('(no related process details)') }
+
+    return "Install entries: $($installEntries -join ' | '). $trackedProcess. Related processes: $($relatedProcesses -join ' ')"
+}
+
 function Clear-TestAppData {
     $appDataPath = Join-Path $env:LOCALAPPDATA 'com.zownload.app'
     if (Test-Path -LiteralPath $appDataPath) {
@@ -288,8 +328,14 @@ try {
             Get-Process -Id $activeApp.Id -ErrorAction SilentlyContinue
         } else { $null }
         $processState = if ($appProcess) { "app process $($appProcess.Id) is still running" } else { 'app process has exited' }
-        $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 120 `
-            "Format $($scenario.Format); $processState; updater requests: $serverRequests."
+        try {
+            $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 120 `
+                "Format $($scenario.Format); $processState; updater requests: $serverRequests."
+        }
+        catch {
+            $installDiagnostics = Get-UpgradeInstallDiagnostics $activeApp
+            throw "$($_.Exception.Message) $installDiagnostics"
+        }
         if (Get-ZownloadInstallRecord $PreviousVersion) {
             throw "$($scenario.Format) update left the previous-version uninstall entry in place."
         }
