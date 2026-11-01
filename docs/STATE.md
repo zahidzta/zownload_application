@@ -2,15 +2,12 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3A was accepted on 2026-10-30; see the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md).
-- **Next task:** Owner review of the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md); Gate 3C waits for explicit acceptance.
+- **Checkpoint:** Gate 3B was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md).
+- **Next task:** Owner acceptance of the [Gate 3C plan](gates/gate-3c.md); implementation waits for explicit acceptance.
 
-## Current Gate 3B completions
+## Current Gate 3C completions
 
-- Completed 3B-01: Gate 3B plan accepted by owner on 2026-10-30; commit `86433d9`; [plan and V0 evidence](gates/gate-3b.md).
-- Completed 3B-02: Added bounded recoverable ZIP writing, per-entry durable recovery, safe name collisions, and no-overwrite finalization; commit `de3ed5e`; [V1 evidence](gates/gate-3b.md#verification).
-- Completed 3B-03: ZIP queue lifecycle, restart reconciliation, and fatal storage settlement; commit `693eac5`; [V2 evidence](gates/evidence/3b/3b-03.md).
-- Completed 3B-04: Owner-approved storage rule (`baea81a`), native startup repair (`cda7a85`), real-engine ZIP restart and permission review, V3; fix/evidence commit `81927eb`; [native review](gates/evidence/3b/native-review.md) and [pending checkpoint](gates/evidence/3b/checkpoint.md).
+- Completed 3C-01: Finalized Windows-only AC-23/AC-36 scope and recorded Gate 3B acceptance; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
 
 ## Accepted gates
 
@@ -25,6 +22,7 @@
 - 2C — accepted 2026-10-28; [checkpoint](gates/evidence/2c/checkpoint.md).
 - 2D — accepted 2026-10-29; [checkpoint](gates/evidence/2d/checkpoint.md).
 - 3A — accepted 2026-10-30; [checkpoint](gates/evidence/3a/checkpoint.md) and [task evidence](gates/evidence/3a/tasks.md).
+- 3B — accepted 2026-10-31; [checkpoint](gates/evidence/3b/checkpoint.md) and [task evidence](gates/evidence/3b/tasks.md).
 
 ## Standing decisions
 
