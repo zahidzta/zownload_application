@@ -15,7 +15,7 @@ The existing updater fixture uses a test public key. Replace it with the public 
 
 ## Owner review before implementation
 
-The roadmap row for 3C names AC-20, AC-22, AC-23, and AC-36, while AC-23 and AC-36 describe the full multi-platform artifact set and Android release compliance. Linux, macOS, and Android artifacts are assigned to 4A, 4B, and 5C, and Android source/build provenance is still a release blocker. Recommended scope: prove the Windows portion of AC-23 and the desktop portion of AC-36 in 3C, record the remaining platform requirements as open, and do not claim either global criterion complete until its later gates and Android blocker are resolved. The owner must confirm this scope before implementation.
+The roadmap row for 3C names AC-20, AC-22, AC-23, and AC-36, while AC-23 and AC-36 describe the full multi-platform artifact set and Android release compliance. Linux, macOS, and Android artifacts are assigned to 4A, 4B, and 5C, and Android source/build provenance is still a release blocker. The owner confirmed on 2026-10-31 that 3C proves the Windows portion of AC-23 and the desktop portion of AC-36, carries the remaining platform requirements forward, and does not claim either global criterion complete until later gates and the Android blocker are resolved.
 
 ## Verification
 
@@ -34,7 +34,7 @@ Run from the repository root. Keep install tests in disposable Windows VMs or is
 - Files: `docs/gates/gate-3c.md`, `docs/gates/evidence/3b/checkpoint.md`, `docs/gates/evidence/3b/tasks.md`, `docs/STATE.md`.
 - Read: `PROJECT.md:180-204,263-308,618-627,630-644,646-684,734-745,778`; Gate 3B checkpoint and Gate 2D updater plan/evidence.
 - Dependencies: explicit Gate 3B checkpoint acceptance (received 2026-10-31).
-- Acceptance: relative links resolve, V0 passes, Gate 3B acceptance is recorded, the AC-23/AC-36 scope is resolved by the owner, and no source, workflow, dependency, or public contract files change. Stop for owner review before implementation.
+- Acceptance: relative links resolve, V0 passes, Gate 3B acceptance and the Windows-only AC-23/AC-36 scope are recorded, and no source, workflow, dependency, or public contract files change. Stop for explicit owner acceptance of this plan before implementation.
 
 ### 3C-02 — Production updater signing and Windows release workflow — AUTOMATABLE
 
