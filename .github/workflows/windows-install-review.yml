@@ -50,6 +50,7 @@ jobs:
     permissions:
       contents: read
     env:
+      RUSTUP_TOOLCHAIN: '1.99.1'
       PREVIOUS_REF: ${{ inputs.previous_ref }}
       CANDIDATE_REF: ${{ inputs.candidate_ref }}
       PREVIOUS_VERSION: ${{ inputs.previous_version }}
@@ -69,14 +70,19 @@ jobs:
           path: previous
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: candidate/package-lock.json
+          node-version: '24.22.0'
+          package-manager-cache: false
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Check Node and npm pins
+        shell: pwsh
+        run: |
+          if ((node --version).Trim() -ne 'v24.22.0') { throw 'Node version differs from the pin.' }
+          if ((npm --version).Trim() -ne '11.19.1') { throw 'npm version differs from the pin.' }
+
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.1 --profile minimal
 
       - name: Enable VBSCRIPT for WiX MSI bundling
         shell: pwsh
