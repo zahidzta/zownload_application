@@ -83,7 +83,7 @@ jobs:
             src-tauri/target/release/bundle/msi/*.msi
 
   owner-draft-release:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta'
     runs-on: windows-latest
     permissions:
       contents: write
