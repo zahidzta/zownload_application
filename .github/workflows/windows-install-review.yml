@@ -179,8 +179,8 @@ jobs:
         working-directory: candidate
         run: |
           ./scripts/test-windows-upgrade.ps1 `
-            -PreviousBundleRoot '../previous/src-tauri/target/release/bundle' `
-            -CandidateBundleRoot 'src-tauri/target/release/bundle' `
+            -PreviousBundleRoot '../previous/src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
+            -CandidateBundleRoot 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
             -CandidateConfigPath 'src-tauri/tauri.conf.json' `
             -MinisignPath '${{ steps.minisign.outputs.path }}' `
             -PreviousVersion $env:PREVIOUS_VERSION `

@@ -75,7 +75,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/verify-windows-release.ps1 `
-            -BundleRoot 'src-tauri/target/release/bundle' `
+            -BundleRoot 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
             -ConfigPath 'src-tauri/tauri.conf.json' `
             -MinisignPath 'unused-for-unsigned-build' `
             -SkipSignatures
@@ -86,8 +86,8 @@ jobs:
           name: windows-x64-installers
           if-no-files-found: error
           path: |
-            src-tauri/target/release/bundle/nsis/*-setup.exe
-            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
   owner-draft-release:
     if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta'
@@ -181,7 +181,7 @@ jobs:
           $assetNames = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:DRAFT_RELEASE_ID" --jq '.assets[].name')
           if ($LASTEXITCODE -ne 0) { throw 'Could not list draft release assets.' }
           ./scripts/verify-windows-release.ps1 `
-            -BundleRoot 'src-tauri/target/release/bundle' `
+            -BundleRoot 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
             -ConfigPath 'src-tauri/tauri.conf.json' `
             -MinisignPath '${{ steps.minisign.outputs.path }}' `
             -LatestJsonPath (Join-Path $metadataDirectory 'latest.json') `
