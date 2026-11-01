@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- SPDX-FileCopyrightText: 2026 zahidzta -->
 
-# Gate 3B checkpoint — pending review
+# Gate 3B checkpoint — accepted 2026-10-31
 
-Gate 3B is **open pending owner acceptance**. The [Windows synthetic and native review](native-review.md) and [V2 evidence](3b-03.md) support the ZIP queue implementation; V3 passed after the native restart fixes. No Gate 3C work may start before owner acceptance under [Gate 3B](../../gate-3b.md#stage-exit).
+Gate 3B is **accepted by the owner on 2026-10-31**. The [Windows synthetic and native review](native-review.md) and [V2 evidence](3b-03.md) support the ZIP queue implementation; V3 passed after the native restart fixes. Gate 3C planning may proceed under [Gate 3B](../../gate-3b.md#stage-exit).
 
 | Criterion | Current evidence | Status |
 |---|---|---|
@@ -12,4 +12,4 @@ Gate 3B is **open pending owner acceptance**. The [Windows synthetic and native 
 | AC-17 | Synthetic disk-full canceled the whole job and persisted `disk_full`. Isolated native Windows write denial produced `permission_denied`, zero queue rows, no incomplete output or child process, and an empty owned work directory. | Passes Gate 3B review. |
 | NFR-04 | Under the owner-approved current-entry rule, the real-engine 5 ms sampler observed at most 1 entry work directory, 2 current media files, 7 staging files and 11,805,745 staging bytes. Verified entries' work files were removed before the next entry. | Passes for the measured native fixture; the sampled peak is not a universal size bound. |
 
-**Owner decision requested:** accept the Gate 3B checkpoint to permit Gate 3C in a fresh session. The native disk-full scenario used a deterministic simulation so no shared disk was filled; the Windows permission denial was exercised in the native app.
+**Owner decision:** On 2026-10-31, the owner accepted the Gate 3B checkpoint and directed planning for Gate 3C. The native disk-full scenario used a deterministic simulation so no shared disk was filled; the Windows permission denial was exercised in the native app.
