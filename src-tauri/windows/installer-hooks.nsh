@@ -21,6 +21,12 @@
       ${EndIf}
       !insertmacro RestartManager_RegisterFile $R4 "$INSTDIR\${MAINBINARYNAME}.exe"
       ${If} $0 = 0
+        ; RmGetList treats pnProcInfo as an input count. Passing stale NSIS
+        ; register contents with a null process buffer can fail the query,
+        ; which skips the wait and reintroduces the updater shutdown race.
+        StrCpy $1 0
+        StrCpy $2 0
+        StrCpy $3 0
         System::Call 'RSTRTMGR::RmGetList(i R4, *i .r1, *i .r2, p 0, *i .r3) i .r0'
       ${EndIf}
       !insertmacro RestartManager_EndSession $R4
