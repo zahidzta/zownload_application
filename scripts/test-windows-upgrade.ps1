@@ -62,14 +62,19 @@ function Get-OnlyPackage([string]$Directory, [string]$Filter) {
     return $packages[0]
 }
 
-function Get-ZownloadInstallRecord([string]$Version) {
+function Get-ZownloadInstallRecords {
     $uninstallRoots = @(
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
     return Get-ItemProperty -Path $uninstallRoots -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayName -eq 'Zownload' -and $_.DisplayVersion -eq $Version } |
+        Where-Object { $_.DisplayName -eq 'Zownload' }
+}
+
+function Get-ZownloadInstallRecord([string]$Version) {
+    return Get-ZownloadInstallRecords |
+        Where-Object { $_.DisplayVersion -eq $Version } |
         Select-Object -First 1
 }
 
@@ -155,14 +160,22 @@ function Get-AppWindow($Process) {
     throw 'The Zownload window did not become available to Windows UI Automation.'
 }
 
-function Wait-ForInstalledVersion([string]$Version, [int]$TimeoutSeconds = 120) {
+function Wait-ForInstalledVersion(
+    [string]$Version,
+    [int]$TimeoutSeconds = 120,
+    [string]$DiagnosticContext = ''
+) {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         $record = Get-ZownloadInstallRecord $Version
         if ($record) { return $record }
         Start-Sleep -Seconds 2
     }
-    throw "The installed package did not reach version $Version."
+    $records = @(Get-ZownloadInstallRecords | ForEach-Object {
+        "$($_.DisplayVersion) at $($_.InstallLocation)"
+    })
+    if ($records.Count -eq 0) { $records = @('(no Zownload uninstall entries)') }
+    throw "The installed package did not reach version $Version. $DiagnosticContext Current entries: $($records -join '; ')."
 }
 
 function Clear-TestAppData {
@@ -268,7 +281,15 @@ try {
             throw "$($scenario.Format) requested the other installer format."
         }
 
-        $candidateRecord = Wait-ForInstalledVersion $CandidateVersion
+        $serverRequests = if (Test-Path -LiteralPath $serverLog) {
+            (Get-Content -LiteralPath $serverLog -Tail 10) -join ' | '
+        } else { '(no updater server log)' }
+        $appProcess = if ($activeApp) {
+            Get-Process -Id $activeApp.Id -ErrorAction SilentlyContinue
+        } else { $null }
+        $processState = if ($appProcess) { "app process $($appProcess.Id) is still running" } else { 'app process has exited' }
+        $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 120 `
+            "Format $($scenario.Format); $processState; updater requests: $serverRequests."
         if (Get-ZownloadInstallRecord $PreviousVersion) {
             throw "$($scenario.Format) update left the previous-version uninstall entry in place."
         }
