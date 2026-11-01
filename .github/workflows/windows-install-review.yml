@@ -80,15 +80,7 @@ jobs:
 
       - name: Enable VBSCRIPT for WiX MSI bundling
         shell: pwsh
-        run: |
-          $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
-          if ($feature.State -ne 'Enabled') {
-            Enable-WindowsOptionalFeature -Online -FeatureName VBSCRIPT -All -NoRestart | Out-Null
-            $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
-          }
-          if ($feature.State -ne 'Enabled') {
-            throw 'VBSCRIPT is required to build the WiX MSI package.'
-          }
+        run: ./candidate/scripts/enable-vbscript.ps1
 
       - name: Validate inputs and create temporary updater configurations
         id: test-config
