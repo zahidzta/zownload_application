@@ -13,6 +13,7 @@ use crate::{
     contract::{AppError, DownloadRequest, ErrorCode, Format, Quality},
     persistence::paths::DownloadPaths,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     ffi::OsString,
@@ -30,6 +31,8 @@ const TIMEOUT: Duration = Duration::from_secs(60 * 60 * 4);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_LINE: usize = 8 * 1024;
 const PROGRESS: &str = "ZP1|%(info.id)s|%(progress.status)s|%(progress.downloaded_bytes|0)d|%(progress.total_bytes,progress.total_bytes_estimate|0)d";
+const STAGED_MEDIA_FILE: &str = "ready.json";
+const STAGED_MEDIA_TEMP: &str = "ready.json.tmp";
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Observation {
@@ -47,6 +50,14 @@ pub struct Completed {
     pub path: PathBuf,
     pub title: String,
     pub selected_height: Option<u32>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct StagedMedia {
+    url: String,
+    title: String,
+    extension: String,
+    bytes: u64,
 }
 
 #[derive(Debug)]
@@ -691,6 +702,118 @@ fn ensure_work_dir(
     Ok(())
 }
 
+fn staged_extension(format: Format) -> &'static str {
+    if format == Format::Mp3 {
+        "mp3"
+    } else {
+        "mp4"
+    }
+}
+
+/// A synced marker means FFmpeg finished before an interrupted ZIP append.
+fn reusable_staged_media(
+    work_dir: &Path,
+    request: &DownloadRequest,
+) -> Result<Option<Completed>, AppError> {
+    let marker = match fs::symlink_metadata(work_dir.join(STAGED_MEDIA_FILE)) {
+        Ok(metadata) if metadata.file_type().is_file() => metadata,
+        Ok(_) => {
+            return Err(error(
+                ErrorCode::PermissionDenied,
+                "staged media marker is not a file",
+            ))
+        }
+        Err(cause) if cause.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(cause) => return Err(io_error(cause)),
+    };
+    if marker.len() > 16 * 1024 {
+        return Ok(None);
+    }
+    let saved: StagedMedia = match serde_json::from_slice(
+        &fs::read(work_dir.join(STAGED_MEDIA_FILE)).map_err(io_error)?,
+    ) {
+        Ok(saved) => saved,
+        Err(_) => return Ok(None),
+    };
+    let extension = staged_extension(request.format);
+    if saved.url != request.url
+        || saved.extension != extension
+        || saved.title.trim().is_empty()
+        || saved.bytes == 0
+    {
+        return Ok(None);
+    }
+    let path = work_dir.join(format!("ready.{extension}"));
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_file() && metadata.len() == saved.bytes => {
+            Ok(Some(Completed {
+                path,
+                title: saved.title,
+                selected_height: None,
+            }))
+        }
+        Ok(_) => Ok(None),
+        Err(cause) if cause.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(cause) => Err(io_error(cause)),
+    }
+}
+
+/// Keep yt-dlp's resumable .part data, but remove finished files without a
+/// valid marker so a retry cannot rename over them on Windows.
+fn clear_unmarked_media(work_dir: &Path) -> Result<(), AppError> {
+    for entry in fs::read_dir(work_dir).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let remove = name == STAGED_MEDIA_FILE
+            || name == STAGED_MEDIA_TEMP
+            || ((name.starts_with("source.") || name.starts_with("ready."))
+                && !name.ends_with(".part")
+                && !name.ends_with(".ytdl"));
+        if remove {
+            if !entry.file_type().map_err(io_error)?.is_file() {
+                return Err(error(
+                    ErrorCode::PermissionDenied,
+                    "staged media path is not a file",
+                ));
+            }
+            fs::remove_file(entry.path()).map_err(io_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn mark_staged_media(
+    work_dir: &Path,
+    request: &DownloadRequest,
+    completed: &Completed,
+) -> Result<(), AppError> {
+    let metadata = fs::symlink_metadata(&completed.path).map_err(io_error)?;
+    if !metadata.file_type().is_file() {
+        return Err(error(
+            ErrorCode::PermissionDenied,
+            "staged media path is not a file",
+        ));
+    }
+    let saved = StagedMedia {
+        url: request.url.clone(),
+        title: completed.title.clone(),
+        extension: staged_extension(request.format).into(),
+        bytes: metadata.len(),
+    };
+    let temp = work_dir.join(STAGED_MEDIA_TEMP);
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(io_error)?;
+    serde_json::to_writer(&mut file, &saved).map_err(|cause| io_error(cause.into()))?;
+    file.flush().map_err(io_error)?;
+    file.sync_all().map_err(io_error)?;
+    drop(file);
+    fs::rename(temp, work_dir.join(STAGED_MEDIA_FILE)).map_err(io_error)
+}
+
 pub fn run_single(
     paths: &EnginePaths,
     supervisor: &Supervisor,
@@ -836,6 +959,14 @@ fn run_media_classified(
         disk.clear_reserved().map_err(io_error)?;
         persist(disk)?;
     }
+    if zip_mode {
+        if let Some(completed) = reusable_staged_media(&disk.work_dir, request)? {
+            observe(Observation::Title(completed.title.clone()));
+            observe(Observation::PostProcessing);
+            return Ok(completed);
+        }
+        clear_unmarked_media(&disk.work_dir)?;
+    }
     let result = (|| {
         let metadata = supervisor
             .run(
@@ -964,11 +1095,15 @@ fn run_media_classified(
         } else {
             finalize(&stage, disk, persist, &source.title, extension)?
         };
-        Ok(Completed {
+        let completed = Completed {
             path,
             title: source.title,
             selected_height: height,
-        })
+        };
+        if zip_mode {
+            mark_staged_media(&disk.work_dir, request, &completed)?;
+        }
+        Ok(completed)
     })();
     if !*broken
         && matches!(
@@ -1340,5 +1475,47 @@ mod tests {
                 .code,
             ErrorCode::PermissionDenied
         );
+    }
+
+    #[test]
+    fn zip_staged_media_survives_packaging_restart_without_losing_partial_downloads() {
+        let root =
+            std::env::temp_dir().join(format!("zownload-staged-restart-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let request = DownloadRequest {
+            url: "https://example.com/entry".into(),
+            format: Format::Mp4,
+            quality: Quality::Max,
+            is_playlist: true,
+        };
+        let ready = root.join("ready.mp4");
+        fs::write(&ready, b"completed media").unwrap();
+        fs::write(root.join("source.mp4"), b"completed source").unwrap();
+        let completed = Completed {
+            path: ready.clone(),
+            title: "Entry title".into(),
+            selected_height: None,
+        };
+        mark_staged_media(&root, &request, &completed).unwrap();
+        let recovered = reusable_staged_media(&root, &request).unwrap().unwrap();
+        assert_eq!(recovered.path, ready);
+        assert_eq!(recovered.title, "Entry title");
+        assert_eq!(
+            fs::read(root.join("source.mp4")).unwrap(),
+            b"completed source"
+        );
+
+        fs::write(root.join(STAGED_MEDIA_FILE), b"incomplete marker").unwrap();
+        fs::write(root.join("source.mp4.part"), b"resumable bytes").unwrap();
+        assert!(reusable_staged_media(&root, &request).unwrap().is_none());
+        clear_unmarked_media(&root).unwrap();
+        assert!(!ready.exists());
+        assert!(!root.join("source.mp4").exists());
+        assert!(!root.join(STAGED_MEDIA_FILE).exists());
+        assert_eq!(
+            fs::read(root.join("source.mp4.part")).unwrap(),
+            b"resumable bytes"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -550,6 +550,11 @@ impl QueueCoordinator {
                                         current.title.as_deref().unwrap_or("playlist"),
                                     ) {
                                         let _ = zip.remove_owned();
+                                    } else {
+                                        let _ = ZipOutput::remove_unrecoverable_pending(
+                                            &disk.output_dir,
+                                            &disk.work_dir,
+                                        );
                                     }
                                     let _ = disk.clean_owned(&self.app_data);
                                 }
@@ -662,6 +667,11 @@ impl QueueCoordinator {
                     .map_err(|error| failure(error.to_string()))?
                 {
                     return Err(failure("playlist row was removed"));
+                }
+                let committed_dir = disk.work_dir.join(format!("entry-{next_index}"));
+                if committed_dir.exists() {
+                    std::fs::remove_dir_all(committed_dir)
+                        .map_err(|cause| zip_failure("committed entry cleanup", cause))?;
                 }
                 (self.emit)(QueueEvent::Updated(current));
                 next_index += 1;
