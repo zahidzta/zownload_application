@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
+
+name: Windows x64 installers
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-release.yml'
+      - 'scripts/install-minisign.ps1'
+      - 'scripts/verify-windows-release.ps1'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+    inputs:
+      draft_release_id:
+        description: ID of the empty draft release created by the owner
+        required: true
+        type: string
+      release_tag:
+        description: Existing draft tag, for example app-v0.0.1
+        required: true
+        type: string
+
+jobs:
+  pull-request-build:
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable VBSCRIPT for WiX MSI bundling
+        shell: pwsh
+        run: |
+          $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          if ($feature.State -ne 'Enabled') {
+            Enable-WindowsOptionalFeature -Online -FeatureName VBSCRIPT -All -NoRestart | Out-Null
+            $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          }
+          if ($feature.State -ne 'Enabled') {
+            throw 'VBSCRIPT is required to build the WiX MSI package.'
+          }
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build only the Windows x64 installers without signing secrets
+        shell: pwsh
+        run: |
+          $configPath = Join-Path $env:RUNNER_TEMP 'tauri-pr-build.json'
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -LiteralPath $configPath -Encoding utf8
+          npm run tauri -- build --target x86_64-pc-windows-msvc --bundles nsis,msi --config $configPath
+
+      - name: Check the installer allowlist
+        shell: pwsh
+        run: |
+          ./scripts/verify-windows-release.ps1 `
+            -BundleRoot 'src-tauri/target/release/bundle' `
+            -ConfigPath 'src-tauri/tauri.conf.json' `
+            -MinisignPath 'unused-for-unsigned-build' `
+            -SkipSignatures
+
+      - name: Store installers for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-installers
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/msi/*.msi
+
+  owner-draft-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Enable VBSCRIPT for WiX MSI bundling
+        shell: pwsh
+        run: |
+          $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          if ($feature.State -ne 'Enabled') {
+            Enable-WindowsOptionalFeature -Online -FeatureName VBSCRIPT -All -NoRestart | Out-Null
+            $feature = Get-WindowsOptionalFeature -Online -FeatureName VBSCRIPT
+          }
+          if ($feature.State -ne 'Enabled') {
+            throw 'VBSCRIPT is required to build the WiX MSI package.'
+          }
+
+      - name: Confirm the owner-created draft and signing secret
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw 'The TAURI_SIGNING_PRIVATE_KEY Actions secret is required.'
+          }
+          $config = Get-Content -LiteralPath 'src-tauri/tauri.conf.json' -Raw | ConvertFrom-Json
+          $expectedTag = "app-v$($config.version)"
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            throw "The draft tag must be $expectedTag for the configured package version."
+          }
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:DRAFT_RELEASE_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$release.draft -or $release.tag_name -ne $env:RELEASE_TAG) {
+            throw 'The supplied release ID must identify an owner-created draft with the selected tag.'
+          }
+          if ($release.assets.Count -ne 0) {
+            throw 'Use an empty draft release so the Windows asset allowlist can be verified exactly.'
+          }
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build and attach signed Windows x64 assets to the existing draft
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          args: --target x86_64-pc-windows-msvc --bundles nsis,msi
+          releaseId: ${{ inputs.draft_release_id }}
+          tagName: ${{ inputs.release_tag }}
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: false
+
+      - name: Install pinned Minisign verifier
+        id: minisign
+        shell: pwsh
+        run: |
+          $executable = ./scripts/install-minisign.ps1
+          "path=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Download updater metadata and verify release assets and signatures
+        shell: pwsh
+        run: |
+          $metadataDirectory = Join-Path $env:RUNNER_TEMP 'zownload-release-metadata'
+          New-Item -ItemType Directory -Path $metadataDirectory -Force | Out-Null
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern latest.json --dir $metadataDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download latest.json from the owner-created draft.' }
+          $assetNames = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:DRAFT_RELEASE_ID" --jq '.assets[].name')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not list draft release assets.' }
+          ./scripts/verify-windows-release.ps1 `
+            -BundleRoot 'src-tauri/target/release/bundle' `
+            -ConfigPath 'src-tauri/tauri.conf.json' `
+            -MinisignPath '${{ steps.minisign.outputs.path }}' `
+            -LatestJsonPath (Join-Path $metadataDirectory 'latest.json') `
+            -ReleaseAssets $assetNames

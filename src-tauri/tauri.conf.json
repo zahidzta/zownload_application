@@ -23,6 +23,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "android": {
       "minSdkVersion": 24
     },
@@ -37,7 +38,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0QjEyNDVDNUVFM0VDNzYKUldSMjdPTmVYQ1N4NU8ramNrcnZnRmphYWF3MkVkUTMvNUtuLzRsMlFYZTdpNTBQYnB2TWEzY3EK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY5ODJGRjc0RkUzQTg1RkEKUldUNmhUcitkUCtDYVk0Sys5U0lWRnZ5eTFuVzI2cTNNL0gvZkZNdXJzZ3JIS1ZwQmJMbXM1VU4K",
       "endpoints": [
         "https://github.com/zahidzta/zownload_application/releases/latest/download/latest.json"
       ]
