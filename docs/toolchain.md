@@ -458,3 +458,44 @@ Windows test linker at a removed Gate 2D temporary worktree manifest.
 Refreshing its timestamp with `(Get-Item src-tauri/build.rs).LastWriteTime =
 Get-Date` rebuilt the linker arguments from this checkout; the focused Rust
 tests and Gate 3A V1 then passed. The command changes no tracked file content.
+
+## Gate 3B Windows ZIP verification
+
+The 3B-03 native fixture compiled `tests/support/queue_stub.rs` with Rust
+1.99.1 into temporary `yt-dlp.exe` and `ffmpeg.exe` files. Both had SHA-256
+`7C0E9A9BD81F2C10C475DFD15168EFFA274A7A18B68A9BC6D87BCAAEE5486C51`.
+The ignored production resources retained their verified SHA-256 values:
+yt-dlp `66674953FE251B89F4D08C5F0E35E0728679BD67AB3D7D05C0562AF101DD3E7A`,
+FFmpeg `FA050630DDF5B7C3303D8DAB5E5A42E7023547FB78EC9B90B5BE0A4F788A7E66`, and
+QuickJS `BEC67F8F87FA22958D3AB8BE5508088116B8BFF90032323D82C94545E1698B83`.
+The synthetic ZIP fixture used 2 MiB per entry under unique OS temporary roots;
+it did not use the owner's Downloads folder.
+
+The first exact V2 run in the working checkout again stalled in the existing
+Node/Vite SSR test and was interrupted. The passing V2 setup followed the
+Gate 2C clean-checkout method:
+
+```powershell
+$repo = (Resolve-Path .).Path
+$check = Join-Path $env:TEMP ('zownload-3b-verify-' + [guid]::NewGuid().ToString('N'))
+git worktree add --detach $check HEAD
+foreach ($file in (git diff --name-only -- src-tauri)) {
+  Copy-Item -LiteralPath (Join-Path $repo $file) -Destination (Join-Path $check $file) -Force
+}
+New-Item -ItemType Directory -Path (Join-Path $check 'src-tauri/resources/windows-engine') -Force | Out-Null
+foreach ($name in @('yt-dlp.exe', 'ffmpeg.exe', 'qjs.exe')) {
+  Copy-Item -LiteralPath (Join-Path $repo "src-tauri/resources/windows-engine/$name") -Destination (Join-Path $check "src-tauri/resources/windows-engine/$name") -Force
+}
+(Get-Item (Join-Path $check 'src-tauri/build.rs')).LastWriteTime = Get-Date
+$nodeDir = Join-Path $repo 'work/engine/2b-08/node/node-v24.22.0-win-x64'
+$env:PATH = "$nodeDir;$env:PATH"
+$env:CARGO_TARGET_DIR = Join-Path $repo 'src-tauri/target'
+Push-Location $check
+npm ci
+# Run the exact V2 and V3 commands from docs/gates/gate-3b.md.
+Pop-Location
+```
+
+The focused [3B evidence](gates/evidence/3b/3b-03.md) records V2 results and
+the ZIP queue scenarios. The V3 and native review results are recorded in the
+same evidence directory.

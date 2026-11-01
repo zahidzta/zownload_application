@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* SPDX-FileCopyrightText: 2026 zahidzta */
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
+@source '.';
+@source '../index.html';
 
 /* Tailwind v4 exposes these same values as utilities and CSS variables. */
 @theme {

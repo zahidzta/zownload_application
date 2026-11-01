@@ -3,12 +3,15 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3A was accepted on 2026-10-30; see the [Gate 3A checkpoint](gates/evidence/3a/checkpoint.md).
-- **Next task:** 3B-03 — ZIP queue lifecycle, resume, and fatal storage errors; see [Gate 3B](gates/gate-3b.md).
+- **Next task:** 3B-04 — resolve the ZIP storage rule, finish native Windows and permission-fault review, then seek Gate 3B acceptance; see the [pending checkpoint](gates/evidence/3b/checkpoint.md).
 
 ## Current Gate 3B completions
 
 - Completed 3B-01: Gate 3B plan accepted by owner on 2026-10-30; commit `86433d9`; [plan and V0 evidence](gates/gate-3b.md).
 - Completed 3B-02: Added bounded recoverable ZIP writing, per-entry durable recovery, safe name collisions, and no-overwrite finalization; commit `de3ed5e`; [V1 evidence](gates/gate-3b.md#verification).
+- Completed 3B-03: ZIP queue lifecycle, restart reconciliation, and fatal storage settlement; commit `693eac5`; [V2 evidence](gates/evidence/3b/3b-03.md).
+- In progress 3B-04: V3 and synthetic Windows stress passed; native-app and permission review plus storage-rule decision remain; commit `a274ca5`; [pending checkpoint](gates/evidence/3b/checkpoint.md).
+- In progress 3B-04 startup repair: Native Tauri window rendered after the Vite/Tailwind fix in commit `cda7a85`; [startup evidence](gates/evidence/3b/native-review.md#tauri-webview-startup-smoke-check).
 
 ## Accepted gates
 

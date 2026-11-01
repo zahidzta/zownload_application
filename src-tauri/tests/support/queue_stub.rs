@@ -18,6 +18,8 @@ fn main() {
         let url = args.last().unwrap();
         let names: &[&str] = if url.ends_with("all-failed") {
             &["fail", "fail2"]
+        } else if url.ends_with("duplicates") {
+            &["first", "first"]
         } else if url.ends_with("fatal") {
             &["first", "diskfull", "second"]
         } else if url.ends_with("mixed") {
@@ -55,7 +57,11 @@ fn main() {
     } else {
         assert_eq!(offset, 10, "resume must see the saved byte offset");
     }
-    OpenOptions::new().append(true).open(&partial).unwrap().write_all(b"abcdefghij").unwrap();
+    let total = env::var("ZOWNLOAD_QUEUE_STUB_BYTES")
+        .ok().and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(20).clamp(20, 8 * 1024 * 1024);
+    let tail = vec![b'a'; total - 10];
+    OpenOptions::new().append(true).open(&partial).unwrap().write_all(&tail).unwrap();
     println!("ZP1|{id}|finished|20|20");
     println!("ZP2|Metadata|started");
     io::stdout().flush().unwrap();

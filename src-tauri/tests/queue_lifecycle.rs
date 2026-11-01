@@ -11,13 +11,17 @@ use std::{
     time::{Duration, Instant},
 };
 use zownload_lib::{
-    contract::{DownloadRequest, Format, ItemStatus, Language, Quality, Settings},
+    contract::{
+        DownloadRequest, Format, ItemStatus, Language, Progress, Quality, QueueItem, Settings,
+    },
     engine::{
+        analysis::{PlaylistEntry, PlaylistSnapshot},
         process::Supervisor,
         queue::{QueueCoordinator, QueueEvent},
+        zip_output::ZipOutput,
         EnginePaths,
     },
-    persistence::Database,
+    persistence::{paths::DownloadPaths, Database},
 };
 
 static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -46,6 +50,51 @@ fn until(mut condition: impl FnMut() -> bool) {
         assert!(Instant::now() < deadline, "queue state timed out");
         thread::sleep(Duration::from_millis(20));
     }
+}
+
+fn zip_staging_stats(root: &Path) -> (usize, u64, usize) {
+    let mut files = 0;
+    let mut bytes = 0;
+    let mut media = 0;
+    let mut pending = vec![root.join("app-data/downloads")];
+    while let Some(path) = pending.pop() {
+        let Ok(entries) = fs::read_dir(path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if let Ok(metadata) = entry.metadata() {
+                files += 1;
+                bytes += metadata.len();
+                if path
+                    .extension()
+                    .is_some_and(|ext| ext == "mp3" || ext == "mp4")
+                    || path
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().ends_with(".mp4.part"))
+                {
+                    media += 1;
+                }
+            }
+        }
+    }
+    if let Ok(entries) = fs::read_dir(root.join("Output")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".zip.part"))
+            {
+                if let Ok(metadata) = entry.metadata() {
+                    files += 1;
+                    bytes += metadata.len();
+                }
+            }
+        }
+    }
+    (files, bytes, media)
 }
 
 #[test]
@@ -108,10 +157,6 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
             sink.lock().unwrap().push(event);
         }),
     );
-    let mut playlist = request("playlist");
-    playlist.is_playlist = true;
-    playlist.quality = Quality::Max;
-    let playlist_id = coordinator.enqueue(playlist.clone()).unwrap();
     let first = coordinator.enqueue(request("one")).unwrap();
     until(|| {
         db.lock()
@@ -121,14 +166,6 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
             .iter()
             .any(|item| item.id == first && item.status == ItemStatus::Downloading)
     });
-    let state = db
-        .lock()
-        .unwrap()
-        .get_playlist_state(&playlist_id)
-        .unwrap()
-        .unwrap();
-    assert!(state.zip_enabled);
-    assert!(state.snapshot.is_none());
     db.lock()
         .unwrap()
         .set_settings(&Settings {
@@ -140,7 +177,7 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
     let second = coordinator.enqueue(request("two")).unwrap();
     thread::sleep(Duration::from_millis(100));
     assert_eq!(
-        db.lock().unwrap().get_queue().unwrap()[2].status,
+        db.lock().unwrap().get_queue().unwrap()[1].status,
         ItemStatus::Queued
     );
     coordinator.pause(&first).unwrap();
@@ -170,8 +207,6 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
     assert!(!part.exists());
     assert_eq!(root.join("Chosen/one.mp4").metadata().unwrap().len(), 20);
     assert_eq!(root.join("Later/two.mp4").metadata().unwrap().len(), 20);
-    assert_eq!(db.lock().unwrap().get_queue().unwrap()[0].id, playlist_id);
-    coordinator.remove(&playlist_id).unwrap();
     let history = db.lock().unwrap().get_history().unwrap();
     assert_eq!(history.len(), 2);
     assert!(history[0].request.url.ends_with("/one"));
@@ -183,47 +218,8 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
             _ => None,
         })
         .collect();
-    assert_eq!(
-        removals,
-        vec![second.as_str(), first.as_str(), playlist_id.as_str()]
-    );
+    assert_eq!(removals, vec![second.as_str(), first.as_str()]);
     drop(events);
-    db.lock()
-        .unwrap()
-        .set_settings(&Settings {
-            language: Language::En,
-            zip_playlists: true,
-            download_dir: Some(root.join("Later").to_string_lossy().into_owned()),
-        })
-        .unwrap();
-    let redownload = coordinator.enqueue(playlist).unwrap();
-    assert_ne!(redownload, playlist_id);
-    until(|| {
-        db.lock()
-            .unwrap()
-            .get_playlist_state(&redownload)
-            .unwrap()
-            .unwrap()
-            .zip_enabled
-    });
-    assert_eq!(
-        db.lock()
-            .unwrap()
-            .get_playlist_state(&redownload)
-            .unwrap()
-            .unwrap()
-            .snapshot,
-        None
-    );
-    db.lock()
-        .unwrap()
-        .set_settings(&Settings {
-            language: Language::En,
-            zip_playlists: false,
-            download_dir: Some(root.join("Later").to_string_lossy().into_owned()),
-        })
-        .unwrap();
-    coordinator.remove(&redownload).unwrap();
     let removed = coordinator.enqueue(request("remove")).unwrap();
     until(|| {
         db.lock()
@@ -344,15 +340,6 @@ fn playlists_continue_after_failure_and_settle_one_request_each() {
     let mixed = coordinator.enqueue(playlist_request("mixed")).unwrap();
     let failed = coordinator.enqueue(playlist_request("all-failed")).unwrap();
     let fatal = coordinator.enqueue(playlist_request("fatal")).unwrap();
-    db.lock()
-        .unwrap()
-        .set_settings(&Settings {
-            language: Language::En,
-            zip_playlists: true,
-            download_dir: Some(root.join("Output").to_string_lossy().into_owned()),
-        })
-        .unwrap();
-    let deferred = coordinator.enqueue(playlist_request("deferred")).unwrap();
     until(|| {
         let db = db.lock().unwrap();
         db.get_queue().unwrap().iter().all(|item| {
@@ -361,10 +348,9 @@ fn playlists_continue_after_failure_and_settle_one_request_each() {
     });
     let db_guard = db.lock().unwrap();
     let history = db_guard.get_history().unwrap();
-    assert_eq!(history.len(), 3);
-    assert_eq!(history[0].request.url, "https://example.com/fatal");
-    assert_eq!(history[1].request.url, "https://example.com/mixed");
-    assert_eq!(history[2].request.url, "https://example.com/all-success");
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].request.url, "https://example.com/mixed");
+    assert_eq!(history[1].request.url, "https://example.com/all-success");
     let notifications = db_guard.get_error_notifications().unwrap();
     assert_eq!(notifications.len(), 3);
     assert_eq!(
@@ -394,15 +380,7 @@ fn playlists_continue_after_failure_and_settle_one_request_each() {
     );
     assert_eq!(
         fatal_note.error.detail.as_deref(),
-        Some("playlist_summary:1:1")
-    );
-    assert_eq!(db_guard.get_queue().unwrap()[0].id, deferred);
-    assert!(
-        db_guard
-            .get_playlist_state(&deferred)
-            .unwrap()
-            .unwrap()
-            .zip_enabled
+        Some("ERROR: No space left on device\n")
     );
     drop(db_guard);
     assert!(root.join("Output/first.mp4").exists());
@@ -453,6 +431,250 @@ fn playlists_continue_after_failure_and_settle_one_request_each() {
             fatal.as_str()
         ]
     );
+}
+
+#[test]
+fn zip_playlists_publish_successes_and_cancel_fatal_jobs() {
+    let _test_lock = TEST_LOCK.lock().unwrap();
+    let root = std::env::temp_dir().join(format!("zownload-zip-queue-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let stub = root.join("yt-dlp.exe");
+    assert!(std::process::Command::new("rustc")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/queue_stub.rs"))
+        .arg("-o")
+        .arg(&stub)
+        .status()
+        .unwrap()
+        .success());
+    fs::copy(&stub, root.join("ffmpeg.exe")).unwrap();
+    let db = Arc::new(Mutex::new(
+        Database::open_at(&root.join("state.sqlite3")).unwrap(),
+    ));
+    db.lock()
+        .unwrap()
+        .set_settings(&Settings {
+            language: Language::En,
+            zip_playlists: true,
+            download_dir: Some(root.join("Output").to_string_lossy().into_owned()),
+        })
+        .unwrap();
+    let events = Arc::new(Mutex::new(Vec::<QueueEvent>::new()));
+    let sink = Arc::clone(&events);
+    let coordinator = QueueCoordinator::new(
+        Arc::clone(&db),
+        Some(EnginePaths {
+            yt_dlp: stub,
+            ffmpeg: root.join("ffmpeg.exe"),
+            quickjs: root.join("qjs.exe"),
+        }),
+        Supervisor::install().unwrap(),
+        root.join("app-data"),
+        None,
+        root.join("Downloads"),
+        Arc::new(move |event| sink.lock().unwrap().push(event)),
+    );
+    std::env::set_var("ZOWNLOAD_QUEUE_STUB_BYTES", (2 * 1024 * 1024).to_string());
+    let success = coordinator
+        .enqueue(playlist_request("all-success"))
+        .unwrap();
+    let mixed = coordinator.enqueue(playlist_request("mixed")).unwrap();
+    let duplicates = coordinator.enqueue(playlist_request("duplicates")).unwrap();
+    let failed = coordinator.enqueue(playlist_request("all-failed")).unwrap();
+    let fatal = coordinator.enqueue(playlist_request("fatal")).unwrap();
+    db.lock()
+        .unwrap()
+        .set_settings(&Settings {
+            language: Language::En,
+            zip_playlists: false,
+            download_dir: Some(root.join("Other").to_string_lossy().into_owned()),
+        })
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut peak_files = 0;
+    let mut peak_bytes = 0;
+    let mut peak_media = 0;
+    loop {
+        let (files, bytes, media) = zip_staging_stats(&root);
+        peak_files = peak_files.max(files);
+        peak_bytes = peak_bytes.max(bytes);
+        peak_media = peak_media.max(media);
+        if db.lock().unwrap().get_queue().unwrap().is_empty() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "ZIP queue timed out");
+        thread::sleep(Duration::from_millis(5));
+    }
+    println!(
+        "ZIP_STAGE_PEAK files={peak_files} bytes={peak_bytes} media_files={peak_media} sample_ms=5"
+    );
+    std::env::remove_var("ZOWNLOAD_QUEUE_STUB_BYTES");
+    let db = db.lock().unwrap();
+    let history = db.get_history().unwrap();
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].request.url, "https://example.com/duplicates");
+    assert_eq!(history[1].request.url, "https://example.com/mixed");
+    assert_eq!(history[2].request.url, "https://example.com/all-success");
+    let notes = db.get_error_notifications().unwrap();
+    assert_eq!(notes.len(), 3);
+    assert_eq!(
+        notes
+            .iter()
+            .find(|note| note.id == fatal)
+            .unwrap()
+            .error
+            .code,
+        zownload_lib::contract::ErrorCode::DiskFull
+    );
+    assert!(notes.iter().any(|note| note.id == failed));
+    assert!(notes.iter().any(|note| note.id == mixed));
+    drop(db);
+    let mut archives = fs::read_dir(root.join("Output"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    archives.sort();
+    assert_eq!(archives.len(), 3);
+    assert_eq!(archives[0].file_name().unwrap(), "Playlist (1).zip");
+    assert_eq!(archives[1].file_name().unwrap(), "Playlist (2).zip");
+    assert_eq!(archives[2].file_name().unwrap(), "Playlist.zip");
+    let mut sizes = Vec::new();
+    for path in &archives {
+        let mut zip = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+        sizes.push(zip.len());
+        for index in 0..zip.len() {
+            let entry = zip.by_index(index).unwrap();
+            assert_eq!(entry.compression(), zip::CompressionMethod::Stored);
+            assert_eq!(entry.size(), 2 * 1024 * 1024);
+        }
+    }
+    assert_eq!(sizes, [2, 2, 2]);
+    let mut duplicate_zip =
+        zip::ZipArchive::new(fs::File::open(root.join("Output/Playlist (2).zip")).unwrap())
+            .unwrap();
+    assert_eq!(
+        duplicate_zip.by_index(0).unwrap().name().unwrap(),
+        "first.mp4"
+    );
+    assert_eq!(
+        duplicate_zip.by_index(1).unwrap().name().unwrap(),
+        "first (1).mp4"
+    );
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event, QueueEvent::Updated(item) if item.id == success && item.status == ItemStatus::Packaging)));
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event, QueueEvent::Updated(item) if item.id == mixed && item.status == ItemStatus::Packaging)));
+    assert!(events.lock().unwrap().iter().any(|event| matches!(event, QueueEvent::Updated(item) if item.id == duplicates && item.status == ItemStatus::Packaging)));
+    assert!(!root.join("Other").exists());
+    assert!(!root.join("app-data/downloads").join(fatal).exists());
+}
+
+#[test]
+fn zip_restart_reconciles_a_committed_entry_before_downloading_the_next() {
+    let _test_lock = TEST_LOCK.lock().unwrap();
+    let root = std::env::temp_dir().join(format!("zownload-zip-restart-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).unwrap();
+    let stub = root.join("yt-dlp.exe");
+    assert!(std::process::Command::new("rustc")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/support/queue_stub.rs"))
+        .arg("-o")
+        .arg(&stub)
+        .status()
+        .unwrap()
+        .success());
+    fs::copy(&stub, root.join("ffmpeg.exe")).unwrap();
+    let db_path = root.join("state.sqlite3");
+    let mut db = Database::open_at(&db_path).unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    let request = playlist_request("all-success");
+    let disk = DownloadPaths::new(
+        &id,
+        &root.join("app-data"),
+        Some(&root.join("Output")),
+        &root.join("Downloads"),
+    )
+    .unwrap();
+    let mut item = QueueItem {
+        id: id.clone(),
+        request: request.clone(),
+        title: None,
+        thumbnail: None,
+        status: ItemStatus::Queued,
+        progress: Progress::Playlist {
+            done: 0,
+            failed: 0,
+            total: 0,
+            current_title: None,
+            current_percent: 0.0,
+        },
+        error: None,
+    };
+    db.insert_queue_item_with_options(&item, Some(&disk), Some(true))
+        .unwrap();
+    let snapshot = PlaylistSnapshot {
+        entries: ["first", "second"]
+            .into_iter()
+            .map(|name| PlaylistEntry {
+                url: format!("https://example.com/entry/{name}"),
+                title: name.into(),
+            })
+            .collect(),
+        next_index: 0,
+    };
+    db.save_playlist_snapshot(&id, "Playlist", &snapshot)
+        .unwrap();
+    let mut zip = ZipOutput::open(&disk.output_dir, &disk.work_dir, "Playlist").unwrap();
+    let media = disk.work_dir.join("first.mp4");
+    fs::write(&media, b"first committed media").unwrap();
+    zip.append_entry(0, "first", &media).unwrap();
+    let mut legacy_paths = disk.clone();
+    legacy_paths.work_dir = disk.work_dir.join("entry-0");
+    db.put_download_paths(&legacy_paths).unwrap();
+    item = db.get_queue().unwrap().remove(0);
+    item.status = ItemStatus::Packaging;
+    db.update_queue_item(&item).unwrap();
+    drop(db);
+    let reopened = Database::open_at(&db_path).unwrap();
+    assert_eq!(reopened.get_queue().unwrap()[0].status, ItemStatus::Paused);
+    assert_eq!(
+        reopened
+            .get_playlist_state(&id)
+            .unwrap()
+            .unwrap()
+            .snapshot
+            .unwrap()
+            .next_index,
+        0
+    );
+    let db = Arc::new(Mutex::new(reopened));
+    let coordinator = QueueCoordinator::new(
+        Arc::clone(&db),
+        Some(EnginePaths {
+            yt_dlp: stub,
+            ffmpeg: root.join("ffmpeg.exe"),
+            quickjs: root.join("qjs.exe"),
+        }),
+        Supervisor::install().unwrap(),
+        root.join("app-data"),
+        None,
+        root.join("Downloads"),
+        Arc::new(|_| {}),
+    );
+    coordinator.resume(&id).unwrap();
+    until(|| db.lock().unwrap().get_queue().unwrap().is_empty());
+    assert_eq!(db.lock().unwrap().get_history().unwrap().len(), 1);
+    assert!(db
+        .lock()
+        .unwrap()
+        .get_error_notifications()
+        .unwrap()
+        .is_empty());
+    let mut archive =
+        zip::ZipArchive::new(fs::File::open(root.join("Output/Playlist.zip")).unwrap()).unwrap();
+    assert_eq!(archive.len(), 2);
+    assert_eq!(archive.by_index(0).unwrap().name().unwrap(), "first.mp4");
+    assert_eq!(archive.by_index(1).unwrap().name().unwrap(), "second.mp4");
+    drop(archive);
+    drop(coordinator);
+    drop(db);
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

@@ -63,7 +63,7 @@ fn error(code: ErrorCode, detail: impl Into<String>) -> AppError {
     AppError::new(code, Some(detail.into()))
 }
 
-fn io_error(cause: io::Error) -> AppError {
+pub(crate) fn io_error(cause: io::Error) -> AppError {
     let code = match cause.raw_os_error() {
         Some(112 | 39) => ErrorCode::DiskFull,
         Some(5 | 13) => ErrorCode::PermissionDenied,
@@ -727,7 +727,7 @@ pub(crate) fn run_single_classified(
     }
     run_media_classified(
         paths, supervisor, disk, app_data, queue_id, request, None, None, cancel, observe, persist,
-        broken,
+        broken, false,
     )
 }
 
@@ -745,6 +745,7 @@ pub fn run_playlist_entry(
     cancel: &AtomicBool,
     observe: Arc<dyn Fn(Observation) + Send + Sync>,
     persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
+    zip_mode: bool,
 ) -> Result<Completed, AppError> {
     run_playlist_entry_classified(
         paths,
@@ -760,6 +761,7 @@ pub fn run_playlist_entry(
         observe,
         persist,
         &mut false,
+        zip_mode,
     )
 }
 
@@ -777,6 +779,7 @@ pub(crate) fn run_playlist_entry_classified(
     observe: Arc<dyn Fn(Observation) + Send + Sync>,
     persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
     broken: &mut bool,
+    zip_mode: bool,
 ) -> Result<Completed, AppError> {
     if !request.is_playlist || playlist_title.trim().is_empty() {
         return Err(error(ErrorCode::Unknown, "invalid playlist entry request"));
@@ -803,8 +806,12 @@ pub(crate) fn run_playlist_entry_classified(
         observe,
         persist,
         broken,
+        zip_mode,
     );
     disk.work_dir = root;
+    // The durable path always identifies the queue root, including after a
+    // failed entry, so Continue can find the same owned entry directory.
+    persist(disk)?;
     result
 }
 
@@ -821,6 +828,7 @@ fn run_media_classified(
     observe: Arc<dyn Fn(Observation) + Send + Sync>,
     persist: &mut dyn FnMut(&DownloadPaths) -> Result<(), AppError>,
     broken: &mut bool,
+    zip_mode: bool,
 ) -> Result<Completed, AppError> {
     valid_request(request)?;
     ensure_work_dir(disk, app_data, queue_id, entry_index)?;
@@ -943,7 +951,19 @@ fn run_media_classified(
         } else {
             "mp4"
         };
-        let path = finalize(&stage, disk, persist, &source.title, extension)?;
+        let path = if zip_mode {
+            // ZIP owns the finished file in this entry's private work directory.
+            // Sync it before the archive writer can commit and delete it.
+            OpenOptions::new()
+                .write(true)
+                .open(&stage)
+                .map_err(io_error)?
+                .sync_all()
+                .map_err(io_error)?;
+            stage
+        } else {
+            finalize(&stage, disk, persist, &source.title, extension)?
+        };
         Ok(Completed {
             path,
             title: source.title,
