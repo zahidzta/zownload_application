@@ -3,11 +3,11 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3B was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md).
-- **Next task:** Owner review of the [Gate 3C plan](gates/gate-3c.md) and its AC-23/AC-36 scope; implementation waits for explicit acceptance.
+- **Next task:** Owner acceptance of the [Gate 3C plan](gates/gate-3c.md); implementation waits for explicit acceptance.
 
 ## Current Gate 3C completions
 
-- Completed 3C-01: Drafted the Windows installer/updater plan and recorded Gate 3B acceptance; commit `a661713`; [plan and checkpoint](gates/gate-3c.md).
+- Completed 3C-01: Finalized Windows-only AC-23/AC-36 scope and recorded Gate 3B acceptance; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
 
 ## Accepted gates
 
