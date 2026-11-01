@@ -6,7 +6,9 @@ param(
     [string]$QuickJsPath = 'work/engine/build/quickjs/windows-x64/qjs.exe',
     [string]$Destination = 'src-tauri/resources/windows-engine',
     [ValidatePattern('^[a-f0-9]{64}$')]
-    [string]$ExpectedFfmpegSha256 = 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66'
+    [string]$ExpectedFfmpegSha256 = 'fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66',
+    [ValidatePattern('^[a-f0-9]{64}$')]
+    [string]$ExpectedQuickJsSha256 = 'bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83'
 )
 $ErrorActionPreference = 'Stop'
 
@@ -24,7 +26,7 @@ function Assert-Hash([string]$path, [string]$expected) {
 $artifacts = @(
     @{ Name='yt-dlp.exe'; Source=(Resolve-Input $YtDlpPath); Hash='66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a' },
     @{ Name='ffmpeg.exe'; Source=(Resolve-Input $FfmpegPath); Hash=$ExpectedFfmpegSha256 },
-    @{ Name='qjs.exe'; Source=(Resolve-Input $QuickJsPath); Hash='bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83' }
+    @{ Name='qjs.exe'; Source=(Resolve-Input $QuickJsPath); Hash=$ExpectedQuickJsSha256 }
 )
 foreach ($artifact in $artifacts) { Assert-Hash $artifact.Source $artifact.Hash }
 

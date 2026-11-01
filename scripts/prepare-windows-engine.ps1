@@ -66,9 +66,15 @@ Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-ffmpeg.ps1') @{ Ver
 
 $ffmpegPath = Join-Path $root 'work/engine/build/ffmpeg/windows-x64/recipe/ffmpeg-8.1.3/ffmpeg.exe'
 $ffmpegHash = (Get-FileHash -LiteralPath $ffmpegPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$quickJsPath = Join-Path $root 'work/engine/build/quickjs/windows-x64/qjs.exe'
+$quickJsHash = (Get-FileHash -LiteralPath $quickJsPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $stageScript = Join-Path $PSScriptRoot 'gate-2b/stage-windows-engine.ps1'
 foreach ($destination in $Destinations) {
-    Invoke-CheckedScript $stageScript @{ Destination = $destination; ExpectedFfmpegSha256 = $ffmpegHash }
+    Invoke-CheckedScript $stageScript @{
+        Destination = $destination
+        ExpectedFfmpegSha256 = $ffmpegHash
+        ExpectedQuickJsSha256 = $quickJsHash
+    }
 }
 
 Write-Output "Verified Windows engine staged to $($Destinations.Count) destination(s)."
