@@ -16,8 +16,8 @@ function Assert-Engine([bool]$condition, [string]$message) {
     if (-not $condition) { throw "Windows engine preparation: $message" }
 }
 
-function Invoke-CheckedScript([string]$path, [string[]]$arguments) {
-    & $path @arguments
+function Invoke-CheckedScript([string]$path, [hashtable]$parameters) {
+    & $path @parameters
 }
 
 function Fetch-LockedSources() {
@@ -57,12 +57,12 @@ if (-not (Test-Path -LiteralPath $gcc -PathType Leaf)) {
     Assert-Engine ($LASTEXITCODE -eq 0) 'w64devkit extraction failed'
 }
 
-Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-quickjs.ps1') @('-Target', 'windows-x64', '-Verify')
-Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-ffmpeg.ps1') @('-Verify')
+Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-quickjs.ps1') @{ Target = 'windows-x64'; Verify = $true }
+Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/build-ffmpeg.ps1') @{ Verify = $true }
 
 $stageScript = Join-Path $PSScriptRoot 'gate-2b/stage-windows-engine.ps1'
 foreach ($destination in $Destinations) {
-    Invoke-CheckedScript $stageScript @('-Destination', $destination)
+    Invoke-CheckedScript $stageScript @{ Destination = $destination }
 }
 
 Write-Output "Verified Windows engine staged to $($Destinations.Count) destination(s)."
