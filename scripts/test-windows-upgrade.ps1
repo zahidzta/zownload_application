@@ -329,7 +329,9 @@ try {
         } else { $null }
         $processState = if ($appProcess) { "app process $($appProcess.Id) is still running" } else { 'app process has exited' }
         try {
-            $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 120 `
+            # The package request is logged before its large response body
+            # finishes downloading, so allow time for download and installation.
+            $candidateRecord = Wait-ForInstalledVersion $CandidateVersion 600 `
                 "Format $($scenario.Format); $processState; updater requests: $serverRequests."
         }
         catch {
