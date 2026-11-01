@@ -106,3 +106,13 @@ jobs:
         run: |
           chmod +x src-tauri/gen/android/gradlew
           npm run android:debug
+
+  windows-install-review:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/task-3c-02-03' && github.actor == 'zahidzta'
+    uses: ./.github/workflows/windows-install-review.yml
+    with:
+      previous_ref: main
+      candidate_ref: task-3c-02-03
+      previous_version: 0.0.0
+      candidate_version: 0.0.1
+    secrets: inherit
