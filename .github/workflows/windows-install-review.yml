@@ -99,19 +99,30 @@ jobs:
           if ([version]$candidateConfig.version -ne $candidate) {
             throw 'The candidate version input must match src-tauri/tauri.conf.json.'
           }
+          $icons = @($candidateConfig.bundle.icon)
+          if ($icons.Count -eq 0) { throw 'The candidate Tauri config must declare Windows bundle icons.' }
+          foreach ($icon in $icons) {
+            if (!(Test-Path -LiteralPath (Join-Path 'candidate/src-tauri' $icon))) {
+              throw "Candidate bundle icon is missing: $icon"
+            }
+            if (!(Test-Path -LiteralPath (Join-Path 'previous/src-tauri' $icon))) {
+              throw "Previous source does not contain candidate bundle icon: $icon"
+            }
+          }
           $endpoint = "http://127.0.0.1:$env:FIXTURE_PORT/latest.json"
           $updater = @{
             pubkey = $candidateConfig.plugins.updater.pubkey
             endpoints = @($endpoint)
             dangerousInsecureTransportProtocol = $true
           }
+          $bundle = @{ createUpdaterArtifacts = $true; icon = $icons }
           $previousConfig = @{
             version = $env:PREVIOUS_VERSION
-            bundle = @{ createUpdaterArtifacts = $true }
+            bundle = $bundle
             plugins = @{ updater = $updater }
           } | ConvertTo-Json -Depth 8 -Compress
           $candidateOverride = @{
-            bundle = @{ createUpdaterArtifacts = $true }
+            bundle = $bundle
             plugins = @{ updater = $updater }
           } | ConvertTo-Json -Depth 8 -Compress
           $previousPath = Join-Path $env:RUNNER_TEMP 'tauri-previous-test.json'
