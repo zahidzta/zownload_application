@@ -160,7 +160,7 @@ yt-dlp is powerful but is a command-line tool that needs extra binaries (ffmpeg,
 | FR-51 | Downloaded files include title, artist/creator/uploader, album and cover art using the exact mapping in FR-58. | `[CONFIRMED]` |
 | FR-52 | Setting "Download a playlist as a .zip file": yes → one `.zip`; no → elements downloaded **one by one**, starting the next when the previous ends, each saved **with the element's own name** (not the playlist's). | `[CONFIRMED]` |
 | FR-53 | Desktop: download folder defaults to the system **Downloads** folder and the user may choose another folder. Android v1: always save through MediaStore to the public Downloads collection; hide/ignore the folder selector and do not use SAF. | `[CONFIRMED]` |
-| FR-54 | Zip mode writes directly to a pending final archive (`playlist.zip.part` on desktop; a pending MediaStore entry on Android if the spike validates it). Each completed media file is added uncompressed, verified, and deleted immediately. On success, finalize/rename the archive. At most the partial ZIP plus the current temporary media file coexist; a full second copy of the playlist is never required. | `[CONFIRMED]` (direct MediaStore writing must be validated in the Android spike) |
+| FR-54 | Zip mode writes directly to a pending final archive (`playlist.zip.part` on desktop; a pending MediaStore entry on Android if the spike validates it). ZIP mode retains the partial archive and only the temporary work files needed for the current entry, including source, conversion output, and engine intermediates. Each completed media file is added uncompressed and verified. After an entry is verified in the archive, its work files are removed before the next entry starts. On success, finalize/rename the archive. It never retains a complete second copy of the playlist. | `[CONFIRMED]` (direct MediaStore writing must be validated in the Android spike) |
 | FR-55 | Progress events are throttled (≈5 per second per item max). | `[PROPOSAL]` |
 | FR-56 | Duplicate display titles are allowed. Physical filename collisions are resolved without overwriting by appending ` (1)`, ` (2)`, etc., both in download folders and inside ZIP archives. | `[CONFIRMED]` |
 | FR-57 | On disk-full or output-permission failure, cancel the whole job, terminate every active child process, clean incomplete output where safe, persist a translated error notification, and remove the item from the queue. | `[CONFIRMED]` |
@@ -200,7 +200,7 @@ yt-dlp is powerful but is a command-line tool that needs extra binaries (ffmpeg,
 | NFR-01 | **Easy installation:** installing one concrete OS/architecture combination requires one appropriate artifact, no terminal and no extra dependency downloads. A release may contain alternatives for different architectures or package formats. | `[CONFIRMED]` |
 | NFR-02 | **Resilience to site changes:** yt-dlp updatable without a new app release. | `[CONFIRMED]` |
 | NFR-03 | **Fault tolerance:** one failing playlist element never stops the rest. | `[CONFIRMED]` |
-| NFR-04 | **Storage efficiency:** ZIP mode never retains the complete set of individual files alongside the archive. Storage overhead is bounded to the partial ZIP plus the current temporary media file. Large playlists can be many GB; mobile storage is limited. | `[CONFIRMED]` |
+| NFR-04 | **Storage efficiency:** ZIP mode retains the partial archive and only the temporary work files needed for the current entry, including source, conversion output, and engine intermediates. After an entry is verified in the archive, its work files are removed before the next entry starts. It never retains a complete second copy of the playlist. Large playlists can be many GB; mobile storage is limited. | `[CONFIRMED]` |
 | NFR-05 | **UI performance:** light UI, throttled progress events, no heavy animation libraries (Android uses the system WebView). | `[PROPOSAL]` |
 | NFR-06 | **Responsive/mobile-first** React UI shared by desktop and Android. | `[PROPOSAL]` |
 | NFR-07 | **Maintainability:** download logic behind one engine interface; contract files kept in sync; single repo. | `[CONFIRMED]` (interface idea) / `[PROPOSAL]` (details) |
@@ -664,7 +664,7 @@ Derived from the confirmed requirements; refine with the owner.
 **Downloads**
 - AC-11: mp3/mp4 files open in common players and contain the FR-58 mapping: title; artist/creator/uploader fallback; playlist title as album only for playlist entries; JPEG-compatible cover art.
 - AC-12: Playlist mp4 Max = best video + best audio; mp4 Min = lowest video + best audio; mp3 Max = best source with 320 kbps requested maximum; mp3 Min = best source with 128 kbps requested maximum. Single MP3 exposes 320/256/192/128 kbps requested maxima. MP3 sources at or below the selection are copied; higher-bitrate MP3 and non-MP3 sources are encoded to the selection.
-- AC-13: Zip on → one `.zip` with the playlist's files, built using at most the partial ZIP plus one temporary media file; zip off → individual files named after each element, downloaded sequentially.
+- AC-13: Zip on → one `.zip` with the playlist's files, built using the partial ZIP plus only the current entry's temporary work files, which are removed after archive verification and before the next entry starts; zip off → individual files named after each element, downloaded sequentially.
 - AC-14: One failing element does not stop the playlist.
 - AC-15: Desktop files use Downloads by default or the folder chosen in Settings. Android files always appear in public Downloads through MediaStore and no folder selector is shown.
 - AC-16: Existing output names are never overwritten; collisions produce `name (1).ext`, `name (2).ext`, etc., including ZIP entries.
@@ -699,7 +699,7 @@ Derived from the confirmed requirements; refine with the owner.
 | 2 | Is pinned QuickJS fast enough for YouTube on desktop? Fallback: Deno (desktop only). | Gate 0B real-playlist benchmark | QuickJS everywhere |
 | 3 | ~~QuickJS source and variant.~~ **Resolved:** upstream QuickJS 2026-06-04, built reproducibly from official source for each target with checksums/build commands recorded (D-07). | Gate 0A/0C verification | — |
 | 4 | ~~Android download folder.~~ **Resolved:** MediaStore public Downloads only in v1; hide/ignore the folder selector; SAF is out of scope (D-29). | — | — |
-| 5 | ~~ZIP strategy and pause during packaging.~~ **Resolved:** stream to a pending MediaStore destination when supported, retain only one temporary media file, and disable pause during `packaging`. The Android spike must validate direct writing; if the API/library cannot support it, document and test the cache-copy fallback. | Android spike | Direct MediaStore writing |
+| 5 | ~~ZIP strategy and pause during packaging.~~ **Resolved:** stream to a pending MediaStore destination when supported, retain only the current entry's temporary work files, remove them after archive verification and before the next entry starts, and disable pause during `packaging`. The Android spike must validate direct writing; if the API/library cannot support it, document and test the cache-copy fallback. | Android spike | Direct MediaStore writing |
 | 6 | ~~Main area after pressing Download.~~ **Resolved:** return immediately to a cleared Input state (FR-26). | — | — |
 | 7 | ~~Finished queue items.~~ **Resolved:** remove automatically after history or persistent error notification is committed (BR-11). | — | — |
 | 8 | ~~Settings update-button scope.~~ **Resolved:** the Settings button updates yt-dlp only; app updates use an automatic daily check and a separate action shown only when available (FR-64). | — | — |
@@ -774,7 +774,7 @@ A failed Gate 0 result stops the roadmap: document the evidence and revise the a
 | Stage | Deliverable | Verification / checkpoint |
 |---|---|---|
 | **3A — Sequential playlists** | Per-entry execution, Max/Min matrix, counters, partial failures, one history row and durable resume index. | AC-04, AC-08, AC-12 and AC-14 with tiny and mixed-failure playlists. |
-| **3B — ZIP and filesystem resilience** | Bounded-storage ZIP pipeline, numbered collisions, disk/permission failures and cleanup. | AC-13, AC-16 and AC-17; measure that only the partial ZIP plus current item coexist. |
+| **3B — ZIP and filesystem resilience** | Bounded-storage ZIP pipeline, numbered collisions, disk/permission failures and cleanup. | AC-13, AC-16 and AC-17; measure the partial ZIP and current entry's temporary work files, and verify cleanup before the next entry. |
 | **3C — Windows release** | Signed updater artifacts plus unsigned OS installers: NSIS `.exe` and WiX `.msi`; GitHub release workflow and install/update documentation. | Clean install, upgrade, uninstall and updater tests for both formats; AC-20, AC-22, AC-23 and AC-36. |
 
 ### Phase 4 — Linux and macOS ports
