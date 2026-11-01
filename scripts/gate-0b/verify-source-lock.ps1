@@ -87,6 +87,8 @@ Assert-Lock ($lock.ffmpeg.signingKey.fallbackUrls -contains 'https://raw.githubu
 Assert-Digest $lock.ffmpeg.signingKey.sha256 'FFmpeg signing key'
 Assert-Lock ($lock.ffmpeg.signingKey.fingerprint -eq 'FCF986EA15E6E293A5644F10B4322F04D67658D8') 'FFmpeg signer fingerprint disagrees with upstream'
 Assert-Lock ($lock.zlib.source.url -eq "https://zlib.net/fossils/zlib-$($lock.zlib.version).tar.gz") 'zlib must use the official versioned fossil archive'
+Assert-FallbackUrls $lock.zlib.source.fallbackUrls 'zlib source'
+Assert-Lock ($lock.zlib.source.fallbackUrls -contains "https://github.com/madler/zlib/releases/download/v$($lock.zlib.version)/zlib-$($lock.zlib.version).tar.gz") 'zlib source mirror must remain the pinned official GitHub release asset'
 Assert-Lock ($lock.zlib.license -match '^Zlib') 'zlib license must be recorded'
 Assert-Lock ($lock.zlib.targets -contains 'windows-x64') 'zlib Windows target is missing'
 

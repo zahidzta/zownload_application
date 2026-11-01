@@ -87,7 +87,14 @@ foreach ($item in $items) {
                 continue
             }
             $partialHash = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash.ToLowerInvariant()
-            Assert-Download ($partialHash -eq $item.Hash) "$($item.Name) downloaded SHA-256 disagrees with lock"
+            if ($partialHash -ne $item.Hash) {
+                Remove-Item -LiteralPath $partial -Force
+                if ($urlIndex -eq ($item.Urls.Count - 1)) {
+                    Assert-Download $false "$($item.Name) SHA-256 mismatch at every locked URL (last: $partialHash; expected: $($item.Hash))"
+                }
+                Write-Warning "Downloaded $($item.Name) hash did not match the source lock; trying its next locked URL."
+                continue
+            }
             Move-Item -LiteralPath $partial -Destination $path
             $fetched = $true
             break
