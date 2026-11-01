@@ -20,6 +20,20 @@ function Invoke-CheckedScript([string]$path, [string[]]$arguments) {
     & $path @arguments
 }
 
+function Fetch-LockedSources() {
+    $fetchScript = Join-Path $PSScriptRoot 'gate-0b/fetch-sources.ps1'
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            & $fetchScript
+            return
+        } catch {
+            if ($attempt -eq 3) { throw }
+            Write-Warning "Pinned source fetch failed on attempt $attempt; retrying the remaining downloads."
+            Start-Sleep -Seconds (5 * $attempt)
+        }
+    }
+}
+
 New-Item -ItemType Directory -Path $toolRoot -Force | Out-Null
 if (Test-Path -LiteralPath $toolArchive -PathType Leaf) {
     $actual = (Get-FileHash -LiteralPath $toolArchive -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -35,7 +49,7 @@ if (Test-Path -LiteralPath $toolArchive -PathType Leaf) {
     Assert-Engine ($actual -eq $toolHash) 'downloaded w64devkit archive SHA-256 mismatch'
 }
 
-Invoke-CheckedScript (Join-Path $PSScriptRoot 'gate-0b/fetch-sources.ps1') @()
+Fetch-LockedSources
 
 $gcc = Join-Path $toolRoot 'w64devkit/bin/gcc.exe'
 if (-not (Test-Path -LiteralPath $gcc -PathType Leaf)) {
