@@ -144,6 +144,11 @@ jobs:
           $executable = ./scripts/install-minisign.ps1
           "path=$executable" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
+      - name: Check release verifier exit codes
+        shell: pwsh
+        working-directory: candidate
+        run: ./scripts/test-windows-release-exit.ps1 -MinisignPath '${{ steps.minisign.outputs.path }}'
+
       - name: Prepare verified Windows engine resources for both source revisions
         shell: pwsh
         working-directory: candidate

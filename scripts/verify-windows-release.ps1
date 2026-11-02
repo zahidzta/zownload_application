@@ -46,8 +46,14 @@ function Assert-OnlyFiles([string]$Directory, [string[]]$ExpectedNames) {
 }
 
 function Invoke-MinisinVerify([string]$Path, [string]$SignaturePath, [string]$PublicKeyPath) {
-    & $MinisignPath -V -m $Path -x $SignaturePath -p $PublicKeyPath *> $null
-    return $LASTEXITCODE
+    # Capture expected signature failures as process results. This also avoids
+    # PowerShell 5.1 promoting Minisign's stderr into a terminating error.
+    $result = Start-Process -FilePath $MinisignPath -ArgumentList @(
+        '-V', '-m', ('"' + $Path + '"'), '-x', ('"' + $SignaturePath + '"'), '-p', ('"' + $PublicKeyPath + '"')
+    ) -WindowStyle Hidden -Wait -PassThru `
+        -RedirectStandardOutput (Join-Path $verificationDirectory 'minisign.out.log') `
+        -RedirectStandardError (Join-Path $verificationDirectory 'minisign.err.log')
+    return $result.ExitCode
 }
 
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
@@ -193,3 +199,8 @@ finally {
     }
     Remove-Item -LiteralPath $verificationDirectory -Force
 }
+
+# Signature checks include expected nonzero Minisign exits. Report the
+# verifier's success only after all checks and cleanup have completed; failures
+# above still throw before reaching this exit and remain failures in Actions.
+exit 0
