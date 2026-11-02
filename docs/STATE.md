@@ -2,9 +2,10 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3C was accepted on 2026-11-02; see the [checkpoint](gates/evidence/3c/checkpoint.md) and [task evidence](gates/evidence/3c/tasks.md). Keep `app-v0.0.1` unpublished.
-- **Next task:** Review and accept the [Gate 4A plan](gates/gate-4a.md). Do not start implementation before acceptance.
-- Completed 4A-01: Drafted the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
+- **Checkpoint:** Gate 3C was accepted on 2026-11-02 and the Gate 4A plan was approved; see the [checkpoint](gates/evidence/3c/checkpoint.md), [task evidence](gates/evidence/3c/tasks.md), and [Gate 4A plan](gates/gate-4a.md). Keep `app-v0.0.1` unpublished.
+- **Next task:** 4A-03 — Linux yt-dlp and app-update behavior.
+- Completed 4A-01: Owner approved the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
+- Completed 4A-02: Added Linux runtime paths, pinned engines, verified app-data copies, and process cleanup; commit `0fabf35`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41545291079).
 
 ## Accepted gates
 
