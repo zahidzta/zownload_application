@@ -116,8 +116,11 @@ install -m 0644 "$zlib/libz.a" "$deps/lib/libz.a"
   done
   grep -q '^License: LGPL version 2\.1 or later$' "$build_root/ffmpeg-configure.log" || fail 'FFmpeg did not report LGPL-2.1-or-later'
   for macro in CONFIG_LIBMP3LAME_ENCODER CONFIG_AAC_ENCODER CONFIG_PNG_DECODER CONFIG_MJPEG_ENCODER \
-    CONFIG_SCALE_FILTER CONFIG_MP3_MUXER CONFIG_MOV_MUXER CONFIG_MP4_MUXER CONFIG_FFMPEG CONFIG_FFPROBE; do
-    grep -Eq "^#define $macro 1$" config.h || fail "required FFmpeg feature is missing: $macro"
+    CONFIG_SCALE_FILTER CONFIG_MP3_MUXER CONFIG_MOV_MUXER CONFIG_MP4_MUXER; do
+    grep -Eq "^#define $macro 1$" config_components.h || fail "required FFmpeg feature is missing: $macro"
+  done
+  for macro in CONFIG_FFMPEG CONFIG_FFPROBE; do
+    grep -Eq "^#define $macro 1$" config.h || fail "required FFmpeg tool is missing: $macro"
   done
   make -j2 V=1 ffmpeg ffprobe > "$build_root/ffmpeg-build.log" 2>&1 || { tail -n 50 "$build_root/ffmpeg-build.log"; fail 'FFmpeg build failed'; }
 )
