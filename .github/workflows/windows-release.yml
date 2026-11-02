@@ -178,11 +178,20 @@ jobs:
           New-Item -ItemType Directory -Path $metadataDirectory -Force | Out-Null
           gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern latest.json --dir $metadataDirectory
           if ($LASTEXITCODE -ne 0) { throw 'Could not download latest.json from the owner-created draft.' }
-          $assetNames = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:DRAFT_RELEASE_ID" --jq '.assets[].name')
+          # Tauri Action puts GitHub asset IDs in latest.json URLs. Keep their
+          # names alongside the allowlist so the verifier can match each URL.
+          $releaseAssetJson = gh api "repos/$env:GITHUB_REPOSITORY/releases/$env:DRAFT_RELEASE_ID" --jq '.assets | map({id, name})' | Out-String
           if ($LASTEXITCODE -ne 0) { throw 'Could not list draft release assets.' }
+          $releaseAssets = @(ConvertFrom-Json -InputObject $releaseAssetJson)
+          $assetNames = @($releaseAssets | ForEach-Object { [string]$_.name })
+          $assetMap = @{}
+          foreach ($asset in $releaseAssets) {
+            $assetMap[[string]$asset.id] = [string]$asset.name
+          }
           ./scripts/verify-windows-release.ps1 `
             -BundleRoot 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
             -ConfigPath 'src-tauri/tauri.conf.json' `
             -MinisignPath '${{ steps.minisign.outputs.path }}' `
             -LatestJsonPath (Join-Path $metadataDirectory 'latest.json') `
-            -ReleaseAssets $assetNames
+            -ReleaseAssets $assetNames `
+            -ReleaseAssetMap $assetMap

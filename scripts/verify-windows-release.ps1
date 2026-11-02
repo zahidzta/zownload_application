@@ -16,6 +16,8 @@ param(
 
     [string[]]$ReleaseAssets = @(),
 
+    [hashtable]$ReleaseAssetMap = @{},
+
     [string]$ExpectedVersion,
 
     [string]$PublicKey,
@@ -43,6 +45,28 @@ function Assert-OnlyFiles([string]$Directory, [string[]]$ExpectedNames) {
     if (($actualNames -join "`n") -ne ($expectedSorted -join "`n")) {
         throw "Unexpected files in $Directory. Expected: $($expectedSorted -join ', '); found: $($actualNames -join ', ')."
     }
+}
+
+function Resolve-ReleaseAssetName([string]$Url) {
+    $uri = [Uri]$Url
+    if ($uri.Host -eq 'api.github.com') {
+        $assetMatch = [Regex]::Match(
+            $uri.AbsolutePath,
+            '^/repos/[^/]+/[^/]+/releases/assets/(?<id>\d+)/?$'
+        )
+        if (!$assetMatch.Success) {
+            throw "Updater URL is not a recognized GitHub release asset URL: $Url"
+        }
+
+        $assetId = $assetMatch.Groups['id'].Value
+        if (!$ReleaseAssetMap.ContainsKey($assetId)) {
+            throw "Updater URL references GitHub release asset id '$assetId', which is not present in the draft."
+        }
+
+        return [string]$ReleaseAssetMap[$assetId]
+    }
+
+    return [IO.Path]::GetFileName($uri.AbsolutePath)
 }
 
 function Invoke-MinisinVerify([string]$Path, [string]$SignaturePath, [string]$PublicKeyPath) {
@@ -161,9 +185,9 @@ try {
                 throw "latest.json is missing its $($entry.Key) entry."
             }
             $platform = $property.Value
-            $uri = [Uri]$platform.url
-            if ([IO.Path]::GetFileName($uri.AbsolutePath) -ne $entry.Package.Name) {
-                throw "The $($entry.Key) entry does not point to its matching package."
+            $assetName = Resolve-ReleaseAssetName ([string]$platform.url)
+            if ($assetName -ne $entry.Package.Name) {
+                throw "The $($entry.Key) entry resolves to '$assetName' instead of its matching package '$($entry.Package.Name)'."
             }
             if ([string]$platform.signature -ne [IO.File]::ReadAllText($entry.Signature).Trim()) {
                 throw "The $($entry.Key) metadata signature does not match its package signature."
@@ -171,8 +195,11 @@ try {
         }
 
         $genericWindows = $platforms.PSObject.Properties['windows-x86_64']
-        if ($genericWindows -and [IO.Path]::GetFileName(([Uri]$genericWindows.Value.url).AbsolutePath) -ne $msi.Name) {
-            throw 'The generic Windows x64 updater entry must retain the MSI fallback.'
+        if ($genericWindows) {
+            $genericAssetName = Resolve-ReleaseAssetName ([string]$genericWindows.Value.url)
+            if ($genericAssetName -ne $msi.Name) {
+                throw 'The generic Windows x64 updater entry must retain the MSI fallback.'
+            }
         }
 
         Write-Output 'latest.json contains matching NSIS and MSI entries and no non-Windows targets.'
