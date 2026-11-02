@@ -5,7 +5,7 @@
 
 use super::{
     hash_file, newer, read_manifest, write_manifest, EngineManifest, EnginePaths, BASELINE_HASHES,
-    YT_DLP_VERSION,
+    CANDIDATE_DOWNLOAD_FILENAME, CANDIDATE_FILENAME, YT_DLP_ASSET, YT_DLP_VERSION,
 };
 use crate::contract::{EngineUpdateInfo, EngineUpdateOutcome};
 use reqwest::{blocking::Client, redirect::Policy, Url};
@@ -205,7 +205,7 @@ impl ReleaseClient {
             Ok(url.clone())
         };
         Ok(Candidate {
-            executable_url: asset("yt-dlp.exe")?,
+            executable_url: asset(YT_DLP_ASSET)?,
             checksums_url: asset("SHA2-256SUMS")?,
             version: release.tag_name,
         })
@@ -337,17 +337,18 @@ impl ReleaseClient {
         }
         let original_manifest = manifest.clone();
         let checksums = self.small(&candidate.checksums_url, MAX_CHECKSUMS)?;
-        let expected = checksum_for(&checksums, "yt-dlp.exe")?;
+        let expected = checksum_for(&checksums, YT_DLP_ASSET)?;
         let staging = data.join("engine/staging");
         fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
-        let temporary = staging.join("candidate-download.exe");
-        let ready = staging.join("candidate.exe");
+        let temporary = staging.join(CANDIDATE_DOWNLOAD_FILENAME);
+        let ready = staging.join(CANDIDATE_FILENAME);
         let result = (|| {
             self.download(&candidate.executable_url, &temporary)?;
             if hash_file(&temporary)? != expected {
                 return Err("release checksum mismatch".into());
             }
             // Never execute an unverified candidate.
+            super::set_executable(&temporary)?;
             check(&temporary, &candidate.version)?;
             if ready.exists() {
                 fs::remove_file(&ready).map_err(|error| error.to_string())?;
@@ -518,7 +519,7 @@ pub(crate) fn activate_pending(data: &Path) -> Result<Option<String>, String> {
         .as_deref()
         .ok_or("pending checksum missing")?
         .to_owned();
-    let candidate = data.join("engine/staging/candidate.exe");
+    let candidate = data.join("engine/staging").join(CANDIDATE_FILENAME);
     if hash_file(&candidate).ok().as_deref() != Some(expected.as_str()) {
         manifest.pending_version = None;
         manifest.pending_sha256 = None;
@@ -656,6 +657,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let base_for_thread = base.clone();
+        let asset_name = YT_DLP_ASSET.to_owned();
         let handle = thread::spawn(move || {
             for _ in 0..requests {
                 let (mut stream, _) = listener.accept().unwrap();
@@ -664,10 +666,10 @@ mod tests {
                 let path = String::from_utf8_lossy(&request[..count]);
                 let path = path.split_whitespace().nth(1).unwrap();
                 let body = match path {
-                    "/latest" if valid_json => format!(r#"{{"tag_name":"2026.10.21","draft":false,"prerelease":false,"assets":[{{"name":"yt-dlp.exe","browser_download_url":"{base_for_thread}/yt-dlp.exe"}},{{"name":"SHA2-256SUMS","browser_download_url":"{base_for_thread}/SHA2-256SUMS"}}]}}"#).into_bytes(),
+                    "/latest" if valid_json => format!(r#"{{"tag_name":"2026.10.21","draft":false,"prerelease":false,"assets":[{{"name":"{asset_name}","browser_download_url":"{base_for_thread}/{asset_name}"}},{{"name":"SHA2-256SUMS","browser_download_url":"{base_for_thread}/SHA2-256SUMS"}}]}}"#).into_bytes(),
                     "/latest" => b"invalid JSON".to_vec(),
-                    "/SHA2-256SUMS" => format!("{checksum}  yt-dlp.exe\n").into_bytes(),
-                    "/yt-dlp.exe" => executable.clone(),
+                    "/SHA2-256SUMS" => format!("{checksum}  {asset_name}\n").into_bytes(),
+                    value if value == format!("/{asset_name}") => executable.clone(),
                     other => panic!("unexpected fixture path {other}"),
                 };
                 write!(
@@ -694,11 +696,14 @@ mod tests {
     #[test]
     fn checksums_require_exact_filename_once() {
         let hash = "a".repeat(64);
-        let bytes = format!("{hash}  yt-dlp.exe\n{}  yt-dlp_arm64.exe\n", "b".repeat(64));
-        assert_eq!(checksum_for(bytes.as_bytes(), "yt-dlp.exe").unwrap(), hash);
+        let bytes = format!(
+            "{hash}  {YT_DLP_ASSET}\n{}  yt-dlp_arm64.exe\n",
+            "b".repeat(64)
+        );
+        assert_eq!(checksum_for(bytes.as_bytes(), YT_DLP_ASSET).unwrap(), hash);
         assert!(checksum_for(
-            format!("{bytes}{hash}  yt-dlp.exe\n").as_bytes(),
-            "yt-dlp.exe"
+            format!("{bytes}{hash}  {YT_DLP_ASSET}\n").as_bytes(),
+            YT_DLP_ASSET
         )
         .is_err());
         assert!(checksum_for(bytes.as_bytes(), "missing.exe").is_err());
@@ -711,7 +716,7 @@ mod tests {
         for version in [YT_DLP_VERSION, "2026.07.04"] {
             let candidate = Candidate {
                 version: version.into(),
-                executable_url: "http://127.0.0.1:1/yt-dlp.exe".into(),
+                executable_url: format!("http://127.0.0.1:1/{YT_DLP_ASSET}"),
                 checksums_url: "http://127.0.0.1:1/SHA2-256SUMS".into(),
             };
             assert!(!client.stage(&data, &candidate).unwrap());
@@ -740,7 +745,7 @@ mod tests {
             .unwrap());
         assert!(checked.load(Ordering::SeqCst));
         assert_eq!(
-            fs::read(data.join("engine/staging/candidate.exe")).unwrap(),
+            fs::read(data.join("engine/staging").join(CANDIDATE_FILENAME)).unwrap(),
             executable
         );
         assert_eq!(
@@ -832,7 +837,10 @@ mod tests {
         assert_eq!(manifest.yt_dlp.version, YT_DLP_VERSION);
         assert!(manifest.pending_version.is_none());
         assert!(manifest.failed_versions.contains(&"2026.10.21".into()));
-        assert!(!data.join("engine/staging/candidate-download.exe").exists());
+        assert!(!data
+            .join("engine/staging")
+            .join(CANDIDATE_DOWNLOAD_FILENAME)
+            .exists());
         server.join().unwrap();
         fs::remove_dir_all(data).unwrap();
     }
@@ -866,16 +874,18 @@ mod tests {
         let client = ReleaseClient::official().unwrap();
         assert!(client
             .validate_url(
-                "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/yt-dlp.exe",
+                &format!(
+                    "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/{YT_DLP_ASSET}"
+                ),
                 "2026.10.21",
-                "yt-dlp.exe"
+                YT_DLP_ASSET
             )
             .is_ok());
         assert!(client
             .validate_url(
-                "https://evil.example/yt-dlp.exe",
+                &format!("https://evil.example/{YT_DLP_ASSET}"),
                 "2026.10.21",
-                "yt-dlp.exe"
+                YT_DLP_ASSET
             )
             .is_err());
         assert!(!official_redirect(
@@ -913,7 +923,7 @@ mod tests {
                 let mut request = [0u8; 2048];
                 let _ = stream.read(&mut request).unwrap();
                 if index == 0 {
-                    let body = format!("{}  yt-dlp.exe\n", "a".repeat(64));
+                    let body = format!("{}  {YT_DLP_ASSET}\n", "a".repeat(64));
                     write!(
                         stream,
                         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -932,7 +942,7 @@ mod tests {
         let candidate = Candidate {
             version: "2026.10.21".into(),
             checksums_url: format!("{base}/SHA2-256SUMS"),
-            executable_url: format!("{base}/yt-dlp.exe"),
+            executable_url: format!("{base}/{YT_DLP_ASSET}"),
         };
         let client = ReleaseClient::new(&format!("{base}/latest"), false).unwrap();
         let data = test_data();
@@ -941,7 +951,10 @@ mod tests {
                 "incomplete download executed"
             ))
             .is_err());
-        assert!(!data.join("engine/staging/candidate-download.exe").exists());
+        assert!(!data
+            .join("engine/staging")
+            .join(CANDIDATE_DOWNLOAD_FILENAME)
+            .exists());
         assert!(read_manifest(&data).unwrap().pending_version.is_none());
         server.join().unwrap();
         fs::remove_dir_all(data).unwrap();
@@ -949,9 +962,13 @@ mod tests {
 
     #[test]
     fn verified_candidate_activates_from_app_data_and_fallback_restores_baseline() {
+        #[cfg(target_os = "windows")]
         let resources =
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/windows-engine");
-        if !resources.join("yt-dlp.exe").is_file() {
+        #[cfg(target_os = "linux")]
+        let resources =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/linux-engine");
+        if !resources.join(super::super::YT_DLP_FILENAME).is_file() {
             return;
         }
         let data =
@@ -966,7 +983,7 @@ mod tests {
         fs::create_dir_all(&staging).unwrap();
         let source = staging.join("stub.rs");
         fs::write(&source, "// SPDX-License-Identifier: GPL-3.0-or-later\n// SPDX-FileCopyrightText: 2026 zahidzta\nfn main() { if std::env::args().any(|arg| arg == \"--version\") { println!(\"2026.10.21\"); } else { std::process::exit(7); } }\n").unwrap();
-        let candidate = staging.join("candidate.exe");
+        let candidate = staging.join(CANDIDATE_FILENAME);
         assert!(std::process::Command::new("rustc")
             .arg(&source)
             .arg("-o")
@@ -982,7 +999,7 @@ mod tests {
             .unwrap_err()
             .contains("version probe"));
         assert_eq!(
-            hash_file(&data.join("engine/yt-dlp.exe")).unwrap(),
+            hash_file(&data.join("engine").join(super::super::YT_DLP_FILENAME)).unwrap(),
             BASELINE_HASHES.yt_dlp
         );
         manifest.pending_version = Some("2026.10.21".into());
@@ -1011,7 +1028,8 @@ mod tests {
         assert_eq!(promoted.yt_dlp.source, "updated");
         assert!(promoted.pending_version.is_none());
         assert_eq!(
-            super::super::hash_file(&data.join("engine/yt-dlp.exe")).unwrap(),
+            super::super::hash_file(&data.join("engine").join(super::super::YT_DLP_FILENAME))
+                .unwrap(),
             manifest.pending_sha256.unwrap()
         );
         assert_eq!(
@@ -1023,7 +1041,7 @@ mod tests {
         assert_eq!(restored.reverted_version.as_deref(), Some("2026.10.21"));
         assert!(restored.failed_versions.contains(&"2026.10.21".into()));
         assert_eq!(
-            hash_file(&data.join("engine/yt-dlp.exe")).unwrap(),
+            hash_file(&data.join("engine").join(super::super::YT_DLP_FILENAME)).unwrap(),
             BASELINE_HASHES.yt_dlp
         );
         fs::remove_dir_all(data).unwrap();

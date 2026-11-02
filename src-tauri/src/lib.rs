@@ -7,7 +7,7 @@ pub mod app_update;
 #[cfg(not(target_os = "android"))]
 mod commands;
 pub mod contract;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub mod engine;
 pub mod persistence;
 pub(crate) mod playlist;
@@ -29,10 +29,9 @@ pub fn run() {
                     persistence::Database::open_at(&path)?,
                 ));
                 app.manage(std::sync::Arc::clone(&database));
-                #[cfg(target_os = "windows")]
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
                 {
-                    // Joining a kill-on-close Windows job before launching any sidecar
-                    // makes abrupt app termination close the whole descendant tree.
+                    // Install the platform supervisor before launching engine work.
                     let supervisor = engine::process::Supervisor::install()?;
                     app.manage(std::sync::Arc::clone(&supervisor));
                     let resources = app.path().resource_dir()?.join("binaries");
@@ -43,7 +42,7 @@ pub fn run() {
                         &app.package_info().version.to_string(),
                     );
                     if let engine::EngineStatus::Unavailable(reason) = &status {
-                        eprintln!("Windows engine unavailable: {reason}");
+                        eprintln!("desktop engine unavailable: {reason}");
                     }
                     let engine_ready = matches!(status, engine::EngineStatus::Ready(_));
                     let ready = match &status {
@@ -92,7 +91,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 if let Some(queue) =
                     window.try_state::<std::sync::Arc<engine::queue::QueueCoordinator>>()
@@ -105,7 +104,7 @@ pub fn run() {
                     supervisor.shutdown();
                 }
             }
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             let _ = (window, event);
         });
     #[cfg(target_os = "windows")]

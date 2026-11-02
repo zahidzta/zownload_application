@@ -3,9 +3,9 @@
 
 #[cfg(any(test, not(target_os = "windows")))]
 use crate::contract::{ItemStatus, Progress};
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::engine::updater::ReleaseClient;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use crate::engine::{
     analysis,
     process::Supervisor,
@@ -20,10 +20,10 @@ use crate::{
     },
     persistence::Database,
 };
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 
@@ -79,7 +79,7 @@ impl EventSink for AppHandle {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) fn queue_sink(app: AppHandle) -> Arc<dyn Fn(QueueEvent) + Send + Sync> {
     Arc::new(move |event| {
         EventSink::emit(
@@ -217,7 +217,7 @@ fn deferred(detail: &'static str) -> AppError {
     AppError::new(ErrorCode::EngineMissing, Some(detail.into()))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn ready_engine(status: &EngineStatus) -> CommandResult<EnginePaths> {
     match status {
         EngineStatus::Ready(paths) => Ok(paths.clone()),
@@ -230,21 +230,21 @@ fn ready_engine(status: &EngineStatus) -> CommandResult<EnginePaths> {
 
 #[tauri::command]
 pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeResult> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         let status = app
             .try_state::<EngineStatus>()
-            .ok_or_else(|| deferred("Windows engine state is unavailable"))?;
+            .ok_or_else(|| deferred("desktop engine state is unavailable"))?;
         let paths = ready_engine(&status)?;
         let supervisor = app
             .try_state::<Arc<Supervisor>>()
-            .ok_or_else(|| deferred("Windows process supervisor is unavailable"))?;
+            .ok_or_else(|| deferred("desktop process supervisor is unavailable"))?;
         let supervisor = Arc::clone(supervisor.inner());
         let data = paths
             .yt_dlp
             .parent()
             .and_then(std::path::Path::parent)
-            .ok_or_else(|| deferred("Windows engine path is invalid"))?
+            .ok_or_else(|| deferred("desktop engine path is invalid"))?
             .to_path_buf();
         let resources = app
             .path()
@@ -289,7 +289,7 @@ pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeRe
             )
         })?;
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         let _ = (app, url);
         Err(deferred(
@@ -304,27 +304,27 @@ pub fn enqueue_download(
     app: AppHandle,
     request: DownloadRequest,
 ) -> CommandResult<String> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
         let _ = database;
         validate_request(&request)?;
         let queue = app
             .try_state::<Arc<QueueCoordinator>>()
-            .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?;
+            .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?;
         return queue.enqueue(request);
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     mutate(database.inner(), &app, |db| enqueue(db, request))
 }
 
 #[tauri::command]
 pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
-        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .pause(&id);
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         let _ = (app, id);
         Err(deferred("pause requires a running download engine"))
@@ -333,12 +333,12 @@ pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
 
 #[tauri::command]
 pub fn resume_download(app: AppHandle, id: String) -> CommandResult<()> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
-        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .resume(&id);
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         let _ = (app, id);
         Err(deferred("resume requires a running download engine"))
@@ -351,14 +351,14 @@ pub fn remove_download(
     app: AppHandle,
     id: String,
 ) -> CommandResult<()> {
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let _ = database;
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
-        .ok_or_else(|| deferred("Windows queue coordinator unavailable"))?
+        .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .remove(&id);
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     mutate(database.inner(), &app, |db| remove(db, id))
 }
 
@@ -439,7 +439,7 @@ pub fn set_settings(
     })
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn engine_update_error(reason: String) -> AppError {
     let lower = reason.to_ascii_lowercase();
     let code = if lower.contains("http")
@@ -455,7 +455,7 @@ fn engine_update_error(reason: String) -> AppError {
 }
 
 #[tauri::command]
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn engine_check_update(
     app: AppHandle,
     engine: State<'_, EngineStatus>,
@@ -473,7 +473,7 @@ pub fn engine_check_update(
 }
 
 #[tauri::command]
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub fn engine_update(
     app: AppHandle,
     engine: State<'_, EngineStatus>,
