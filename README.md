@@ -6,7 +6,7 @@ Zownload is an in-progress local media downloader built with Tauri, React, and R
 
 ## Windows installation
 
-When a Windows release is available, most users should choose the NSIS `*-setup.exe`; managed environments may use the WiX `.msi`. These installers are unsigned, so Windows SmartScreen may warn: choose **More info** and then **Run anyway** if you trust the download.
+When a Windows release is available, download it from [GitHub Releases](https://github.com/zahidzta/zownload_application/releases). Most users should choose the NSIS `*-setup.exe`; managed environments may use the WiX `.msi`. These installers are unsigned, so if Windows SmartScreen warns, choose **More info** and then **Run anyway** if you trust the download.
 
 The installer uses Microsoft's WebView2 bootstrapper. If the WebView2 Runtime is not already present, an Internet connection is required during installation so the bootstrapper can download it.
 

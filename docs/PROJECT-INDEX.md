@@ -15,7 +15,7 @@ Ranges are inclusive and refer to the current 827-line `PROJECT.md`. Read the ra
 9. Development order is Windows, Linux/macOS, Android, with an early Android feasibility spike (`44,384`).
 10. One user install artifact must need no terminal or extra dependency download (`200`).
 11. v1 is MP3/MP4, sequential playlists, optional ZIP, queue, history, metadata, two UI languages (`52-59`).
-12. Desktop executes engine copies in app data; Android saves to MediaStore Downloads (`184,349`).
+12. Desktop executes engine copies in app data without visible Windows console windows; Android saves to MediaStore Downloads (`184,349`).
 13. Gate 0A is a reproducible empty foundation; do not implement production UI there (`751`).
 14. Each stage needs tests, manual evidence where applicable, review, and explicit owner acceptance (`736-745`).
 15. Authority: contract files for fields/types; `PROJECT.md` for behavior; indexed design images for visuals. Report conflicts (`22`).

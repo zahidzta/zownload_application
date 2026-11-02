@@ -80,7 +80,7 @@ Verify `source.properties` reports Platform-Tools `37.0.1`, Command-Line Tools `
 | Android arm64-v8a | Android 7.0 / API 24 or later | [Tauri Android minimum](https://tauri.app/distribute/google-play/) and [config default](https://tauri.app/reference/config/#minsdkversion) are API 24. Set `bundle.android.minSdkVersion = 24`; build the skeleton in 0A-09 and test an API 24 device/emulator and a current Android version in the Android spike. |
 | Linux x64 | Ubuntu 24.04 LTS is the Gate 0A CI build baseline; minimum user distribution is set in Stage 4A | `PROJECT.md:208` explicitly defers the Linux support matrix to Stage 4A. [Tauri Linux prerequisites](https://tauri.app/start/prerequisites/#linux) vary by distribution. Gate 0A CI can prove this build baseline, not a portable minimum. |
 
-These OS minima are the proposed `PROJECT.md:208,715` baseline checked against framework documentation. Device/install proof is still required by those lines and the Gate 0A/0C checkpoints; a version pin alone does not prove runtime support. The Windows `offlineInstaller` setting also follows `PROJECT.md:200`'s one-artifact, no-extra-download requirement.
+These OS minima are the proposed `PROJECT.md:208,715` baseline checked against framework documentation. Device/install proof is still required by those lines and the Gate 0A/0C checkpoints; a version pin alone does not prove runtime support. The selected Windows `downloadBootstrapper` mode keeps WebView2 payloads out of the installers; Internet is required only when the runtime is absent, as documented in `PROJECT.md:200` and the Windows installation instructions.
 
 ## Local installation evidence on 2026-10-17
 

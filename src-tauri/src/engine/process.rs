@@ -31,7 +31,8 @@ use windows_sys::Win32::{
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
         },
         Threading::{
-            GetCurrentProcess, OpenThread, ResumeThread, CREATE_SUSPENDED, THREAD_SUSPEND_RESUME,
+            GetCurrentProcess, OpenThread, ResumeThread, CREATE_NO_WINDOW, CREATE_SUSPENDED,
+            THREAD_SUSPEND_RESUME,
         },
     },
 };
@@ -277,7 +278,7 @@ impl Supervisor {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .creation_flags(CREATE_SUSPENDED);
+            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW);
         let mut child = command.spawn().map_err(RunError::Io)?;
         if let Err(error) = job.assign(child.as_raw_handle() as HANDLE) {
             let _ = child.kill();

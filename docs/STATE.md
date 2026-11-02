@@ -3,17 +3,21 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3B was accepted and the Gate 3C plan was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md) and [Gate 3C plan](gates/gate-3c.md).
-- **Next task:** After PR #129 merges, clear the old `app-v0.0.1` assets and rerun 3C-02 V1 plus 3C-03 V2 with `downloadBootstrapper`; the prior signed V1/V2 used `offlineInstaller`. Then resume 3C-04; keep the draft unpublished.
+- **Next task:** After PR #130 merges, clear the pre-fix assets from the unpublished `app-v0.0.1` draft and rerun signed V1 plus installed V2 with `downloadBootstrapper`. Then review the updated Gate 3C checkpoint for owner acceptance.
 
 ## Current Gate 3C completions
 
 - Completed 3C-01: Owner accepted the Windows-only AC-23/AC-36 plan; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
-- Completed 3C-02/03-fix: Preserve verified installer lifetime and wait for ZIP worker cleanup; commit `50df838`; local foundation and focused Windows checks passed. [V2 result recorded below](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
-- Completed 3C-03-log-fix: Isolate installer request logs per scenario; commit `a108e86`; regression passed in Windows PowerShell and PowerShell 7. [V2 result recorded here](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
-- Completed 3C-03-exit-fix: Correct verifier exit status after expected tamper rejection; commit `65e9d50`; success/failure regressions passed in PowerShell 5.1 and 7. [Both installer scenarios passed in V2 run 41372393925; owner review pending](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
+- Completed 3C-02/03-fix: Preserve verified installer lifetime and wait for ZIP worker cleanup; commit `50df838`; local foundation and focused Windows checks passed. [Latest V2 result](gates/evidence/3c/3c-03.md#latest-downloadbootstrapper-v2-result--passed).
+- Completed 3C-03-log-fix: Isolate installer request logs per scenario; commit `a108e86`; regression passed in Windows PowerShell and PowerShell 7. [Latest V2 result](gates/evidence/3c/3c-03.md#latest-downloadbootstrapper-v2-result--passed).
+- Completed 3C-03-exit-fix: Correct verifier exit status after expected tamper rejection; commit `65e9d50`; success/failure regressions passed in PowerShell 5.1 and 7. [Both installer scenarios passed in the historical V2 run](gates/evidence/3c/3c-03.md#earlier-automatic-v2-result--offlineinstaller).
 - Completed 3C-02-v1-url-fix: Resolve Tauri GitHub API asset IDs to draft package names; commit `a155a14`; focused regression passed in PowerShell 5.1 and 7. [Correction and production rerun evidence](gates/evidence/3c/3c-02.md#v1-asset-url-verifier-correction--2026-11-02).
 - Completed 3C-02-V1: Verify signed Windows x64 NSIS/MSI packages and bundle-aware metadata; run `41393046389` on commit `d18b552`; [production evidence](gates/evidence/3c/3c-02.md#v1-production-draft-run--passed).
-- Completed 3C-02-size-change: Select `downloadBootstrapper`; PR build `41484361422` measured unsigned NSIS 33.90 MB and MSI 39.32 MB; commit `4251b8e`; [size evidence](gates/evidence/3c/3c-02.md#pull-request-build-size-measurement--2026-11-02). Signed V1/V2 reruns remain pending.
+- Completed 3C-02-size-change: Select `downloadBootstrapper`; PR build `41484361422` measured unsigned NSIS 33.90 MB and MSI 39.32 MB; commit `4251b8e`; [size evidence](gates/evidence/3c/3c-02.md#pull-request-build-size-measurement--2026-11-02).
+- Completed 3C-02-V1-rerun: Production-signed NSIS/MSI assets, bundle metadata, signature verification and tamper rejection passed in run `41496741229` on `dfaa56d`; [V1 evidence](gates/evidence/3c/3c-02.md#signed-production-v1-rerun-with-downloadbootstrapper--passed).
+- Completed 3C-03-V2-rerun: Clean install, same-format updater, relaunch/version and uninstall passed for NSIS/MSI in run `41500715879` on `dfaa56d`; [V2 evidence](gates/evidence/3c/3c-03.md#latest-downloadbootstrapper-v2-result--passed).
+- Completed 3C-04-docs: Windows install instructions, desktop provenance and criterion mapping recorded; initial V3 checks passed; commit `be8e9fc`; [checkpoint](gates/evidence/3c/checkpoint.md) and [provenance](gates/evidence/3c/release-provenance.md). Acceptance is held for the console-window follow-up and post-merge V1/V2 reruns.
+- Completed 3C-04-console-fix: Suppress Windows engine console windows during analysis/download; commit `bde48f6`; process-tree regression and foundation verification passed. [Follow-up evidence](gates/evidence/3c/3c-03.md#owner-reported-console-window--fix-verified-locally).
 
 ## Accepted gates
 
