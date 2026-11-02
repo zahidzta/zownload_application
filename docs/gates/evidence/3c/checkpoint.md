@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- SPDX-FileCopyrightText: 2026 zahidzta -->
 
-# Gate 3C checkpoint — owner review pending
+# Gate 3C checkpoint — accepted 2026-11-02
 
-Gate 3C's Windows x64 V1 and V2 workflows passed again on 2026-11-02 after PR #130 merged the console-window fix at `c586c90c7b4311dd6e3d105052e271ab12dc86d1`. The owner-created `app-v0.0.1` draft now contains the post-fix signed V1 assets and remains unpublished. This checkpoint covers only Gate 3C's Windows and desktop evidence; the global cross-platform criteria remain open. Owner acceptance is still pending.
+Gate 3C's Windows x64 V1 and V2 workflows passed again on 2026-11-02 after PR #130 merged the console-window fix at `c586c90c7b4311dd6e3d105052e271ab12dc86d1`. The owner-created `app-v0.0.1` draft contains the post-fix signed V1 assets and remains unpublished. This checkpoint covers only Gate 3C's Windows and desktop evidence; the global cross-platform criteria remain open. The owner accepted this checkpoint on 2026-11-02 and authorized planning Gate 4A.
 
 | Criterion | Gate 3C evidence | Gate result |
 |---|---|---|
@@ -27,4 +27,4 @@ Gate 3C's Windows x64 V1 and V2 workflows passed again on 2026-11-02 after PR #1
 - Android distribution remains blocked until the youtubedl-android binary sources, exact build inputs, notices, and transitive license audit are established. Do not distribute an Android build while this blocker remains; see [STATE.md](../../../STATE.md#release-blocker--android-distribution).
 - The public-release source/compliance bundle, legal review, and remaining release checks listed in [STATE.md](../../../STATE.md#release-blocker--android-distribution) remain required. Gate 3C did not create or publish a release.
 
-**Owner decision:** Gate 3C checkpoint acceptance is pending. Do not start Gate 4A until the owner accepts this checkpoint.
+**Owner decision:** Gate 3C checkpoint accepted on 2026-11-02. The draft release remains unpublished; Gate 4A planning may begin.
