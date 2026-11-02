@@ -3,7 +3,7 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3B was accepted and the Gate 3C plan was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md) and [Gate 3C plan](gates/gate-3c.md).
-- **Next task:** 3C-04 — Windows install documentation, desktop release provenance/compliance evidence, and owner checkpoint. V1 passed in run `41393046389`; V2 passed in run `41372393925`. Review both records and the 3C-02/03 corrections during the checkpoint; keep draft `app-v0.0.1` unpublished.
+- **Next task:** After PR #129 merges, clear the old `app-v0.0.1` assets and rerun 3C-02 V1 plus 3C-03 V2 with `downloadBootstrapper`; the prior signed V1/V2 used `offlineInstaller`. Then resume 3C-04; keep the draft unpublished.
 
 ## Current Gate 3C completions
 
@@ -13,6 +13,7 @@
 - Completed 3C-03-exit-fix: Correct verifier exit status after expected tamper rejection; commit `65e9d50`; success/failure regressions passed in PowerShell 5.1 and 7. [Both installer scenarios passed in V2 run 41372393925; owner review pending](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
 - Completed 3C-02-v1-url-fix: Resolve Tauri GitHub API asset IDs to draft package names; commit `a155a14`; focused regression passed in PowerShell 5.1 and 7. [Correction and production rerun evidence](gates/evidence/3c/3c-02.md#v1-asset-url-verifier-correction--2026-11-02).
 - Completed 3C-02-V1: Verify signed Windows x64 NSIS/MSI packages and bundle-aware metadata; run `41393046389` on commit `d18b552`; [production evidence](gates/evidence/3c/3c-02.md#v1-production-draft-run--passed).
+- Completed 3C-02-size-change: Select `downloadBootstrapper`; PR build `41484361422` measured unsigned NSIS 33.90 MB and MSI 39.32 MB; commit `4251b8e`; [size evidence](gates/evidence/3c/3c-02.md#pull-request-build-size-measurement--2026-11-02). Signed V1/V2 reruns remain pending.
 
 ## Accepted gates
 
