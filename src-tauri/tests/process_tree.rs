@@ -17,7 +17,10 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::{CloseHandle, WAIT_OBJECT_0},
-    System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION},
+    System::{
+        Console::GetConsoleWindow,
+        Threading::{OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION},
+    },
 };
 use zownload_lib::engine::process::{RunError, Supervisor};
 
@@ -90,6 +93,48 @@ fn assert_gone(ids: &[u32]) {
     assert!(
         ids.iter().all(|id| !alive(*id)),
         "descendant survived: {ids:?}"
+    );
+}
+
+#[test]
+fn windows_supervisor_hides_console_for_engine_process() {
+    let executable = std::env::current_exe().unwrap();
+    let args = [
+        OsString::from("--ignored"),
+        OsString::from("--exact"),
+        OsString::from("console_window_probe"),
+        OsString::from("--nocapture"),
+    ];
+    let output = Supervisor::install()
+        .unwrap()
+        .run(
+            &executable,
+            &args,
+            Duration::from_secs(10),
+            4096,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+
+    assert!(output.status.success(), "console probe failed: {output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("console-window=absent"),
+        "supervised engine process had an attached console: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+#[ignore = "launched by windows_supervisor_hides_console_for_engine_process"]
+fn console_window_probe() {
+    let window = unsafe { GetConsoleWindow() };
+    println!(
+        "console-window={}",
+        if window.is_null() {
+            "absent"
+        } else {
+            "present"
+        }
     );
 }
 

@@ -3,7 +3,7 @@
 
 # Gate 3C checkpoint — owner review pending
 
-Gate 3C completed its Windows x64 verification on 2026-11-02. The owner-created `app-v0.0.1` release remains a draft and unpublished. This checkpoint covers only Gate 3C's Windows and desktop evidence; the global cross-platform criteria remain open.
+Gate 3C's Windows x64 V1/V2 workflows passed on 2026-11-02. The owner then reported that the installed app opened a terminal window during analysis and downloads. A local process-launch fix and regression have passed; the production draft still contains the pre-fix app, so checkpoint acceptance is held until post-merge V1/V2 reruns. The owner-created `app-v0.0.1` release remains a draft and unpublished. This checkpoint covers only Gate 3C's Windows and desktop evidence; the global cross-platform criteria remain open.
 
 | Criterion | Gate 3C evidence | Gate result |
 |---|---|---|
@@ -19,6 +19,7 @@ Gate 3C completed its Windows x64 verification on 2026-11-02. The owner-created 
 - The focused verifier regression passed in Windows PowerShell 5.1 and PowerShell 7 using the pinned Minisign 0.9 installer: valid signed fixtures and rejected tampering returned success, while invalid metadata and signatures returned failure. Bundle asset-ID URL resolution passed in both shells.
 - `powershell -NoProfile -File scripts/verify-foundation.ps1` passed the frontend, contract, Rust unit/integration, and nine-image design checks. `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` passed.
 - Relative Markdown targets resolved in all seven changed documents; the README installation steps and desktop provenance links were reviewed against the approved spec and source records; `git diff --check` passed.
+- After the console issue was reported, `cargo test --manifest-path src-tauri/Cargo.toml --test process_tree` passed, including the new no-console regression, and foundation verification passed again on the fix.
 
 ## Carry-forward items
 
