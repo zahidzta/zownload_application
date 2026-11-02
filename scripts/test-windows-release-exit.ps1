@@ -51,13 +51,42 @@ try {
 # SPDX-FileCopyrightText: 2026 zahidzta
 param($Verifier, $BundleRoot, $ConfigPath, $MinisignPath, $LatestJsonPath)
 $ErrorActionPreference = 'Stop'
-& $Verifier -BundleRoot $BundleRoot -ConfigPath $ConfigPath -MinisignPath $MinisignPath -LatestJsonPath $LatestJsonPath
+$nsis = Get-ChildItem -LiteralPath (Join-Path $BundleRoot 'nsis') -File -Filter '*-setup.exe' | Select-Object -First 1
+$msi = Get-ChildItem -LiteralPath (Join-Path $BundleRoot 'msi') -File -Filter '*.msi' | Select-Object -First 1
+$assetMap = @{
+    '1001' = $nsis.Name
+    '1002' = $msi.Name
+}
+& $Verifier -BundleRoot $BundleRoot -ConfigPath $ConfigPath -MinisignPath $MinisignPath `
+    -LatestJsonPath $LatestJsonPath -ReleaseAssetMap $assetMap
 Write-Output 'Verifier returned to caller.'
 if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }
 '@ | Set-Content -LiteralPath $wrapperPath -Encoding utf8
 
     Assert-VerifierExit 'valid-packages-and-rejected-tampering' $true 'Verifier returned to caller.'
     $metadata = Join-Path $testRoot 'latest.json'
+    $nsisSignature = [IO.File]::ReadAllText($nsisPath + '.sig').Trim()
+    $msiSignature = [IO.File]::ReadAllText($msiPath + '.sig').Trim()
+    @{
+        version = '0.0.1'
+        platforms = @{
+            'windows-x86_64' = @{
+                signature = $msiSignature
+                url = 'https://api.github.com/repos/zahidzta/zownload_application/releases/assets/1002'
+            }
+            'windows-x86_64-nsis' = @{
+                signature = $nsisSignature
+                url = 'https://api.github.com/repos/zahidzta/zownload_application/releases/assets/1001'
+            }
+            'windows-x86_64-msi' = @{
+                signature = $msiSignature
+                url = 'https://api.github.com/repos/zahidzta/zownload_application/releases/assets/1002'
+            }
+        }
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadata -Encoding utf8
+    Assert-VerifierExit 'bundle-asset-api-urls-resolve-to-matching-packages' $true `
+        'latest.json contains matching NSIS and MSI entries' $metadata
+
     '{"version":"9.9.9"}' | Set-Content -LiteralPath $metadata -Encoding utf8
     Assert-VerifierExit 'invalid-metadata-after-signature-checks' $false 'does not match package version' $metadata
     [IO.File]::WriteAllText($nsisPath, 'tampered package')
