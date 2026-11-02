@@ -3,7 +3,7 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3B was accepted and the Gate 3C plan was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md) and [Gate 3C plan](gates/gate-3c.md).
-- **Next task:** Review the Gate 3C checkpoint for owner acceptance; keep the `app-v0.0.1` draft unpublished. The bootstrapper V1/V2 reruns and 3C-04 evidence are recorded below.
+- **Next task:** After PR #130 merges, clear the pre-fix assets from the unpublished `app-v0.0.1` draft and rerun signed V1 plus installed V2 with `downloadBootstrapper`. Then review the updated Gate 3C checkpoint for owner acceptance.
 
 ## Current Gate 3C completions
 
@@ -16,7 +16,8 @@
 - Completed 3C-02-size-change: Select `downloadBootstrapper`; PR build `41484361422` measured unsigned NSIS 33.90 MB and MSI 39.32 MB; commit `4251b8e`; [size evidence](gates/evidence/3c/3c-02.md#pull-request-build-size-measurement--2026-11-02).
 - Completed 3C-02-V1-rerun: Production-signed NSIS/MSI assets, bundle metadata, signature verification and tamper rejection passed in run `41496741229` on `dfaa56d`; [V1 evidence](gates/evidence/3c/3c-02.md#signed-production-v1-rerun-with-downloadbootstrapper--passed).
 - Completed 3C-03-V2-rerun: Clean install, same-format updater, relaunch/version and uninstall passed for NSIS/MSI in run `41500715879` on `dfaa56d`; [V2 evidence](gates/evidence/3c/3c-03.md#latest-downloadbootstrapper-v2-result--passed).
-- Completed 3C-04: Windows install instructions, desktop provenance and criterion mapping recorded; V3 checks passed; commit `be8e9fc`; [checkpoint](gates/evidence/3c/checkpoint.md) and [provenance](gates/evidence/3c/release-provenance.md). Owner acceptance pending.
+- Completed 3C-04-docs: Windows install instructions, desktop provenance and criterion mapping recorded; initial V3 checks passed; commit `be8e9fc`; [checkpoint](gates/evidence/3c/checkpoint.md) and [provenance](gates/evidence/3c/release-provenance.md). Acceptance is held for the console-window follow-up and post-merge V1/V2 reruns.
+- Completed 3C-04-console-fix: Suppress Windows engine console windows during analysis/download; commit `bde48f6`; process-tree regression and foundation verification passed. [Follow-up evidence](gates/evidence/3c/3c-03.md#owner-reported-console-window--fix-verified-locally).
 
 ## Accepted gates
 
