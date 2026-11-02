@@ -401,8 +401,15 @@ export function createDownloadFlowStore(transport: AppTransport) {
       set({ appUpdateBusy: true, appUpdateError: null })
       try {
         await transport.call('app_update_install', {})
-        const info = get().appUpdateInfo
-        if (info?.latest) set({ appUpdateInfo: { ...info, current: info.latest, updateAvailable: false } })
+        // A Linux .deb action opens the matching package download; the old app
+        // remains installed until the user completes that package update.
+        try {
+          const appUpdateInfo = await transport.call('app_update_check', {})
+          set({ appUpdateInfo, appUpdateError: appUpdateInfo.error
+            ? { code: 'unknown', detail: appUpdateInfo.error } : null })
+        } catch {
+          // Keep the saved offer if the post-action status refresh fails.
+        }
       } catch (reason) {
         set({ appUpdateError: appError(reason) })
       } finally {

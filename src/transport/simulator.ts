@@ -156,7 +156,8 @@ export type MockOutcome = 'success' | 'partial' | 'failed'
 
 /** Offline queue lifecycle. The clock owns every transition, including event delivery. */
 export function createSimulatorTransport({ clock = systemClock, storage = createMemoryMockStorage(), outcomes = {}, availableVideoHeights = {}, engineUpdateFails = false,
-  appUpdateAvailable = false, appUpdateVersion = '0.0.2', appUpdateCheckFails = false, appUpdateInstallFails = false }: {
+  appUpdateAvailable = false, appUpdateVersion = '0.0.2', appUpdateCheckFails = false, appUpdateInstallFails = false,
+  appUpdateInstallOpensLink = false }: {
   clock?: SimulatorClock
   storage?: MockStorage
   outcomes?: Record<string, MockOutcome>
@@ -166,6 +167,7 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
   appUpdateVersion?: string
   appUpdateCheckFails?: boolean
   appUpdateInstallFails?: boolean
+  appUpdateInstallOpensLink?: boolean
 } = {}): AppTransport {
   const saved = storage.load()
   const queue: QueueItem[] = saved?.queue.map(copyQueueItem) ?? []
@@ -411,6 +413,7 @@ export function createSimulatorTransport({ clock = systemClock, storage = create
           throw syntheticError('unknown', 'No app update is available.')
         }
         if (appUpdateInstallFails) throw syntheticError('unknown', 'Mock app update installation failed.')
+        if (appUpdateInstallOpensLink) return undefined as Commands[K]['result']
         appVersion = latestAppVersion
         appUpdateIsAvailable = false
         appUpdateError = null
