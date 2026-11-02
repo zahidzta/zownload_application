@@ -528,7 +528,7 @@ pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
     ))
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 fn app_update_error(reason: String) -> AppError {
     AppError::new(ErrorCode::Unknown, Some(reason))
 }
@@ -549,7 +549,23 @@ pub async fn app_update_install(app: AppHandle) -> CommandResult<()> {
         .map_err(app_update_error)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn app_update_check(app: AppHandle) -> CommandResult<AppUpdateInfo> {
+    crate::app_update::check_daily(&app)
+        .await
+        .map_err(app_update_error)
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn app_update_install(app: AppHandle) -> CommandResult<()> {
+    crate::app_update::install_available(&app)
+        .await
+        .map_err(app_update_error)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 #[tauri::command]
 pub fn app_update_check() -> CommandResult<AppUpdateInfo> {
     Err(deferred(
@@ -557,7 +573,7 @@ pub fn app_update_check() -> CommandResult<AppUpdateInfo> {
     ))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 #[tauri::command]
 pub fn app_update_install() -> CommandResult<()> {
     Err(deferred(

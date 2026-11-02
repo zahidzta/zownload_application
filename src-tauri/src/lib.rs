@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 // Keep the shared contract in the Rust build before commands are implemented.
 pub mod android_spike;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "linux"))]
 pub mod app_update;
 #[cfg(not(target_os = "android"))]
 mod commands;
@@ -107,7 +107,7 @@ pub fn run() {
             #[cfg(not(any(target_os = "windows", target_os = "linux")))]
             let _ = (window, event);
         });
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(target_os = "android")]
     let builder = builder.invoke_handler(tauri::generate_handler![
