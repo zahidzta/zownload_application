@@ -62,6 +62,11 @@ function Get-OnlyPackage([string]$Directory, [string]$Filter) {
     return $packages[0]
 }
 
+function Get-UpdaterScenarioLog([string]$Path, [int]$StartLine) {
+    if (!(Test-Path -LiteralPath $Path)) { return '' }
+    return (Get-Content -LiteralPath $Path | Select-Object -Skip $StartLine) -join "`n"
+}
+
 function Get-ZownloadInstallRecords {
     $uninstallRoots = @(
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
@@ -305,6 +310,9 @@ try {
         Invoke-Installer $scenario.Previous $scenario.Format 'install' $PreviousVersion
         $previousRecord = Wait-ForInstalledVersion $PreviousVersion
         $previousExe = Get-ZownloadExecutable $previousRecord
+        # Both scenarios share the fixture server. Only requests made after
+        # this app launch belong to the current installer-format check.
+        $scenarioLogStart = @(Get-Content -LiteralPath $serverLog).Count
         $activeApp = Start-Process -FilePath $previousExe.FullName -WorkingDirectory $previousExe.DirectoryName -PassThru
         $window = Get-AppWindow $activeApp
         $settingsButton = Find-Button $window 'Settings' 45
@@ -317,7 +325,7 @@ try {
         $deadline = [DateTime]::UtcNow.AddSeconds(120)
         do {
             Start-Sleep -Seconds 2
-            $serverRequests = if (Test-Path -LiteralPath $serverLog) { Get-Content -LiteralPath $serverLog -Raw } else { '' }
+            $serverRequests = Get-UpdaterScenarioLog $serverLog $scenarioLogStart
             $requestedExpected = $serverRequests.Contains($expectedRequest)
         } while (!$requestedExpected -and [DateTime]::UtcNow -lt $deadline)
         if (!$requestedExpected) {
@@ -327,9 +335,6 @@ try {
             throw "$($scenario.Format) requested the other installer format."
         }
 
-        $serverRequests = if (Test-Path -LiteralPath $serverLog) {
-            (Get-Content -LiteralPath $serverLog -Tail 10) -join ' | '
-        } else { '(no updater server log)' }
         $appProcess = if ($activeApp) {
             Get-Process -Id $activeApp.Id -ErrorAction SilentlyContinue
         } else { $null }
@@ -345,9 +350,7 @@ try {
                 $candidateRecord = Get-ZownloadInstallRecord $CandidateVersion
                 if ($candidateRecord) { break }
 
-                $serverRequests = if (Test-Path -LiteralPath $serverLog) {
-                    Get-Content -LiteralPath $serverLog -Raw
-                } else { '' }
+                $serverRequests = Get-UpdaterScenarioLog $serverLog $scenarioLogStart
                 $transferComplete = $serverRequests.Contains("TRANSFER $expectedRequest complete bytes=")
                 if ($transferComplete) { break }
                 Start-Sleep -Seconds 2
@@ -362,9 +365,8 @@ try {
             }
         }
         catch {
-            $serverRequests = if (Test-Path -LiteralPath $serverLog) {
-                (Get-Content -LiteralPath $serverLog -Tail 20) -join ' | '
-            } else { '(no updater server log)' }
+            $serverRequests = ((Get-UpdaterScenarioLog $serverLog $scenarioLogStart) -split "`n" |
+                Select-Object -Last 20) -join ' | '
             $installDiagnostics = Get-UpgradeInstallDiagnostics $activeApp
             throw "$($_.Exception.Message) $installDiagnostics Latest updater server log: $serverRequests."
         }

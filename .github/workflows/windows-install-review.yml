@@ -69,6 +69,10 @@ jobs:
           ref: ${{ inputs.previous_ref }}
           path: previous
 
+      - name: Check updater scenario log isolation
+        shell: pwsh
+        run: ./candidate/scripts/test-windows-upgrade-log.ps1
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
