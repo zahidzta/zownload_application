@@ -1132,6 +1132,8 @@ mod tests {
             yt_dlp: "C:/Data/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/ffmpeg.exe".into(),
             quickjs: "C:/Data/qjs.exe".into(),
+            #[cfg(target_os = "linux")]
+            ffprobe: "C:/Data/ffprobe".into(),
         };
         let request = DownloadRequest {
             url: "https://example.com/watch?v=1".into(),
@@ -1260,6 +1262,8 @@ mod tests {
             yt_dlp: "C:/Data/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/ffmpeg.exe".into(),
             quickjs: "C:/Data/qjs.exe".into(),
+            #[cfg(target_os = "linux")]
+            ffprobe: "C:/Data/ffprobe".into(),
         };
         let args = download_args(
             &paths,
@@ -1285,6 +1289,8 @@ mod tests {
             yt_dlp: "C:/Data/engine/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/engine/ffmpeg.exe".into(),
             quickjs: "C:/Data/engine/qjs.exe".into(),
+            #[cfg(target_os = "linux")]
+            ffprobe: "C:/Data/engine/ffprobe".into(),
         };
         let source = Source {
             id: "one".into(),

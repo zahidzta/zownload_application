@@ -545,6 +545,8 @@ pub(crate) fn activate_pending(data: &Path) -> Result<Option<String>, String> {
         yt_dlp: candidate,
         ffmpeg: active.ffmpeg,
         quickjs: active.quickjs,
+        #[cfg(target_os = "linux")]
+        ffprobe: active.ffprobe,
     };
     if let Err(reason) = replace_dir(data, &source, &promoted, &expected, |paths, version| {
         super::probe_version(&paths.yt_dlp, version)
@@ -624,6 +626,8 @@ pub(crate) fn restore_baseline_locked(
         yt_dlp: bundled.yt_dlp,
         ffmpeg: active.ffmpeg,
         quickjs: active.quickjs,
+        #[cfg(target_os = "linux")]
+        ffprobe: active.ffprobe,
     };
     replace_dir(
         data,

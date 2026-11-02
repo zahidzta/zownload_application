@@ -25,6 +25,8 @@ fn metadata_analysis_launches_with_checked_runtime_and_no_download() {
         yt_dlp: stub,
         ffmpeg: root.join("ffmpeg.exe"),
         quickjs: root.join("qjs.exe"),
+        #[cfg(target_os = "linux")]
+        ffprobe: root.join("ffprobe"),
     };
     let url = "https://www.youtube.com/watch?v=uW13KuRrg1g";
     let result = analysis::analyze(

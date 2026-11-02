@@ -512,19 +512,19 @@ pub fn engine_update(
     Ok(status)
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 #[tauri::command]
 pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
-        "engine updates are currently supported on Windows only",
+        "engine updates are currently supported on Windows and Linux only",
     ))
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
 #[tauri::command]
 pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
-        "engine updates are currently supported on Windows only",
+        "engine updates are currently supported on Windows and Linux only",
     ))
 }
 
@@ -734,7 +734,7 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
         {
             assert_eq!(
                 engine_check_update().unwrap_err().code,

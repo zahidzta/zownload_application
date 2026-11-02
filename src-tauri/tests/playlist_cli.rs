@@ -45,6 +45,8 @@ fn four_profiles_run_entries_in_order_and_preserve_colliding_outputs() {
         yt_dlp: stub,
         ffmpeg,
         quickjs: root.join("qjs.exe"),
+        #[cfg(target_os = "linux")]
+        ffprobe: root.join("ffprobe"),
     };
     let trace = root.join("trace.txt");
     std::env::set_var("ZOWNLOAD_PLAYLIST_STUB_AUDIO", &audio);
