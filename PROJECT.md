@@ -197,7 +197,7 @@ yt-dlp is powerful but is a command-line tool that needs extra binaries (ffmpeg,
 
 | ID | Requirement | Status |
 |---|---|---|
-| NFR-01 | **Easy installation:** installing one concrete OS/architecture combination requires one appropriate artifact, no terminal and no extra dependency downloads. A release may contain alternatives for different architectures or package formats. | `[CONFIRMED]` |
+| NFR-01 | **Easy installation:** installing one concrete OS/architecture combination requires one appropriate artifact and no terminal. On Windows, if WebView2 Runtime is absent, the installer automatically fetches it with Microsoft's bootstrapper; Internet is required for that step, with no separate manual dependency setup. A release may contain alternatives for different architectures or package formats. | `[CONFIRMED]` |
 | NFR-02 | **Resilience to site changes:** yt-dlp updatable without a new app release. | `[CONFIRMED]` |
 | NFR-03 | **Fault tolerance:** one failing playlist element never stops the rest. | `[CONFIRMED]` |
 | NFR-04 | **Storage efficiency:** ZIP mode retains the partial archive and only the temporary work files needed for the current entry, including source, conversion output, and engine intermediates. After an entry is verified in the archive, its work files are removed before the next entry starts. It never retains a complete second copy of the playlist. Large playlists can be many GB; mobile storage is limited. | `[CONFIRMED]` |
@@ -301,7 +301,7 @@ yt-dlp is powerful but is a command-line tool that needs extra binaries (ffmpeg,
 Explicitly **out of v1** `[CONFIRMED]`: `.rpm`, Flatpak, Snap, Microsoft Store/MSIX, Windows ARM, Linux ARM, macOS universal binary, Android AAB, `armeabi-v7a`, `x86_64` Android, and any store distribution. They can be added later without changing the architecture. In CI, restrict bundle targets explicitly so no extra format is published by accident.
 
 **Install steps to document in the README** `[CONFIRMED]`:
-- **Windows:** most users download `*-setup.exe`; managed environments may use `.msi`. Run the chosen installer; SmartScreen warns (unsigned) → More info → Run anyway. Building MSI requires Windows VBSCRIPT support in CI.
+- **Windows:** most users download `*-setup.exe`; managed environments may use `.msi`. Run the chosen installer; SmartScreen warns (unsigned) → More info → Run anyway. If WebView2 Runtime is absent, the installer downloads it through Microsoft's bootstrapper, so Internet is required during that step. Building MSI requires Windows VBSCRIPT support in CI.
 - **macOS:** download the `.dmg` (Apple Silicon or Intel), drag to Applications; Gatekeeper blocks first launch → System Settings → Privacy & Security → Open Anyway (right-click → Open no longer works on recent macOS). Document with screenshots. Paid Apple Developer account + notarization is a possible later improvement `[PENDING]`.
 - **Linux:** both are shipped. **AppImage:** works on most distros; make it executable and run it; some distros (e.g. Ubuntu 22.04+) need `libfuse2`. **`.deb`:** for Debian/Ubuntu and derivatives; double-click to install through the software center (needs administrator rights).
 - **Android:** download the `arm64-v8a` `.apk` in the browser; allow "Install unknown apps" once; Play Protect may warn → Install anyway. Devices that are not ARM64 are unsupported in v1. **All release APKs must be signed with the same keystore**, otherwise updates fail; back the keystore up.
