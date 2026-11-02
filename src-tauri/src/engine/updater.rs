@@ -471,11 +471,26 @@ fn replace_dir(
         fs::copy(&source.yt_dlp, &target.yt_dlp).map_err(|error| error.to_string())?;
         fs::copy(&source.ffmpeg, &target.ffmpeg).map_err(|error| error.to_string())?;
         fs::copy(&source.quickjs, &target.quickjs).map_err(|error| error.to_string())?;
+        #[cfg(target_os = "linux")]
+        fs::copy(&source.ffprobe, &target.ffprobe).map_err(|error| error.to_string())?;
         if hash_file(&target.yt_dlp)? != expected_hash
             || hash_file(&target.ffmpeg)? != BASELINE_HASHES.ffmpeg
             || hash_file(&target.quickjs)? != BASELINE_HASHES.quickjs
         {
             return Err("staged engine checksum mismatch".into());
+        }
+        #[cfg(target_os = "linux")]
+        if hash_file(&target.ffprobe)? != BASELINE_HASHES.ffprobe {
+            return Err("staged ffprobe checksum mismatch".into());
+        }
+        #[cfg(target_os = "linux")]
+        for path in [
+            &target.yt_dlp,
+            &target.ffmpeg,
+            &target.quickjs,
+            &target.ffprobe,
+        ] {
+            super::set_executable(path)?;
         }
         check(&target, &manifest.yt_dlp.version)?;
         let mut file =
@@ -627,7 +642,7 @@ pub(crate) fn restore_baseline_locked(
         ffmpeg: active.ffmpeg,
         quickjs: active.quickjs,
         #[cfg(target_os = "linux")]
-        ffprobe: active.ffprobe,
+        ffprobe: bundled.ffprobe,
     };
     replace_dir(
         data,
