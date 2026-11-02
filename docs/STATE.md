@@ -3,15 +3,16 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3B was accepted and the Gate 3C plan was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md) and [Gate 3C plan](gates/gate-3c.md).
-- **Next task:** Owner review of the 3C-02/03 fixes and passing V2 run 41372393925. V1 run 41385764585 exposed an API asset-ID URL assumption, corrected in commit `a155a14`; after merge, clear the five assets from draft `431050689` and rerun V1. Record both results before 3C-04.
+- **Next task:** 3C-04 — Windows install documentation, desktop release provenance/compliance evidence, and owner checkpoint. V1 passed in run `41393046389`; V2 passed in run `41372393925`. Review both records and the 3C-02/03 corrections during the checkpoint; keep draft `app-v0.0.1` unpublished.
 
 ## Current Gate 3C completions
 
 - Completed 3C-01: Owner accepted the Windows-only AC-23/AC-36 plan; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
-- Completed 3C-02/03-fix: Preserve verified installer lifetime and wait for ZIP worker cleanup; commit `50df838`; local foundation and focused Windows checks passed. [Evidence; V2 remains pending](gates/evidence/3c/3c-03.md#local-correction-verification--2026-11-01).
-- Completed 3C-03-log-fix: Isolate installer request logs per scenario; commit `a108e86`; regression passed in Windows PowerShell and PowerShell 7. [Evidence; NSIS passed, full V2 pending](gates/evidence/3c/3c-03.md#scenario-log-isolation-correction).
+- Completed 3C-02/03-fix: Preserve verified installer lifetime and wait for ZIP worker cleanup; commit `50df838`; local foundation and focused Windows checks passed. [V2 result recorded below](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
+- Completed 3C-03-log-fix: Isolate installer request logs per scenario; commit `a108e86`; regression passed in Windows PowerShell and PowerShell 7. [V2 result recorded here](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
 - Completed 3C-03-exit-fix: Correct verifier exit status after expected tamper rejection; commit `65e9d50`; success/failure regressions passed in PowerShell 5.1 and 7. [Both installer scenarios passed in V2 run 41372393925; owner review pending](gates/evidence/3c/3c-03.md#latest-automatic-v2-result--owner-review-pending).
-- Completed 3C-02-v1-url-fix: Resolve Tauri GitHub API asset IDs to draft package names; commit `a155a14`; focused regression passed in PowerShell 5.1 and 7. [V1 correction evidence](gates/evidence/3c/3c-02.md#v1-asset-url-verifier-correction--2026-11-02); production V1 rerun pending.
+- Completed 3C-02-v1-url-fix: Resolve Tauri GitHub API asset IDs to draft package names; commit `a155a14`; focused regression passed in PowerShell 5.1 and 7. [Correction and production rerun evidence](gates/evidence/3c/3c-02.md#v1-asset-url-verifier-correction--2026-11-02).
+- Completed 3C-02-V1: Verify signed Windows x64 NSIS/MSI packages and bundle-aware metadata; run `41393046389` on commit `d18b552`; [production evidence](gates/evidence/3c/3c-02.md#v1-production-draft-run--passed).
 
 ## Accepted gates
 
