@@ -40,13 +40,23 @@ fn assert_process_stopped(pid: i32) {
     let deadline = Instant::now() + Duration::from_secs(3);
     while Instant::now() < deadline {
         // Signal zero checks whether the child remains addressable without
-        // sending it another signal.
-        if unsafe { libc::kill(pid, 0) } != 0 {
+        // sending it another signal. A killed orphan may briefly remain as a
+        // zombie until the system reaps it, which is already stopped work.
+        if unsafe { libc::kill(pid, 0) } != 0 || process_is_reaped_or_zombie(pid) {
             return;
         }
         thread::sleep(Duration::from_millis(20));
     }
     panic!("engine descendant {pid} remained after its process group was stopped");
+}
+
+fn process_is_reaped_or_zombie(pid: i32) -> bool {
+    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return true;
+    };
+    stat.rsplit_once(')')
+        .and_then(|(_, rest)| rest.split_whitespace().next())
+        .is_none_or(|state| state == "Z" || state == "X")
 }
 
 #[test]
