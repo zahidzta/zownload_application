@@ -166,7 +166,7 @@ fn windows_supervisor_cleans_timeout_cancel_close_and_parent_exit() {
     assert!(matches!(work.join().unwrap(), Err(RunError::Cancelled)));
     assert_gone(&ids);
 
-    for mode in ["close", "abrupt"] {
+    for mode in ["close", "abrupt", "installer"] {
         let path = marker(&root, mode);
         let status = Command::new(std::env::current_exe().unwrap())
             .args(["--ignored", "--exact", "supervisor_helper"])
@@ -175,7 +175,24 @@ fn windows_supervisor_cleans_timeout_cancel_close_and_parent_exit() {
             .status()
             .unwrap();
         assert!(status.success());
+        if mode == "installer" {
+            // Only let the installer finish once its launching app has exited.
+            fs::write(path.with_extension("continue"), b"app exited").unwrap();
+        }
         assert_gone(&wait_for_tree(&path));
+        if mode == "installer" {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !path.with_extension("installed").exists() {
+                assert!(Instant::now() < deadline, "installer died with the app");
+                thread::sleep(Duration::from_millis(20));
+            }
+            let installer_pid = fs::read_to_string(path.with_extension("installer.pid"))
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert_gone(&[installer_pid]);
+            assert_gone(&wait_for_tree(&path.with_extension("restored")));
+        }
     }
     fs::remove_dir_all(root).unwrap();
 }
@@ -191,10 +208,11 @@ fn supervisor_helper() -> io::Result<()> {
         .join("tree_stub.exe");
     let supervisor = Supervisor::install()?;
     let runner = Arc::clone(&supervisor);
+    let media_binary = binary.clone();
     let args = vec![OsString::from("parent"), marker.as_os_str().into()];
     thread::spawn(move || {
         runner.run(
-            &binary,
+            &media_binary,
             &args,
             Duration::from_secs(30),
             4096,
@@ -207,6 +225,19 @@ fn supervisor_helper() -> io::Result<()> {
         supervisor.shutdown();
         assert_gone(&ids);
     } else {
+        if mode == "installer" {
+            let installer = supervisor.launch_installer(|| {
+                Command::new(&binary).arg("installer").arg(&marker).spawn()
+            })??;
+            fs::write(
+                marker.with_extension("installer.pid"),
+                installer.id().to_string(),
+            )?;
+            // A returned launch must restore normal child inheritance.
+            let restored = marker.with_extension("restored");
+            let _child = Command::new(&binary).arg("parent").arg(&restored).spawn()?;
+            wait_for_tree(&restored);
+        }
         // Simulate abrupt process exit: the root job's last handle closes.
         std::process::exit(0);
     }

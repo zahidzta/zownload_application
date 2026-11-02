@@ -2,12 +2,15 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3B was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md).
-- **Next task:** Owner acceptance of the [Gate 3C plan](gates/gate-3c.md); implementation waits for explicit acceptance.
+- **Checkpoint:** Gate 3B was accepted and the Gate 3C plan was accepted on 2026-10-31; see the [Gate 3B checkpoint](gates/evidence/3b/checkpoint.md) and [Gate 3C plan](gates/gate-3c.md).
+- **Next task:** Owner review of the pushed 3C-02/03 corrections and automatic V2 result; 3C-02 V1 against an empty owner-created `app-v0.0.1` draft remains required. Record both results before 3C-04.
 
 ## Current Gate 3C completions
 
-- Completed 3C-01: Finalized Windows-only AC-23/AC-36 scope and recorded Gate 3B acceptance; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
+- Completed 3C-01: Owner accepted the Windows-only AC-23/AC-36 plan; commit `76c8ba9`; [plan and checkpoint](gates/gate-3c.md).
+- Completed 3C-02/03-fix: Preserve verified installer lifetime and wait for ZIP worker cleanup; commit `50df838`; local foundation and focused Windows checks passed. [Evidence; V2 remains pending](gates/evidence/3c/3c-03.md#local-correction-verification--2026-11-01).
+- Completed 3C-03-log-fix: Isolate installer request logs per scenario; commit `a108e86`; regression passed in Windows PowerShell and PowerShell 7. [Evidence; NSIS passed, full V2 pending](gates/evidence/3c/3c-03.md#scenario-log-isolation-correction).
+- Completed 3C-03-exit-fix: Correct verifier exit status after expected tamper rejection; commit `65e9d50`; success/failure regressions passed in PowerShell 5.1 and 7. [Evidence; both installer scenarios passed, workflow completion pending](gates/evidence/3c/3c-03.md#verifier-exit-status-correction).
 
 ## Accepted gates
 

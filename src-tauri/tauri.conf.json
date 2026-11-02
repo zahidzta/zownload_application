@@ -23,6 +23,14 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "android": {
       "minSdkVersion": 24
     },
@@ -32,12 +40,15 @@
     "windows": {
       "webviewInstallMode": {
         "type": "offlineInstaller"
+      },
+      "nsis": {
+        "installerHooks": "./windows/installer-hooks.nsh"
       }
     }
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0QjEyNDVDNUVFM0VDNzYKUldSMjdPTmVYQ1N4NU8ramNrcnZnRmphYWF3MkVkUTMvNUtuLzRsMlFYZTdpNTBQYnB2TWEzY3EK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY5ODJGRjc0RkUzQTg1RkEKUldUNmhUcitkUCtDYVk0Sys5U0lWRnZ5eTFuVzI2cTNNL0gvZkZNdXJzZ3JIS1ZwQmJMbXM1VU4K",
       "endpoints": [
         "https://github.com/zahidzta/zownload_application/releases/latest/download/latest.json"
       ]

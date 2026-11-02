@@ -186,9 +186,15 @@ pub(crate) async fn install_available(app: &AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .filter(|update| Some(update.version.as_str()) == state.latest.as_deref())
         .ok_or_else(|| "saved app update is no longer available".to_owned())?;
-    update
-        .download_and_install(|_, _| {}, || {})
+    // Download verifies the updater signature before allowing the installer
+    // to outlive our Windows process-cleanup job.
+    let bytes = update
+        .download(|_, _| {}, || {})
         .await
+        .map_err(|error| error.to_string())?;
+    app.state::<std::sync::Arc<crate::engine::process::Supervisor>>()
+        .launch_installer(|| update.install(bytes))
+        .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
 }
 

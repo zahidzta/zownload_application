@@ -499,3 +499,20 @@ Pop-Location
 The focused [3B evidence](gates/evidence/3b/3b-03.md) records V2 results and
 the ZIP queue scenarios. The V3 and native review results are recorded in the
 same evidence directory.
+
+## Gate 3C signature verifier regression
+
+The exit-status regression uses Minisign 0.9 from the existing pinned installer
+script and the signed bytes/public key in `tests/fixtures/app-updates`. Its
+temporary `.exe` and `.msi` files are signature fixtures and are never executed.
+The child PowerShell script reproduces the Actions exit-code footer. Run from
+the repository root:
+
+```powershell
+$minisign = ./scripts/install-minisign.ps1
+powershell -NoProfile -File scripts/test-windows-release-exit.ps1 -MinisignPath $minisign
+pwsh -NoProfile -File scripts/test-windows-release-exit.ps1 -MinisignPath $minisign
+```
+
+Both shells passed: valid packages and rejected tampering returned 0; invalid
+metadata after signature checks and invalid package signatures returned 1.

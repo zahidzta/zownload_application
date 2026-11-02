@@ -106,3 +106,15 @@ jobs:
         run: |
           chmod +x src-tauri/gen/android/gradlew
           npm run android:debug
+
+  windows-install-review:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/task-3c-02-03' && github.actor == 'zahidzta'
+    uses: ./.github/workflows/windows-install-review.yml
+    with:
+      # The old app must contain the installer job exception too. No app
+      # release exists yet; build the corrected source at both test versions.
+      previous_ref: task-3c-02-03
+      candidate_ref: task-3c-02-03
+      previous_version: 0.0.0
+      candidate_version: 0.0.1
+    secrets: inherit
