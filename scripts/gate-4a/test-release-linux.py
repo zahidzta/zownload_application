@@ -4,6 +4,7 @@
 """Offline regression for Linux draft assembly and signature rejection."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -72,15 +73,35 @@ def main(minisign):
         run("signed", root, minisign, bundle_root=bundle)
 
         for index, package in enumerate((appimage, deb), 301):
-            release["assets"].extend([
-                {"id": index, "name": package.name,
-                 "browser_download_url": f"https://github.com/{REPOSITORY}/releases/download/app-v{VERSION}/{package.name}"},
-                {"id": index + 100, "name": f"{package.name}.sig"},
-            ])
+            for asset_id, path in ((index, package), (index + 100, Path(f"{package}.sig"))):
+                release["assets"].append({
+                    "id": asset_id,
+                    "name": path.name,
+                    "size": path.stat().st_size,
+                    "digest": f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}",
+                    "browser_download_url":
+                        f"https://github.com/{REPOSITORY}/releases/download/app-v{VERSION}/{path.name}",
+                })
         release_path.write_text(json.dumps(release), encoding="utf-8")
         merged = root / "merged.json"
         run("assemble", root, minisign, bundle_root=bundle, output=merged, **common)
         run("verify", root, minisign, bundle_root=bundle, output=merged, **common)
+        run("metadata", root, minisign, output=merged,
+            appimage_signature=Path(f"{appimage}.sig"), **common)
+
+        deb_asset = next(asset for asset in release["assets"] if asset["name"] == deb.name)
+        deb_asset["browser_download_url"] = (
+            f"https://github.com/{REPOSITORY}/releases/download/untagged-0123abc/{deb.name}"
+        )
+        release_path.write_text(json.dumps(release), encoding="utf-8")
+        run("verify", root, minisign, bundle_root=bundle, output=merged, **common)
+        deb_asset["browser_download_url"] = deb_asset["browser_download_url"].replace(deb.name, appimage.name)
+        release_path.write_text(json.dumps(release), encoding="utf-8")
+        run("verify", root, minisign, expected=1, bundle_root=bundle, output=merged, **common)
+        run("metadata", root, minisign, expected=1, output=merged,
+            appimage_signature=Path(f"{appimage}.sig"), **common)
+        deb_asset["browser_download_url"] = deb_asset["browser_download_url"].replace(appimage.name, deb.name)
+        release_path.write_text(json.dumps(release), encoding="utf-8")
 
         merged_data = json.loads(merged.read_text(encoding="utf-8"))
         del merged_data["platforms"]["windows-x86_64-nsis"]

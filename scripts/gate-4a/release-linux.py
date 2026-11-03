@@ -5,6 +5,7 @@
 
 import argparse
 import base64
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -115,15 +116,56 @@ def verify_signatures(packages, config, minisign):
             tampered.unlink()
 
 
+def check_uploaded_bytes(packages, release):
+    assets = asset_map(release)
+    for package in packages.values():
+        for path in (package, Path(f"{package}.sig")):
+            asset = assets[path.name]
+            require(asset["size"] == path.stat().st_size, f"uploaded {path.name} size differs")
+            with path.open("rb") as source:
+                digest = hashlib.file_digest(source, "sha256").hexdigest()
+            require(asset["digest"] == f"sha256:{digest}",
+                    f"uploaded {path.name} SHA-256 differs from the draft")
+
+
+def check_final_metadata(release, baseline, final, version, windows_signatures, appimage_signature):
+    appimage_name = f"Zownload_{version}_amd64.AppImage"
+    deb_name = f"Zownload_{version}_amd64.deb"
+    check_release(release, version, {
+        appimage_name, f"{appimage_name}.sig", deb_name, f"{deb_name}.sig"
+    })
+    check_windows(baseline, release, version, windows_signatures)
+    require(set(final["platforms"]) == WINDOWS_KEYS | {"linux-x86_64"},
+            "combined metadata has unexpected updater targets")
+    require({key: value for key, value in final.items() if key != "platforms"} ==
+            {key: value for key, value in baseline.items() if key != "platforms"},
+            "combined metadata changed baseline fields")
+    require({key: final["platforms"][key] for key in WINDOWS_KEYS} == baseline["platforms"],
+            "Windows updater entries changed")
+    entry = final["platforms"]["linux-x86_64"]
+    require(asset_for_url(entry["url"], release) == appimage_name,
+            "AppImage URL targets wrong package")
+    require(entry["signature"] == Path(appimage_signature).read_text(encoding="utf-8").strip(),
+            "AppImage metadata signature differs from the draft asset")
+    deb_url = asset_map(release)[deb_name]["browser_download_url"]
+    prefix = f"https://github.com/{REPOSITORY}/releases/download/"
+    require(deb_url.startswith(prefix), "direct .deb link is not a GitHub release download")
+    parts = deb_url[len(prefix):].split("/")
+    require(len(parts) == 2 and parts[1] == deb_name and
+            (parts[0] == f"app-v{version}" or re.fullmatch(r"untagged-[0-9a-f]+", parts[0])),
+            "direct .deb link does not target the matching package")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("stage", choices=["preflight", "unsigned", "signed", "assemble", "verify"])
+    parser.add_argument("stage", choices=["preflight", "unsigned", "signed", "assemble", "verify", "metadata"])
     parser.add_argument("--config", required=True)
     parser.add_argument("--release")
     parser.add_argument("--latest")
     parser.add_argument("--windows-signatures")
     parser.add_argument("--bundle-root")
     parser.add_argument("--output")
+    parser.add_argument("--appimage-signature")
     parser.add_argument("--minisign", default="minisign")
     arguments = parser.parse_args()
     config = load(arguments.config)
@@ -148,10 +190,18 @@ def main():
         check_windows(baseline, release, version, arguments.windows_signatures)
         print("Owner-created Windows draft and updater metadata verified.")
         return
+    if arguments.stage == "metadata":
+        require(arguments.output and arguments.appimage_signature,
+                "combined metadata and AppImage signature paths are required")
+        check_final_metadata(release, baseline, load(arguments.output), version,
+                             arguments.windows_signatures, arguments.appimage_signature)
+        print("Combined draft allowlist, Windows preservation, AppImage metadata, and .deb link verified.")
+        return
 
     require(arguments.bundle_root, "Linux bundle root is required")
     packages = linux_packages(arguments.bundle_root, version)
     verify_signatures(packages, config, arguments.minisign)
+    check_uploaded_bytes(packages, release)
     linux_names = {path.name for path in packages.values()} | {
         f"{path.name}.sig" for path in packages.values()
     }
@@ -170,20 +220,8 @@ def main():
         print("Combined Windows and AppImage updater metadata assembled.")
         return
 
-    final = load(arguments.output)
-    require(set(final["platforms"]) == WINDOWS_KEYS | {"linux-x86_64"},
-            "combined metadata has unexpected updater targets")
-    require({key: value for key, value in final.items() if key != "platforms"} ==
-            {key: value for key, value in baseline.items() if key != "platforms"},
-            "combined metadata changed baseline fields")
-    require({key: final["platforms"][key] for key in WINDOWS_KEYS} == baseline["platforms"],
-            "Windows updater entries changed")
-    require(final["platforms"]["linux-x86_64"] == entry, "AppImage updater entry is wrong")
-    require(asset_for_url(entry["url"], release) == appimage.name, "AppImage URL targets wrong package")
-    deb = packages["deb"]
-    deb_url = asset_map(release)[deb.name]["browser_download_url"]
-    require(deb_url == f"https://github.com/{REPOSITORY}/releases/download/app-v{version}/{deb.name}",
-            "direct .deb link does not target the matching package")
+    check_final_metadata(release, baseline, load(arguments.output), version,
+                         arguments.windows_signatures, Path(f"{appimage}.sig"))
     print("Combined draft allowlist, updater signatures, tamper rejection, and .deb link verified.")
 
 

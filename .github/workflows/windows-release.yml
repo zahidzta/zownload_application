@@ -27,13 +27,14 @@ on:
         required: true
         type: string
       release_platform:
-        description: Build Windows into an empty draft or add Linux to the verified Windows draft
+        description: Build Windows, add Linux, or verify the completed unpublished draft
         required: true
         type: choice
         default: windows
         options:
           - windows
           - linux
+          - verify
 
 jobs:
   pull-request-build:
@@ -359,3 +360,40 @@ jobs:
             work/engine/build/ffmpeg/linux-x64/ffmpeg-configure.log
             work/engine/build/ffmpeg/linux-x64/ffmpeg-build.log
             work/engine/build/ffmpeg/linux-x64/lame-members.txt
+
+  owner-desktop-draft-verify:
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.release_platform == 'verify'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install updater signature verifier
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends minisign
+      - name: Download and verify the complete unpublished desktop draft
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          test "$RELEASE_TAG" = "app-v$version"
+          base="$RUNNER_TEMP/4a-verify"
+          bundle="$base/bundle"
+          mkdir -p "$bundle/appimage" "$bundle/deb"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$base/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --pattern '*.sig' --pattern '*.AppImage' --pattern '*.deb' --dir "$base"
+          mv "$base/Zownload_${version}_amd64.AppImage" \
+            "$base/Zownload_${version}_amd64.AppImage.sig" "$bundle/appimage/"
+          mv "$base/Zownload_${version}_amd64.deb" \
+            "$base/Zownload_${version}_amd64.deb.sig" "$bundle/deb/"
+          python3 scripts/gate-4a/release-linux.py verify \
+            --config src-tauri/tauri.conf.json \
+            --release "$base/release.json" \
+            --latest docs/gates/evidence/4a/windows-latest-baseline.json \
+            --windows-signatures "$base" \
+            --bundle-root "$bundle" \
+            --output "$base/latest.json"
