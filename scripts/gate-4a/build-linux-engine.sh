@@ -31,34 +31,43 @@ mkdir -p "$downloads" "$build_root" "$resources"
 
 hash_file() { sha256sum "$1" | awk '{print $1}'; }
 fetch_locked() {
-  local name="$1" url="$2" expected="$3" path="$downloads/$1"
+  local name="$1" expected="$2" path="$downloads/$1" candidate partial
+  shift 2
   if [[ ! -f "$path" ]]; then
-    local partial="$path.partial.$$"
-    curl --fail --location --silent --show-error --retry 3 --proto '=https' --proto-redir '=https' \
-      --output "$partial" "$url"
-    [[ "$(hash_file "$partial")" == "$expected" ]] || fail "$name source checksum mismatch"
-    mv -- "$partial" "$path"
+    for candidate in "$@"; do
+      partial="$path.partial.$$"
+      if curl --fail --location --silent --show-error --retry 3 --proto '=https' --proto-redir '=https' \
+        --output "$partial" "$candidate" && [[ "$(hash_file "$partial")" == "$expected" ]]; then
+        mv -- "$partial" "$path"
+        echo "Verified $name source from $candidate"
+        break
+      fi
+      rm -f -- "$partial"
+    done
+    [[ -f "$path" ]] || fail "$name source checksum mismatch or no locked source available"
   fi
   [[ "$(hash_file "$path")" == "$expected" ]] || fail "$name source checksum mismatch"
 }
 
 fetch_locked 'yt-dlp-2026.08.19-linux' \
-  'https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux' \
-  '58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a'
+  '58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a' \
+  'https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux'
 install -m 0755 "$downloads/yt-dlp-2026.08.19-linux" "$resources/yt-dlp"
 
 bash "$repo_root/scripts/gate-0b/build-quickjs.sh" linux-x64 --verify
 install -m 0755 "$repo_root/work/engine/build/quickjs/linux-x64/qjs" "$resources/qjs"
 
 fetch_locked 'ffmpeg-8.1.3.tar.xz' \
+  '7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3' \
   'https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz' \
-  '7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3'
+  'https://mirror.math.princeton.edu/pub/macports/distfiles/ffmpeg/ffmpeg-8.1.3.tar.xz'
 fetch_locked 'lame-3.100.tar.gz' \
-  'https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download' \
-  'ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e'
+  'ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e' \
+  'https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download'
 fetch_locked 'zlib-1.3.2.tar.gz' \
+  'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16' \
   'https://zlib.net/fossils/zlib-1.3.2.tar.gz' \
-  'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16'
+  'https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz'
 
 if [[ -e "$recipe" ]]; then
   resolved_recipe="$(cd "$recipe" && pwd -P)"

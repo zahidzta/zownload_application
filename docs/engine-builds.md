@@ -342,6 +342,8 @@ builds QuickJS 2026-06-04 using the [Gate 0B Linux recipe](../scripts/gate-0b/bu
 and builds FFmpeg/ffprobe 8.1.3 with LAME 3.100's encoder library and zlib
 1.3.2. All four source URLs and SHA-256 values are in the
 [source lock](engine-sources.md); the script verifies each download before use.
+FFmpeg and zlib have versioned fallback URLs from that lock; a fallback is
+accepted only when it matches the same pinned SHA-256.
 The official yt-dlp executable contains its matching EJS 0.8.0 scripts and
 the upstream PyInstaller notice. Its upstream release checksum is
 `58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a`.
