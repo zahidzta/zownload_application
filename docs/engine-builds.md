@@ -333,7 +333,7 @@ repository root, the release workflow runs:
 ```bash
 bash scripts/gate-4a/build-linux-engine.sh --verify
 npm ci
-npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
+NO_STRIP=true npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
 ```
 
 The script stages the official yt-dlp 2026.08.19 `yt-dlp_linux` executable,
@@ -361,6 +361,9 @@ and MP4 files probe correctly. The complete configure and link commands are
 retained in ignored `work/engine/build/ffmpeg/linux-x64/` during the build.
 Gate 4A's [package evidence](gates/evidence/4a/4a-04.md) records the exact
 bundled engine and installer hashes from the signed run.
+`NO_STRIP=true` prevents linuxdeploy from changing the verified engine bytes
+while assembling the AppImage. The package verifier extracts both installers
+and compares their four engine files byte for byte with the staged inputs.
 
 Linux packages ship the same [third-party notices](THIRD-PARTY-NOTICES.md)
 for yt-dlp/EJS, QuickJS, FFmpeg, LAME, and zlib. Static FFmpeg and LAME
