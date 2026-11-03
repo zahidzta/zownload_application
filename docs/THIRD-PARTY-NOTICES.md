@@ -44,6 +44,15 @@ directory currently contains intermediate objects; a release must package
 and check them before deleting it. Later platform builds need separate
 binary hashes, library inventories and relinking materials.
 
+Gate 4A's Linux `ffmpeg` and `ffprobe` use the same locked FFmpeg 8.1.3,
+encoder-only LAME 3.100, and zlib 1.3.2 sources. Their
+[Linux build record](engine-builds.md#4a-04--linux-x64-package-engine-recipe)
+gives the exact configuration and checks, and the
+[Gate 4A evidence](gates/evidence/4a/4a-04.md) identifies the shipped Linux
+binary hashes. Preserve the same FFmpeg, LAME, and zlib license texts and
+Linux-specific link commands and relinking objects in the eventual versioned
+source bundle. The unpublished draft is not a public compliance release.
+
 ## QuickJS
 
 QuickJS 2026-06-04 is MIT-licensed. Ship its unmodified source archive

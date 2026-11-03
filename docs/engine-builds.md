@@ -323,3 +323,47 @@ embedded dependency sources and upstream platform build recipe at release
 packaging. Microsoft's runtime DLLs inside `yt-dlp.exe` require separate
 redistribution terms and entitlement review. These future packaging checks
 are not asserted as complete by the Gate 0B script.
+
+## 4A-04 — Linux x64 package engine recipe
+
+Run on the pinned Ubuntu 24.04 x86_64 runner with GCC/G++ 13 and the packages
+listed in [toolchain.md](toolchain.md#gate-4a-linux-package-build). From the
+repository root, the release workflow runs:
+
+```bash
+bash scripts/gate-4a/build-linux-engine.sh --verify
+npm ci
+npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
+```
+
+The script stages the official yt-dlp 2026.08.19 `yt-dlp_linux` executable,
+builds QuickJS 2026-06-04 using the [Gate 0B Linux recipe](../scripts/gate-0b/build-quickjs.sh),
+and builds FFmpeg/ffprobe 8.1.3 with LAME 3.100's encoder library and zlib
+1.3.2. All four source URLs and SHA-256 values are in the
+[source lock](engine-sources.md); the script verifies each download before use.
+The official yt-dlp executable contains its matching EJS 0.8.0 scripts and
+the upstream PyInstaller notice. Its upstream release checksum is
+`58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a`.
+The pinned Gate 0B Linux QuickJS build hash is
+`50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c`;
+the package run records the hash of the copy actually bundled.
+
+FFmpeg is configured by [`build-linux-engine.sh`](../scripts/gate-4a/build-linux-engine.sh)
+with `--target-os=linux --arch=x86_64`, GCC/G++ 13, `--pkg-config=false`,
+`--disable-autodetect`, `--disable-x86asm`, `--disable-ffplay`,
+`--disable-doc`, `--disable-debug`, `--enable-static`, `--disable-shared`,
+`--enable-libmp3lame`, and `--enable-zlib`. It explicitly sets
+`--disable-gpl --disable-nonfree --disable-version3`; the generated
+`CONFIG_GPL`, `CONFIG_NONFREE`, and `CONFIG_VERSION3` must each be `0` and
+FFmpeg must report LGPL-2.1-or-later. The recipe checks LAME decoder objects
+are absent, required MP3/MP4 features are present, and locally generated MP3
+and MP4 files probe correctly. The complete configure and link commands are
+retained in ignored `work/engine/build/ffmpeg/linux-x64/` during the build.
+Gate 4A's [package evidence](gates/evidence/4a/4a-04.md) records the exact
+bundled engine and installer hashes from the signed run.
+
+Linux packages ship the same [third-party notices](THIRD-PARTY-NOTICES.md)
+for yt-dlp/EJS, QuickJS, FFmpeg, LAME, and zlib. Static FFmpeg and LAME
+linkage still requires matching source and relinking materials in the
+versioned compliance bundle before public release; a signed unpublished
+draft is not the final compliance bundle.

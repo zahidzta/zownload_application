@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 zahidzta
 
-name: Windows x64 installers
+name: Desktop x64 release packages
 
 on:
   pull_request:
@@ -10,6 +10,7 @@ on:
       - 'scripts/install-minisign.ps1'
       - 'scripts/prepare-windows-engine.ps1'
       - 'scripts/verify-windows-release.ps1'
+      - 'scripts/gate-4a/**'
       - 'scripts/gate-0b/**'
       - 'scripts/gate-2b/stage-windows-engine.ps1'
       - 'src-tauri/**'
@@ -25,6 +26,14 @@ on:
         description: Existing draft tag, for example app-v0.0.1
         required: true
         type: string
+      release_platform:
+        description: Build Windows into an empty draft or add Linux to the verified Windows draft
+        required: true
+        type: choice
+        default: windows
+        options:
+          - windows
+          - linux
 
 jobs:
   pull-request-build:
@@ -90,7 +99,7 @@ jobs:
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
   owner-draft-release:
-    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta'
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.release_platform == 'windows'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -195,3 +204,151 @@ jobs:
             -LatestJsonPath (Join-Path $metadataDirectory 'latest.json') `
             -ReleaseAssets $assetNames `
             -ReleaseAssetMap $assetMap
+
+  linux-pull-request-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      RUSTUP_TOOLCHAIN: '1.99.1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential curl wget \
+            libxdo-dev gcc-13 g++-13 make xz-utils \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev patchelf libfuse2t64 file
+      - name: Check toolchain pins and build verified Linux engines
+        run: |
+          test "$(node --version)" = 'v24.22.0'
+          test "$(npm --version)" = '11.19.1'
+          rustup toolchain install 1.99.1 --profile minimal
+          bash scripts/gate-4a/build-linux-engine.sh --verify
+      - run: npm ci
+      - name: Build only unsigned Linux x64 AppImage and Debian packages
+        run: |
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/tauri-pr-build.json"
+          npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb --config "$RUNNER_TEMP/tauri-pr-build.json"
+          python3 scripts/gate-4a/release-linux.py unsigned \
+            --config src-tauri/tauri.conf.json \
+            --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          bash scripts/gate-4a/verify-linux-bundles.sh \
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-review-packages
+          if-no-files-found: error
+          path: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+
+  owner-linux-draft-release:
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.release_platform == 'linux'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUSTUP_TOOLCHAIN: '1.99.1'
+      DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Install Linux build and signature verification dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential curl wget \
+            libxdo-dev gcc-13 g++-13 make xz-utils \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev patchelf libfuse2t64 file minisign
+          dpkg-query -W -f='${Package} ${Version}\n' \
+            gcc-13 g++-13 libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev patchelf libfuse2t64 minisign \
+            > "$RUNNER_TEMP/linux-package-versions.txt"
+      - name: Verify the owner-created Windows draft before changing it
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          test "$(node --version)" = 'v24.22.0'
+          test "$(npm --version)" = '11.19.1'
+          version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          test "$RELEASE_TAG" = "app-v$version"
+          mkdir -p "$RUNNER_TEMP/4a/baseline" "$RUNNER_TEMP/4a/final"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/4a/baseline/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --pattern '*.sig' --dir "$RUNNER_TEMP/4a/baseline"
+          python3 scripts/gate-4a/release-linux.py preflight \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/4a/baseline/release.json" \
+            --latest "$RUNNER_TEMP/4a/baseline/latest.json" \
+            --windows-signatures "$RUNNER_TEMP/4a/baseline"
+      - name: Build pinned engines and signed Linux packages
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          bash scripts/gate-4a/build-linux-engine.sh --verify
+          npm ci
+          npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
+          python3 scripts/gate-4a/release-linux.py signed \
+            --config src-tauri/tauri.conf.json \
+            --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          bash scripts/gate-4a/verify-linux-bundles.sh \
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          sha256sum src-tauri/resources/linux-engine/{yt-dlp,qjs,ffmpeg,ffprobe} \
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/{appimage,deb}/* \
+            > "$RUNNER_TEMP/linux-output-sha256.txt"
+          dpkg-deb -f src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb \
+            Package Version Architecture Depends > "$RUNNER_TEMP/linux-deb-control.txt"
+      - name: Attach only the verified Linux packages and signatures
+        run: |
+          root=src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "$root"/appimage/*.AppImage "$root"/appimage/*.AppImage.sig \
+            "$root"/deb/*.deb "$root"/deb/*.deb.sig
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/4a/with-linux.json"
+          python3 scripts/gate-4a/release-linux.py assemble \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/4a/with-linux.json" \
+            --latest "$RUNNER_TEMP/4a/baseline/latest.json" \
+            --windows-signatures "$RUNNER_TEMP/4a/baseline" \
+            --bundle-root "$root" \
+            --output "$RUNNER_TEMP/4a/final/latest.json"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/4a/final/latest.json" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Verify the complete unpublished desktop draft
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/4a/final/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --dir "$RUNNER_TEMP/4a/final/downloaded"
+          python3 scripts/gate-4a/release-linux.py verify \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/4a/final/release.json" \
+            --latest "$RUNNER_TEMP/4a/baseline/latest.json" \
+            --windows-signatures "$RUNNER_TEMP/4a/baseline" \
+            --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle \
+            --output "$RUNNER_TEMP/4a/final/downloaded/latest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-provenance
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/linux-package-versions.txt
+            ${{ runner.temp }}/linux-output-sha256.txt
+            ${{ runner.temp }}/linux-deb-control.txt
+            work/engine/build/ffmpeg/linux-x64/ffmpeg-configure.log
+            work/engine/build/ffmpeg/linux-x64/ffmpeg-build.log
+            work/engine/build/ffmpeg/linux-x64/lame-members.txt

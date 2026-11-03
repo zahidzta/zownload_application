@@ -517,3 +517,35 @@ pwsh -NoProfile -File scripts/test-windows-release-exit.ps1 -MinisignPath $minis
 
 Both shells passed: valid packages and rejected tampering returned 0; invalid
 metadata after signature checks and invalid package signatures returned 1.
+
+## Gate 4A Linux package build
+
+The x86_64 AppImage and `.deb` build runs on `ubuntu-24.04` with pinned Node
+`24.22.0` / npm `11.19.1`, Rust `1.99.1`, and GCC/G++ 13. The workflow installs
+`build-essential`, `curl`, `wget`, `libxdo-dev`, `gcc-13`, `g++-13`, `make`,
+`xz-utils`, `libwebkit2gtk-4.1-dev`,
+`libayatana-appindicator3-dev`, `librsvg2-dev`, `libssl-dev`, `patchelf`,
+`libfuse2t64`, `file`, and `minisign` using `apt-get --no-install-recommends`.
+The signed run stores resolved Debian package versions as a workflow artifact
+so the precise runner image and dependency revisions remain traceable. The
+minimum user baseline remains Ubuntu 24.04 LTS; the Gate 4A-05 matrix must
+record the exact Debian stable and Fedora releases it tests.
+
+```bash
+sudo apt-get update -qq
+sudo apt-get install -y --no-install-recommends build-essential curl wget \
+  libxdo-dev gcc-13 g++-13 make xz-utils \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libssl-dev patchelf libfuse2t64 file minisign
+rustup toolchain install 1.99.1 --profile minimal
+```
+
+The [desktop release workflow](../.github/workflows/windows-release.yml) has
+an unsigned Linux pull-request build and an owner-only `linux` dispatch mode.
+The latter requires the existing owner-created Windows draft and its signing
+secret, runs the pinned [engine recipe](../scripts/gate-4a/build-linux-engine.sh),
+and builds only `appimage,deb` for `x86_64-unknown-linux-gnu`. It verifies the
+two signatures and rejects altered packages, uploads only those packages and
+signatures, then merges the `linux-x86_64` AppImage entry into `latest.json`.
+The script checks that all three Windows entries, the `.deb` direct asset URL,
+and the complete draft allowlist remain correct. The draft stays unpublished.
