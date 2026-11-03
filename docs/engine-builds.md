@@ -364,6 +364,17 @@ and MP4 files probe correctly. The complete configure and link commands are
 retained in ignored `work/engine/build/ffmpeg/linux-x64/` during the build.
 Gate 4A's [package evidence](gates/evidence/4a/4a-04.md) records the exact
 bundled engine and installer hashes from the signed run.
+
+| Linux x64 engine resource | Signed-run SHA-256 |
+|---|---|
+| `yt-dlp` | `58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a` |
+| `qjs` | `50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c` |
+| `ffmpeg` | `9cf7a8b7c78c09d74491cc8d601f88acae33ac50c3f6bbbf86b2b9b5b2fdac38` |
+| `ffprobe` | `3cf692569a96f03a4ff848af639a6142ab32706d336386d4fc0f7646e738bd9d` |
+
+The [signed build](https://github.com/zahidzta/zownload_application/actions/runs/41569451429)
+printed these four hashes and checked both packages contain byte-identical
+executable copies. It used Ubuntu 24.04.5 LTS and GCC 13.3.0.
 `NO_STRIP=true` disables linuxdeploy's strip pass. Linuxdeploy also invokes
 `patchelf --set-rpath` on staged ELF files, which changes the engine bytes.
 The [selective wrapper](../scripts/gate-4a/patchelf-preserve-engine.sh) passes

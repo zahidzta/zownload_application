@@ -4,7 +4,9 @@ Zownload's own source from task 0C-01B onward uses
 [GPL-3.0-or-later](../LICENSE). Copies of the earlier MIT-licensed history
 remain under MIT for people who received them; this change does not revoke
 those grants. The component licences below remain those components' own terms.
-This audits the locked Gate 0B engine artifacts; no release package exists yet. Exact source
+This audits the locked Gate 0B engine artifacts and the Gate 4A Linux
+extension. Unpublished Windows and Linux draft packages now exist; no public
+release has been made. Exact source
 URLs and signatures are in [`engine-sources.md`](engine-sources.md), build
 commands in [`engine-builds.md`](engine-builds.md), and observations in
 [`license-audit.txt`](gates/evidence/0b/license-audit.txt). No engine binary
@@ -41,7 +43,7 @@ Because these libraries are statically linked, each Windows release must
 provide the matching source, patches, full build/link commands, and relinkable
 object files or another LGPL-compliant relinking method. The ignored recipe
 directory currently contains intermediate objects; a release must package
-and check them before deleting it. Later platform builds need separate
+and check them before deleting it. Each platform build needs its own
 binary hashes, library inventories and relinking materials.
 
 Gate 4A's Linux `ffmpeg` and `ffprobe` use the same locked FFmpeg 8.1.3,

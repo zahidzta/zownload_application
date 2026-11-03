@@ -552,3 +552,13 @@ to keep the four verified engine resource files byte-identical; other ELF
 files still receive their normal linuxdeploy RPATH handling.
 The script checks that all three Windows entries, the `.deb` direct asset URL,
 and the complete draft allowlist remain correct. The draft stays unpublished.
+
+The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
+`13.3.0-6ubuntu2~24.04.1`. Its resolved packages included WebKitGTK
+`libwebkit2gtk-4.1-0` and `-dev` `2.52.6-0ubuntu0.24.04.1`,
+`libayatana-appindicator3-1` and `-dev` `0.5.93-1build3`,
+`librsvg2-2` and `-dev` `2.58.0+dfsg-1ubuntu0.1`, `libfuse2t64`
+`2.9.9-8.1build1`, `patchelf` `0.18.0-1.1build1`, `minisign` `0.11-1`,
+and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
+[V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
+hashes. Fedora and Debian native compatibility remains Gate 4A-05 work.
