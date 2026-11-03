@@ -365,7 +365,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.release_platform == 'verify'
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      # GitHub's draft-release asset API returns 403 to this job with read-only
+      # GITHUB_TOKEN permissions, even though the job performs no writes.
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
