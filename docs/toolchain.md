@@ -517,3 +517,48 @@ pwsh -NoProfile -File scripts/test-windows-release-exit.ps1 -MinisignPath $minis
 
 Both shells passed: valid packages and rejected tampering returned 0; invalid
 metadata after signature checks and invalid package signatures returned 1.
+
+## Gate 4A Linux package build
+
+The x86_64 AppImage and `.deb` build runs on `ubuntu-24.04` with pinned Node
+`24.22.0` / npm `11.19.1`, Rust `1.99.1`, and GCC/G++ 13. The workflow installs
+`build-essential`, `curl`, `wget`, `libxdo-dev`, `gcc-13`, `g++-13`, `make`,
+`xz-utils`, `libwebkit2gtk-4.1-dev`,
+`libayatana-appindicator3-dev`, `librsvg2-dev`, `libssl-dev`, `patchelf`,
+`libfuse2t64`, `file`, and `minisign` using `apt-get --no-install-recommends`.
+The signed run stores resolved Debian package versions as a workflow artifact
+so the precise runner image and dependency revisions remain traceable. The
+minimum user baseline remains Ubuntu 24.04 LTS; the Gate 4A-05 matrix must
+record the exact Debian stable and Fedora releases it tests.
+
+```bash
+sudo apt-get update -qq
+sudo apt-get install -y --no-install-recommends build-essential curl wget \
+  libxdo-dev gcc-13 g++-13 make xz-utils \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libssl-dev patchelf libfuse2t64 file minisign
+rustup toolchain install 1.99.1 --profile minimal
+```
+
+The [desktop release workflow](../.github/workflows/windows-release.yml) has
+an unsigned Linux pull-request build and an owner-only `linux` dispatch mode.
+The latter requires the existing owner-created Windows draft and its signing
+secret, runs the pinned [engine recipe](../scripts/gate-4a/build-linux-engine.sh),
+and builds only `appimage,deb` for `x86_64-unknown-linux-gnu`. It verifies the
+two signatures and rejects altered packages, uploads only those packages and
+signatures, then merges the `linux-x86_64` AppImage entry into `latest.json`.
+The AppImage build sets `NO_STRIP=true` and uses a selective `PATCHELF` wrapper
+to keep the four verified engine resource files byte-identical; other ELF
+files still receive their normal linuxdeploy RPATH handling.
+The script checks that all three Windows entries, the `.deb` direct asset URL,
+and the complete draft allowlist remain correct. The draft stays unpublished.
+
+The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
+`13.3.0-6ubuntu2~24.04.1`. Its resolved packages included WebKitGTK
+`libwebkit2gtk-4.1-0` and `-dev` `2.52.6-0ubuntu0.24.04.1`,
+`libayatana-appindicator3-1` and `-dev` `0.5.93-1build3`,
+`librsvg2-2` and `-dev` `2.58.0+dfsg-1ubuntu0.1`, `libfuse2t64`
+`2.9.9-8.1build1`, `patchelf` `0.18.0-1.1build1`, `minisign` `0.11-1`,
+and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
+[V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
+hashes. Fedora and Debian native compatibility remains Gate 4A-05 work.

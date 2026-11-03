@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "notes": "",
+  "pub_date": "2026-11-02T20:29:46.828Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNmhUcitkUCtDYWV0ZUVDNFllNUdZei9OUHFadUh5ZkhxTkI0dlVYQnhEOHBSL0t0Y0p6VGhrWnZhc2pyU3ZyU0VSeDZJWFZlY3BMekgxOTFKcEJ6K0pBMVFoZVlQK0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjUxMzgwCWZpbGU6Wm93bmxvYWRfMC4wLjFfeDY0X2VuLVVTLm1zaQl2ZXJzaW9uOjAuMC4xCi9EaUZmK1VWYzMySm5lWFV5YThoT3F1N0x3azBYaHhCMENRdWhubVFQREZhU3dpUXh1eWRsb1d2aDgwdVZrT1lrUjl0UWJnSlZrcFdzelZHNjFhdkN3PT0K",
+      "url": "https://api.github.com/repos/zahidzta/zownload_application/releases/assets/703083281"
+    },
+    "windows-x86_64-msi": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNmhUcitkUCtDYWV0ZUVDNFllNUdZei9OUHFadUh5ZkhxTkI0dlVYQnhEOHBSL0t0Y0p6VGhrWnZhc2pyU3ZyU0VSeDZJWFZlY3BMekgxOTFKcEJ6K0pBMVFoZVlQK0EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjUxMzgwCWZpbGU6Wm93bmxvYWRfMC4wLjFfeDY0X2VuLVVTLm1zaQl2ZXJzaW9uOjAuMC4xCi9EaUZmK1VWYzMySm5lWFV5YThoT3F1N0x3azBYaHhCMENRdWhubVFQREZhU3dpUXh1eWRsb1d2aDgwdVZrT1lrUjl0UWJnSlZrcFdzelZHNjFhdkN3PT0K",
+      "url": "https://api.github.com/repos/zahidzta/zownload_application/releases/assets/703083281"
+    },
+    "windows-x86_64-nsis": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUNmhUcitkUCtDYWZ1TnBHQWlPMTlUNG51cm80TmtWMVlWNktkUVh0SDVENkVuR1lUTkJhVUFmaUJyTzNNd0djVnMvdTJRWUVmN2hXa01mU3JoR1BsTzQ5WmFkUkMwZVEwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNjUxMzgwCWZpbGU6Wm93bmxvYWRfMC4wLjFfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuMC4xCnAvWHZyNDZYY291QTByZWV6Ti9pNFpBNzFHWUUwRnVIUkZkbGs4UVJsNUdBcHQxcmc5cGI1UXJRL05XK3ZtaU5QcUFaVUlpNDZRbnFqczU4cElMd0NBPT0K",
+      "url": "https://api.github.com/repos/zahidzta/zownload_application/releases/assets/703083450"
+    }
+  }
+}

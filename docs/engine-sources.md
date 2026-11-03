@@ -89,7 +89,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "sha256": "397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5",
       "fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8"
     },
-    "targets": ["windows-x64"]
+    "targets": ["windows-x64", "linux-x64"]
   },
   "zlib": {
     "version": "1.3.2",
@@ -99,7 +99,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
       "fallbackUrls": ["https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"]
     },
-    "targets": ["windows-x64"]
+    "targets": ["windows-x64", "linux-x64"]
   },
   "lame": {
     "version": "3.100",
@@ -108,7 +108,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "url": "https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download",
       "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
     },
-    "targets": ["windows-x64"]
+    "targets": ["windows-x64", "linux-x64"]
   }
 }
 ```
@@ -135,7 +135,7 @@ SHA-256 values and detached FFmpeg signature remain mandatory before a build.
 | Target | yt-dlp/ejs | QuickJS | FFmpeg/MP3 encoder |
 |---|---|---|---|
 | Windows x64 Gate 0B probe | Official pinned `yt-dlp.exe` includes EJS; use the exact binary hash above. | Build `qjs.exe` from the locked C source in 0B-04/05. | Build `ffmpeg.exe` and `ffprobe.exe` from FFmpeg 8.1.3 with LAME 3.100 encoder and zlib 1.3.2 in 0B-10/11. |
-| Linux x64 | Official pinned `yt-dlp_linux` includes EJS; use the exact binary hash above. | Build `qjs` from the same source in 0B-06. | Later platform build from the same locked sources and LGPL configuration. |
+| Linux x64 | Official pinned `yt-dlp_linux` includes EJS; use the exact binary hash above. | Build `qjs` from the same source in 0B-06 and verify the Gate 4A package copy. | Gate 4A builds `ffmpeg` and `ffprobe` from the same locked FFmpeg, LAME encoder, and zlib sources using [`build-linux-engine.sh`](../scripts/gate-4a/build-linux-engine.sh). |
 | macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; its hash is attested from the signed checksum file. | Build native `qjs` separately on each host in 0B-07/08. | Later platform builds from the same locked sources and LGPL configuration. |
 | Android arm64 | No official Android yt-dlp standalone executable is claimed. Keep the pinned source and EJS wheel as inputs; Python runtime packaging is a Gate 0C decision and must be locked before device execution. | Build the native Android `qjs` from the same source with NDK r30 in 0B-09; device run is Gate 0C. | Android executable and dependency configuration belongs to Gate 0C; no Android FFmpeg binary is attested by Gate 0B. |
 
