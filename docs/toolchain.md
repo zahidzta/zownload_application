@@ -547,5 +547,8 @@ secret, runs the pinned [engine recipe](../scripts/gate-4a/build-linux-engine.sh
 and builds only `appimage,deb` for `x86_64-unknown-linux-gnu`. It verifies the
 two signatures and rejects altered packages, uploads only those packages and
 signatures, then merges the `linux-x86_64` AppImage entry into `latest.json`.
+The AppImage build sets `NO_STRIP=true` and uses a selective `PATCHELF` wrapper
+to keep the four verified engine resource files byte-identical; other ELF
+files still receive their normal linuxdeploy RPATH handling.
 The script checks that all three Windows entries, the `.deb` direct asset URL,
 and the complete draft allowlist remain correct. The draft stays unpublished.

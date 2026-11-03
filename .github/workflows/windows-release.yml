@@ -235,7 +235,9 @@ jobs:
       - name: Build only unsigned Linux x64 AppImage and Debian packages
         run: |
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > "$RUNNER_TEMP/tauri-pr-build.json"
-          NO_STRIP=true npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb --config "$RUNNER_TEMP/tauri-pr-build.json"
+          chmod +x scripts/gate-4a/patchelf-preserve-engine.sh
+          PATCHELF="$PWD/scripts/gate-4a/patchelf-preserve-engine.sh" NO_STRIP=true \
+            npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb --config "$RUNNER_TEMP/tauri-pr-build.json"
           python3 scripts/gate-4a/release-linux.py unsigned \
             --config src-tauri/tauri.conf.json \
             --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
@@ -302,7 +304,9 @@ jobs:
           rustup toolchain install 1.99.1 --profile minimal
           bash scripts/gate-4a/build-linux-engine.sh --verify
           npm ci
-          NO_STRIP=true npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
+          chmod +x scripts/gate-4a/patchelf-preserve-engine.sh
+          PATCHELF="$PWD/scripts/gate-4a/patchelf-preserve-engine.sh" NO_STRIP=true \
+            npm run tauri -- build --target x86_64-unknown-linux-gnu --bundles appimage,deb
           python3 scripts/gate-4a/release-linux.py signed \
             --config src-tauri/tauri.conf.json \
             --bundle-root src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
