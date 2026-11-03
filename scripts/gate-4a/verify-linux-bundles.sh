@@ -33,7 +33,15 @@ for package in deb appimage; do
     [[ ${#copies[@]} -eq 1 ]] || { echo "$package: expected one bundled $name" >&2; exit 1; }
     [[ -x "${copies[0]}" ]] || { echo "$package: $name is not executable" >&2; exit 1; }
     cmp -s "$resources/$name" "${copies[0]}" || {
-      echo "$package: $name differs from verified engine input" >&2; exit 1;
+      echo "$package: $name differs from verified engine input" >&2
+      echo "Bundled path: ${copies[0]}" >&2
+      sha256sum "$resources/$name" "${copies[0]}" >&2
+      stat -c '%n %s bytes' "$resources/$name" "${copies[0]}" >&2
+      echo "Input RPATH: $(patchelf --print-rpath "$resources/$name" 2>/dev/null || true)" >&2
+      echo "Bundled RPATH: $(patchelf --print-rpath "${copies[0]}" 2>/dev/null || true)" >&2
+      echo 'First differing byte positions:' >&2
+      cmp -l "$resources/$name" "${copies[0]}" | head -n 5 >&2 || true
+      exit 1
     }
   done
 done
