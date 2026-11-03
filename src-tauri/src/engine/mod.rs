@@ -20,21 +20,63 @@ pub mod updater;
 pub mod zip_output;
 
 const YT_DLP_VERSION: &str = "2026.08.19";
+#[cfg(target_os = "windows")]
 const YT_DLP_HASH: &str = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a";
+#[cfg(target_os = "windows")]
 const FFMPEG_HASH: &str = "fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66";
+#[cfg(target_os = "windows")]
 const QUICKJS_HASH: &str = "bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83";
+#[cfg(target_os = "linux")]
+const YT_DLP_HASH: &str = "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a";
+#[cfg(target_os = "linux")]
+const FFMPEG_HASH: &str = "9cf7a8b7c78c09d74491cc8d601f88acae33ac50c3f6bbbf86b2b9b5b2fdac38";
+#[cfg(target_os = "linux")]
+const FFPROBE_HASH: &str = "3cf692569a96f03a4ff848af639a6142ab32706d336386d4fc0f7646e738bd9d";
+#[cfg(target_os = "linux")]
+const QUICKJS_HASH: &str = "50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[cfg(target_os = "windows")]
+pub(crate) const YT_DLP_ASSET: &str = "yt-dlp.exe";
+#[cfg(target_os = "linux")]
+pub(crate) const YT_DLP_ASSET: &str = "yt-dlp_linux";
+#[cfg(target_os = "windows")]
+pub(crate) const YT_DLP_FILENAME: &str = "yt-dlp.exe";
+#[cfg(target_os = "linux")]
+pub(crate) const YT_DLP_FILENAME: &str = "yt-dlp";
+#[cfg(target_os = "windows")]
+const FFMPEG_FILENAME: &str = "ffmpeg.exe";
+#[cfg(target_os = "linux")]
+const FFMPEG_FILENAME: &str = "ffmpeg";
+#[cfg(target_os = "linux")]
+const FFPROBE_FILENAME: &str = "ffprobe";
+#[cfg(target_os = "windows")]
+const QUICKJS_FILENAME: &str = "qjs.exe";
+#[cfg(target_os = "linux")]
+const QUICKJS_FILENAME: &str = "qjs";
+#[cfg(target_os = "windows")]
+pub(crate) const CANDIDATE_FILENAME: &str = "candidate.exe";
+#[cfg(target_os = "linux")]
+pub(crate) const CANDIDATE_FILENAME: &str = "candidate";
+#[cfg(target_os = "windows")]
+pub(crate) const CANDIDATE_DOWNLOAD_FILENAME: &str = "candidate-download.exe";
+#[cfg(target_os = "linux")]
+pub(crate) const CANDIDATE_DOWNLOAD_FILENAME: &str = "candidate-download";
 
 struct Hashes<'a> {
     yt_dlp: &'a str,
     ffmpeg: &'a str,
     quickjs: &'a str,
+    #[cfg(target_os = "linux")]
+    ffprobe: &'a str,
 }
 
 const BASELINE_HASHES: Hashes<'static> = Hashes {
     yt_dlp: YT_DLP_HASH,
     ffmpeg: FFMPEG_HASH,
     quickjs: QUICKJS_HASH,
+    #[cfg(target_os = "linux")]
+    ffprobe: FFPROBE_HASH,
 };
 
 #[derive(Debug)]
@@ -48,17 +90,22 @@ pub struct EnginePaths {
     pub yt_dlp: PathBuf,
     pub ffmpeg: PathBuf,
     pub quickjs: PathBuf,
+    #[cfg(target_os = "linux")]
+    pub ffprobe: PathBuf,
 }
 
 impl EnginePaths {
     fn in_dir(dir: &Path) -> Self {
         Self {
-            yt_dlp: dir.join("yt-dlp.exe"),
-            ffmpeg: dir.join("ffmpeg.exe"),
-            quickjs: dir.join("qjs.exe"),
+            yt_dlp: dir.join(YT_DLP_FILENAME),
+            ffmpeg: dir.join(FFMPEG_FILENAME),
+            quickjs: dir.join(QUICKJS_FILENAME),
+            #[cfg(target_os = "linux")]
+            ffprobe: dir.join(FFPROBE_FILENAME),
         }
     }
 
+    #[cfg(target_os = "windows")]
     fn entries<'a>(&'a self, hashes: &'a Hashes<'_>) -> [(&'a Path, &'a str); 3] {
         [
             (&self.yt_dlp, hashes.yt_dlp),
@@ -66,6 +113,32 @@ impl EnginePaths {
             (&self.quickjs, hashes.quickjs),
         ]
     }
+
+    #[cfg(target_os = "linux")]
+    fn entries<'a>(&'a self, hashes: &'a Hashes<'_>) -> [(&'a Path, &'a str); 4] {
+        [
+            (&self.yt_dlp, hashes.yt_dlp),
+            (&self.ffmpeg, hashes.ffmpeg),
+            (&self.quickjs, hashes.quickjs),
+            (&self.ffprobe, hashes.ffprobe),
+        ]
+    }
+}
+
+fn set_executable(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path)
+            .map_err(|error| format!("{}: {error}", path.display()))?
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+    }
+    #[cfg(target_os = "windows")]
+    let _ = path;
+    Ok(())
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -165,7 +238,10 @@ fn health_check(paths: &EnginePaths, version: &str) -> Result<(), String> {
         &paths.quickjs,
         &["-e", "print('quickjs-ready')"],
         "quickjs-ready",
-    )
+    )?;
+    #[cfg(target_os = "linux")]
+    probe(&paths.ffprobe, &["-version"], "ffprobe version 8.1.3")?;
+    Ok(())
 }
 
 pub(crate) fn read_manifest(data: &Path) -> Result<EngineManifest, String> {
@@ -210,6 +286,16 @@ fn active_is_healthy(
     yt_is_verified(paths, manifest, hashes)
         && hash_file(&paths.ffmpeg).is_ok_and(|hash| hash == hashes.ffmpeg)
         && hash_file(&paths.quickjs).is_ok_and(|hash| hash == hashes.quickjs)
+        && {
+            #[cfg(target_os = "linux")]
+            {
+                hash_file(&paths.ffprobe).is_ok_and(|hash| hash == hashes.ffprobe)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                true
+            }
+        }
         && check(paths, &manifest.yt_dlp.version).is_ok()
 }
 
@@ -351,7 +437,7 @@ fn prepare_with(
         }
         manifest.baseline_app_version = app_version.to_owned();
         if manifest.pending_version.is_some() {
-            let pending = active.join("staging/candidate.exe");
+            let pending = active.join("staging").join(CANDIDATE_FILENAME);
             if pending.is_file()
                 && manifest
                     .pending_sha256
@@ -359,7 +445,7 @@ fn prepare_with(
                     .is_some_and(|hash| hash_file(&pending).is_ok_and(|actual| actual == hash))
             {
                 fs::create_dir(stage.join("staging")).map_err(|error| error.to_string())?;
-                fs::copy(pending, stage.join("staging/candidate.exe"))
+                fs::copy(pending, stage.join("staging").join(CANDIDATE_FILENAME))
                     .map_err(|error| error.to_string())?;
             } else {
                 manifest.pending_version = None;
@@ -385,6 +471,9 @@ fn prepare_with(
                     return Err("baseline tool checksum mismatch".into());
                 }
             }
+        }
+        for (path, _) in staged_paths.entries(hashes) {
+            set_executable(path)?;
         }
         check(&staged_paths, &manifest.yt_dlp.version)?;
         let mut file =
@@ -439,7 +528,7 @@ mod tests {
         root: PathBuf,
         resources: PathBuf,
         data: PathBuf,
-        hashes: [String; 3],
+        hashes: Vec<String>,
     }
 
     impl Fixture {
@@ -453,11 +542,19 @@ mod tests {
             fs::write(&files.yt_dlp, b"yt-dlp stub").unwrap();
             fs::write(&files.ffmpeg, b"ffmpeg stub").unwrap();
             fs::write(&files.quickjs, b"quickjs stub").unwrap();
-            let hashes = [
+            #[cfg(target_os = "linux")]
+            fs::write(&files.ffprobe, b"ffprobe stub").unwrap();
+            let hashes = vec![
                 hash_file(&files.yt_dlp).unwrap(),
                 hash_file(&files.ffmpeg).unwrap(),
                 hash_file(&files.quickjs).unwrap(),
             ];
+            #[cfg(target_os = "linux")]
+            let hashes = {
+                let mut hashes = hashes;
+                hashes.push(hash_file(&files.ffprobe).unwrap());
+                hashes
+            };
             Self {
                 root,
                 resources,
@@ -471,6 +568,8 @@ mod tests {
                 yt_dlp: &self.hashes[0],
                 ffmpeg: &self.hashes[1],
                 quickjs: &self.hashes[2],
+                #[cfg(target_os = "linux")]
+                ffprobe: &self.hashes[3],
             }
         }
 
@@ -514,6 +613,22 @@ mod tests {
         assert_eq!(value["baselineAppVersion"], "0.0.1");
         assert_eq!(value["failedVersions"], serde_json::json!([]));
         assert!(value["lastUpdateCheck"].is_null());
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for path in [&paths.yt_dlp, &paths.ffmpeg, &paths.quickjs] {
+                assert_ne!(fs::metadata(path).unwrap().permissions().mode() & 0o111, 0);
+            }
+            assert_ne!(
+                fs::metadata(&paths.ffprobe).unwrap().permissions().mode() & 0o111,
+                0
+            );
+            for (path, expected) in
+                EnginePaths::in_dir(&fixture.resources).entries(&fixture.hashes())
+            {
+                assert_eq!(hash_file(path).unwrap(), expected);
+            }
+        }
     }
 
     #[test]
@@ -533,7 +648,11 @@ mod tests {
     fn corrupt_active_copy_is_replaced_from_verified_resources() {
         let fixture = Fixture::new();
         fixture.prepare("0.0.1").unwrap();
-        fs::write(fixture.data.join("engine/yt-dlp.exe"), b"corrupt").unwrap();
+        fs::write(
+            fixture.data.join("engine").join(YT_DLP_FILENAME),
+            b"corrupt",
+        )
+        .unwrap();
         let paths = fixture.prepare("0.0.1").unwrap();
         verify_files(&paths, &fixture.hashes()).unwrap();
     }
@@ -541,7 +660,7 @@ mod tests {
     #[test]
     fn missing_or_corrupt_resources_are_rejected_before_activation() {
         let fixture = Fixture::new();
-        let yt = fixture.resources.join("yt-dlp.exe");
+        let yt = fixture.resources.join(YT_DLP_FILENAME);
         fs::remove_file(&yt).unwrap();
         assert!(fixture.prepare("0.0.1").is_err());
         assert!(!fixture.data.join("engine").exists());
@@ -640,10 +759,17 @@ mod tests {
         fs::write(&resources.quickjs, b"new quickjs").unwrap();
         fixture.hashes[1] = hash_file(&resources.ffmpeg).unwrap();
         fixture.hashes[2] = hash_file(&resources.quickjs).unwrap();
+        #[cfg(target_os = "linux")]
+        {
+            fs::write(&resources.ffprobe, b"new ffprobe").unwrap();
+            fixture.hashes[3] = hash_file(&resources.ffprobe).unwrap();
+        }
         fixture.prepare("0.0.2").unwrap();
         assert_eq!(fs::read(&paths.yt_dlp).unwrap(), b"updated yt-dlp stub");
         assert_eq!(fs::read(&paths.ffmpeg).unwrap(), b"new ffmpeg");
         assert_eq!(fs::read(&paths.quickjs).unwrap(), b"new quickjs");
+        #[cfg(target_os = "linux")]
+        assert_eq!(fs::read(&paths.ffprobe).unwrap(), b"new ffprobe");
     }
 
     #[test]
@@ -676,7 +802,7 @@ mod tests {
         fixture.prepare("0.0.1").unwrap();
         let staging = fixture.data.join("engine/staging");
         fs::create_dir_all(&staging).unwrap();
-        let candidate = staging.join("candidate.exe");
+        let candidate = staging.join(CANDIDATE_FILENAME);
         fs::write(&candidate, b"pending update").unwrap();
         let mut manifest = read_manifest(&fixture.data).unwrap();
         manifest.pending_version = Some("2026.10.21".into());
@@ -749,7 +875,10 @@ mod tests {
             return;
         }
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        #[cfg(target_os = "windows")]
         let resources = root.join("resources/windows-engine");
+        #[cfg(target_os = "linux")]
+        let resources = root.join("resources/linux-engine");
         let data =
             std::env::temp_dir().join(format!("zownload-real-engine-{}", uuid::Uuid::new_v4()));
         let result = bootstrap(&resources, &data, "0.0.1");

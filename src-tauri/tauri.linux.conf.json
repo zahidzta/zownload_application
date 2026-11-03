@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": {
+      "resources/linux-engine/yt-dlp": "binaries/yt-dlp",
+      "resources/linux-engine/ffmpeg": "binaries/ffmpeg",
+      "resources/linux-engine/ffprobe": "binaries/ffprobe",
+      "resources/linux-engine/qjs": "binaries/qjs"
+    }
+  }
+}

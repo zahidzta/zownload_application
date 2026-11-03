@@ -98,3 +98,14 @@ test('stable app update action persists across UI recreation and runs only after
   await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Zownload is up to date.'))
   expect(screen.queryByRole('button', { name: 'Update Zownload' })).toBeNull()
 })
+
+test('opening a direct package link keeps the app update available until the app version changes', async () => {
+  const transport = createSimulatorTransport({ appUpdateAvailable: true, appUpdateInstallOpensLink: true })
+  const store = createDownloadFlowStore(transport)
+  render(<AppView locale="en" page="settings" flowStore={store}
+    onBack={() => {}} onOpenSettings={() => {}} onToggleLocale={() => {}} />)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Update Zownload' }))
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('0.0.1 → 0.0.2'))
+  expect(screen.getByRole('button', { name: 'Update Zownload' })).toBeTruthy()
+})

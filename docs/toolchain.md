@@ -52,6 +52,7 @@ From the repository root, after installing Rust via [rustup](https://rustup.rs/)
 
 ```powershell
 rustup toolchain install 1.99.1 --profile minimal
+rustup component add rustfmt --toolchain 1.99.1
 rustup target add aarch64-linux-android --toolchain 1.99.1
 node --version
 npm --version
