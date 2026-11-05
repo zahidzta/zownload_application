@@ -561,4 +561,22 @@ The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
 `2.9.9-8.1build1`, `patchelf` `0.18.0-1.1build1`, `minisign` `0.11-1`,
 and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
 [V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
-hashes. Fedora and Debian native compatibility remains Gate 4A-05 work.
+hashes.
+
+### Gate 4A-05 native test targets
+
+The V3 native targets are Ubuntu 24.04 LTS x86_64 (AppImage with and without
+the FUSE v2 compatibility library, plus `.deb`), Fedora Workstation 44 x86_64
+(AppImage), and Debian GNU/Linux 13.7 “trixie” x86_64 (`.deb`). The Ubuntu
+24.04 package is `libfuse2t64`; Debian/Ubuntu `.deb` installation must resolve
+`libwebkit2gtk-4.1-0` from configured repositories. These targets remain
+incomplete. This session used WSL2 smoke environments instead of native
+desktop targets: Ubuntu 24.04.5 LTS, Debian 13.7 (upgraded from the installed
+13.5 WSL image), and Fedora Linux 44. In WSL2, tested `libfuse2t64` was
+`2.9.9-8.1build1`, Ubuntu WebKitGTK `2.52.6-0ubuntu0.24.04.1`, Debian
+WebKitGTK `2.54.0-1~deb13u3` / GTK3 `3.24.49-3`, and Fedora `fuse-libs`
+`2.9.9-25.fc44`, WebKitGTK `2.54.2-1.fc44`, GTK3 `3.24.52-2`, and glibc
+`2.43-2.fc44`. The draft AppImage and `.deb` hashes and scenario limits are in
+the [4A-05 status report](gates/evidence/4a/4a-05.md). The owner separately
+reported native Ubuntu 24.04.5 installation and single MP3/MP4 success for
+both packages; the owner's artifact hashes were not supplied.
