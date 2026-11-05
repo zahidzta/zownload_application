@@ -562,3 +562,41 @@ The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
 and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
 [V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
 hashes. Fedora and Debian native compatibility remains Gate 4A-05 work.
+
+### Gate 4A-05 Ubuntu native review
+
+On 2026-11-05, the graphical host reported **Ubuntu 24.04.5 LTS (Noble),
+x86_64 / amd64**, kernel `7.0.0-42-generic`, WebKitGTK
+`2.52.6-0ubuntu0.24.04.1`, and GTK `3.24.41-4ubuntu1.3`. Neither
+`libfuse2t64` nor `libfuse2` was installed, yet the AppImage mounted and ran.
+The host system packages were not changed.
+
+A disposable QEMU/KVM guest reported **Ubuntu 24.04.5 LTS x86_64 / amd64**,
+kernel `6.8.0-147-generic`, the same WebKitGTK and GTK versions, and
+`libfuse2t64 2.9.9-8.1build1`. It came from the official Noble cloud image,
+SHA-256 `04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94`
+(matching Ubuntu's `SHA256SUMS`). The AppImage mounted and downloaded in that
+guest. The `.deb` installed with an administrator prompt, opened its GUI,
+and completed a clean graphical installation through GDebi. The guest was
+powered off after testing.
+
+The authenticated GitHub release list identified the unpublished
+`app-v0.0.1` draft as release ID `431050689`; the by-tag API returned 404 for
+this draft. The following SHA-256 values were recomputed from the downloaded
+files and matched the release asset digests:
+
+| Draft asset | Locally verified SHA-256 |
+|---|---|
+| `Zownload_0.0.1_amd64.AppImage` | `f5275e1bd3166a189ab1f64a63b0a39483c1b42ef7967bf618a12048378e788d` |
+| `Zownload_0.0.1_amd64.AppImage.sig` | `a54b2893d997d58f932e09c8977494a91f54c5e4d7d2229aba2f4a3ea86c0e9e` |
+| `Zownload_0.0.1_amd64.deb` | `95852e7124feb90e1acc6da34cb2d2e37fbacf290ba632639348637ce145bde2` |
+| `Zownload_0.0.1_amd64.deb.sig` | `1372f753250f443ca71031d40d86fd096b2e339f7318e55b3a0db49e5bf7b0ae` |
+| `latest.json` | `35443f232d5cedf822842bf07eed519580ca769c1280dc2624ff78832a50850a` |
+
+The [4A-05 evidence](gates/evidence/4a/4a-05.md) records output hashes,
+engine hashes, screenshots, the `.deb` dependency and prompt observations,
+AppImage MP3/MP4/playlist results, and shutdown/queue restoration. The final
+read-only release check found the exact nine-asset allowlist and unchanged
+Windows metadata. Fedora Workstation 44, Debian 13.7, Ubuntu's stock App
+Center flow, and real app upgrades remain pending. Only version 0.0.1 exists;
+no update was simulated, and Gate 4A remains open.
