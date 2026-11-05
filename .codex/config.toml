@@ -1,0 +1,46 @@
+# =====================================
+# CODEX CLI - PROJECT CONFIGURATION
+# =====================================
+
+# MAIN ORCHESTRATOR
+model = "gpt-6-sol"
+model_reasoning_effort = "xhigh"
+
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+
+# =====================================
+# MULTI-AGENT SYSTEM
+# =====================================
+
+[features]
+multi_agent = true
+
+[agents]
+enabled = true
+max_threads = 4
+max_depth = 1
+
+# =====================================
+# SPECIALIZED AGENTS
+# =====================================
+
+[agents.explorer]
+description = "Read-only repository exploration, dependency analysis and codebase research."
+config_file = "agents/explorer.toml"
+
+[agents.architect]
+description = "Software architecture, technical planning, design decisions and risk analysis."
+config_file = "agents/architect.toml"
+
+[agents.developer]
+description = "Implement features, fix bugs and refactor code according to the approved design."
+config_file = "agents/developer.toml"
+
+[agents.reviewer]
+description = "Independent code review focused on correctness, security, performance and maintainability."
+config_file = "agents/reviewer.toml"
+
+[agents.tester]
+description = "Create and execute automated tests, verify acceptance criteria and report failures."
+config_file = "agents/tester.toml"

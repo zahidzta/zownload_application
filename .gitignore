@@ -24,6 +24,3 @@ target/
 work/engine/
 work/android/
 src-tauri/resources/windows-engine/
-
-# Configuracion local
-.codex/
