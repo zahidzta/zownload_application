@@ -561,7 +561,7 @@ The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
 `2.9.9-8.1build1`, `patchelf` `0.18.0-1.1build1`, `minisign` `0.11-1`,
 and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
 [V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
-hashes. Fedora and Debian native compatibility remains Gate 4A-05 work.
+hashes. Fedora and Debian native compatibility were scheduled for Gate 4A-05.
 
 ### Gate 4A-05 Ubuntu native review
 
@@ -597,6 +597,30 @@ The [4A-05 evidence](gates/evidence/4a/4a-05.md) records output hashes,
 engine hashes, screenshots, the `.deb` dependency and prompt observations,
 AppImage MP3/MP4/playlist results, and shutdown/queue restoration. The final
 read-only release check found the exact nine-asset allowlist and unchanged
-Windows metadata. Fedora Workstation 44, Debian 13.7, Ubuntu's stock App
-Center flow, and real app upgrades remain pending. Only version 0.0.1 exists;
-no update was simulated, and Gate 4A remains open.
+Windows metadata. Fedora Workstation 44, Ubuntu's stock App Center flow, and
+real app upgrades remain pending. Only version 0.0.1 exists; no update was
+simulated, and Gate 4A remains open.
+
+### Gate 4A-05 Debian native review
+
+On 2026-11-05, the native Oracle VirtualBox guest reported **Debian GNU/Linux
+13.7 (trixie), x86_64 / amd64**, kernel `6.12.115+deb13.1-amd64`, GNOME on
+Wayland/Xwayland, and no WSL. The installed runtime packages were
+`libwebkit2gtk-4.1-0 2.54.0-1~deb13u3`,
+`libjavascriptcoregtk-4.1-0 2.54.0-1~deb13u3`,
+`libgtk-3-0t64 3.24.49-3`, `libsoup-3.0-0 3.6.5-3`, and
+`libadwaita-1-0 1.7.6-1~deb13u1`. GNOME Software was `48.3-2`; the second
+clean graphical installation used GDebi `0.9.5.8`.
+
+Debian's `/usr/bin/gh` read unpublished release ID `431050689` after the
+release-by-tag endpoint returned 404. The downloaded `.deb` SHA-256 was
+`95852e7124feb90e1acc6da34cb2d2e37fbacf290ba632639348637ce145bde2`;
+the downloaded `latest.json` SHA-256 was
+`35443f232d5cedf822842bf07eed519580ca769c1280dc2624ff78832a50850a`.
+The installed app opened with an isolated XDG profile and produced a local
+MP3, an Archive.org MP4, and a two-entry local playlist. Engine copies in
+app data retained the V2 hashes and executable permissions. Closing the app
+during a throttled local download removed its engine processes; the queue
+reopened paused. The [Debian evidence](gates/evidence/4a/4a-05.md#native-debian-137-deb-review)
+records output hashes, screenshots, graphical install observations, and
+remaining V3 limits.
