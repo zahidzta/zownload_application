@@ -566,13 +566,18 @@ hashes.
 ### Gate 4A-05 native test targets
 
 The V3 native targets are Ubuntu 24.04 LTS x86_64 (AppImage with and without
-the FUSE v2 compatibility library, plus `.deb`), Fedora Workstation 44 x86_64
-(AppImage), and Debian GNU/Linux 13.7 “trixie” x86_64 (`.deb`). The Ubuntu
-24.04 package is `libfuse2t64`; Debian/Ubuntu `.deb` installation must resolve
-`libwebkit2gtk-4.1-0` from configured repositories. These targets remain
+the FUSE v2 compatibility library, plus `.deb`), Fedora Workstation 45 x86_64
+(AppImage), and Debian GNU/Linux 13.7 “trixie” x86_64 (`.deb`). The owner
+approved replacing the planned Fedora 44 target with Fedora 45 on 2026-11-06.
+The Ubuntu 24.04 package is `libfuse2t64`; Debian/Ubuntu `.deb` installation
+must resolve `libwebkit2gtk-4.1-0` from configured repositories. These targets remain
 incomplete. This session used WSL2 smoke environments instead of native
 desktop targets: Ubuntu 24.04.5 LTS, Debian 13.7 (upgraded from the installed
-13.5 WSL image), and Fedora Linux 44. In WSL2, tested `libfuse2t64` was
+13.5 WSL image), and Fedora Linux 44. The owner reported that a Fedora
+Workstation 45 x86_64 host was available and its package versions were recorded
+for diagnostics, but the AppImage could not be downloaded, so Fedora 45 V3
+application tests remain pending.
+In WSL2, tested `libfuse2t64` was
 `2.9.9-8.1build1`, Ubuntu WebKitGTK `2.52.6-0ubuntu0.24.04.1`, Debian
 WebKitGTK `2.54.0-1~deb13u3` / GTK3 `3.24.49-3`, and Fedora `fuse-libs`
 `2.9.9-25.fc44`, WebKitGTK `2.54.2-1.fc44`, GTK3 `3.24.52-2`, and glibc
