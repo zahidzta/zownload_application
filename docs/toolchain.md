@@ -597,9 +597,9 @@ The [4A-05 evidence](gates/evidence/4a/4a-05.md) records output hashes,
 engine hashes, screenshots, the `.deb` dependency and prompt observations,
 AppImage MP3/MP4/playlist results, and shutdown/queue restoration. The final
 read-only release check found the exact nine-asset allowlist and unchanged
-Windows metadata. Fedora Workstation 44, Ubuntu's stock App Center flow, and
-real app upgrades remain pending. Only version 0.0.1 exists; no update was
-simulated, and Gate 4A remains open.
+Windows metadata. Fedora Workstation 45 native smoke tests are recorded below;
+Ubuntu's stock App Center flow and real app upgrades remain pending. No update
+was simulated, and Gate 4A remains open.
 
 ### Gate 4A-05 Debian native review
 
@@ -624,3 +624,37 @@ during a throttled local download removed its engine processes; the queue
 reopened paused. The [Debian evidence](gates/evidence/4a/4a-05.md#native-debian-137-deb-review)
 records output hashes, screenshots, graphical install observations, and
 remaining V3 limits.
+
+### Gate 4A-05 Fedora Workstation 45 follow-up
+
+On 2026-11-06, the owner approved **Fedora Workstation 45 x86_64** as the
+non-Debian V3 target; the earlier Fedora 44 WSL trial is historical. The
+available graphical guest was **Fedora Linux 45 (Workstation Edition),
+x86_64**, kernel `7.2.11-300.fc45.x86_64`, GNOME on Wayland under Oracle
+virtualization, not WSL. The installed host diagnostic RPMs were
+`fuse 2.9.9-26.fc45.x86_64`, `fuse3 3.18.3-1.fc45.x86_64`,
+`fuse3-libs 3.18.3-1.fc45.x86_64`,
+`webkit2gtk4.1 2.54.1-2.fc45.x86_64`,
+`gtk3 3.24.52-6.fc45.x86_64`, and `glibc 2.44-1.fc45.x86_64`.
+`fuse-libs` and `libfuse.so.2` were absent; `/dev/fuse` was present.
+These are host package versions, separate from the app results. `/usr/bin/fusermount`
+reported `2.9.9`; the verified AppImage mounted and opened without
+`fuse-libs` or `libfuse.so.2`. No system package was installed.
+
+On the owner's instruction, Linux `gh --version` reported `2.103.3`, and
+`gh auth status` confirmed the `zahidzta` account with `repo` scope. The
+authenticated release list identified draft `app-v0.0.1`, ID `431050689`,
+with nine assets and no later version. Asset ID `704068643` supplied the
+150,657,528-byte AppImage; its locally recomputed SHA-256 was
+`f5275e1bd3166a189ab1f64a63b0a39483c1b42ef7967bf618a12048378e788d`,
+matching V2. An interrupted initial transfer was resumed using authenticated
+byte ranges. The draft remained unpublished and unchanged.
+
+A fresh isolated XDG profile launched the AppImage from a test desktop entry;
+its four app-data engines matched V2 hashes and mode `755`. A second isolated
+profile completed MP3, MP4, and a two-entry MP3 playlist. Closing during a
+throttled download removed yt-dlp and the AppImage mount; the queue reopened
+paused without automatic work. The AppImage's daily update check reported
+`Could not fetch a valid release JSON from the remote`; no later version was
+confirmed or installed. [4A-05 evidence](gates/evidence/4a/4a-05.md#fedora-workstation-45-native-follow-up-2026-11-06)
+contains output/source hashes and screenshots. Real upgrades remain pending.
