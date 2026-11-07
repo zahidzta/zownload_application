@@ -561,27 +561,100 @@ The signed Gate 4A-04 runner reported **Ubuntu 24.04.5 LTS x86_64** and GCC
 `2.9.9-8.1build1`, `patchelf` `0.18.0-1.1build1`, `minisign` `0.11-1`,
 and OpenSSL development headers `3.0.13-0ubuntu3.16`. The
 [V2 evidence](gates/evidence/4a/4a-04.md) records the package and engine
-hashes.
+hashes. Fedora and Debian native compatibility were scheduled for Gate 4A-05.
 
-### Gate 4A-05 native test targets
+### Gate 4A-05 Ubuntu native review
 
-The V3 native targets are Ubuntu 24.04 LTS x86_64 (AppImage with and without
-the FUSE v2 compatibility library, plus `.deb`), Fedora Workstation 45 x86_64
-(AppImage), and Debian GNU/Linux 13.7 “trixie” x86_64 (`.deb`). The owner
-approved replacing the planned Fedora 44 target with Fedora 45 on 2026-11-06.
-The Ubuntu 24.04 package is `libfuse2t64`; Debian/Ubuntu `.deb` installation
-must resolve `libwebkit2gtk-4.1-0` from configured repositories. These targets remain
-incomplete. This session used WSL2 smoke environments instead of native
-desktop targets: Ubuntu 24.04.5 LTS, Debian 13.7 (upgraded from the installed
-13.5 WSL image), and Fedora Linux 44. The owner reported that a Fedora
-Workstation 45 x86_64 host was available and its package versions were recorded
-for diagnostics, but the AppImage could not be downloaded, so Fedora 45 V3
-application tests remain pending.
-In WSL2, tested `libfuse2t64` was
-`2.9.9-8.1build1`, Ubuntu WebKitGTK `2.52.6-0ubuntu0.24.04.1`, Debian
-WebKitGTK `2.54.0-1~deb13u3` / GTK3 `3.24.49-3`, and Fedora `fuse-libs`
-`2.9.9-25.fc44`, WebKitGTK `2.54.2-1.fc44`, GTK3 `3.24.52-2`, and glibc
-`2.43-2.fc44`. The draft AppImage and `.deb` hashes and scenario limits are in
-the [4A-05 status report](gates/evidence/4a/4a-05.md). The owner separately
-reported native Ubuntu 24.04.5 installation and single MP3/MP4 success for
-both packages; the owner's artifact hashes were not supplied.
+On 2026-11-05, the graphical host reported **Ubuntu 24.04.5 LTS (Noble),
+x86_64 / amd64**, kernel `7.0.0-42-generic`, WebKitGTK
+`2.52.6-0ubuntu0.24.04.1`, and GTK `3.24.41-4ubuntu1.3`. Neither
+`libfuse2t64` nor `libfuse2` was installed, yet the AppImage mounted and ran.
+The host system packages were not changed.
+
+A disposable QEMU/KVM guest reported **Ubuntu 24.04.5 LTS x86_64 / amd64**,
+kernel `6.8.0-147-generic`, the same WebKitGTK and GTK versions, and
+`libfuse2t64 2.9.9-8.1build1`. It came from the official Noble cloud image,
+SHA-256 `04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94`
+(matching Ubuntu's `SHA256SUMS`). The AppImage mounted and downloaded in that
+guest. The `.deb` installed with an administrator prompt, opened its GUI,
+and completed a clean graphical installation through GDebi. The guest was
+powered off after testing.
+
+The authenticated GitHub release list identified the unpublished
+`app-v0.0.1` draft as release ID `431050689`; the by-tag API returned 404 for
+this draft. The following SHA-256 values were recomputed from the downloaded
+files and matched the release asset digests:
+
+| Draft asset | Locally verified SHA-256 |
+|---|---|
+| `Zownload_0.0.1_amd64.AppImage` | `f5275e1bd3166a189ab1f64a63b0a39483c1b42ef7967bf618a12048378e788d` |
+| `Zownload_0.0.1_amd64.AppImage.sig` | `a54b2893d997d58f932e09c8977494a91f54c5e4d7d2229aba2f4a3ea86c0e9e` |
+| `Zownload_0.0.1_amd64.deb` | `95852e7124feb90e1acc6da34cb2d2e37fbacf290ba632639348637ce145bde2` |
+| `Zownload_0.0.1_amd64.deb.sig` | `1372f753250f443ca71031d40d86fd096b2e339f7318e55b3a0db49e5bf7b0ae` |
+| `latest.json` | `35443f232d5cedf822842bf07eed519580ca769c1280dc2624ff78832a50850a` |
+
+The [4A-05 evidence](gates/evidence/4a/4a-05.md) records output hashes,
+engine hashes, screenshots, the `.deb` dependency and prompt observations,
+AppImage MP3/MP4/playlist results, and shutdown/queue restoration. The final
+read-only release check found the exact nine-asset allowlist and unchanged
+Windows metadata. Fedora Workstation 45 native smoke tests are recorded below;
+Ubuntu's stock App Center flow and real app upgrades remain pending. No update
+was simulated, and Gate 4A remains open.
+
+### Gate 4A-05 Debian native review
+
+On 2026-11-05, the native Oracle VirtualBox guest reported **Debian GNU/Linux
+13.7 (trixie), x86_64 / amd64**, kernel `6.12.115+deb13.1-amd64`, GNOME on
+Wayland/Xwayland, and no WSL. The installed runtime packages were
+`libwebkit2gtk-4.1-0 2.54.0-1~deb13u3`,
+`libjavascriptcoregtk-4.1-0 2.54.0-1~deb13u3`,
+`libgtk-3-0t64 3.24.49-3`, `libsoup-3.0-0 3.6.5-3`, and
+`libadwaita-1-0 1.7.6-1~deb13u1`. GNOME Software was `48.3-2`; the second
+clean graphical installation used GDebi `0.9.5.8`.
+
+Debian's `/usr/bin/gh` read unpublished release ID `431050689` after the
+release-by-tag endpoint returned 404. The downloaded `.deb` SHA-256 was
+`95852e7124feb90e1acc6da34cb2d2e37fbacf290ba632639348637ce145bde2`;
+the downloaded `latest.json` SHA-256 was
+`35443f232d5cedf822842bf07eed519580ca769c1280dc2624ff78832a50850a`.
+The installed app opened with an isolated XDG profile and produced a local
+MP3, an Archive.org MP4, and a two-entry local playlist. Engine copies in
+app data retained the V2 hashes and executable permissions. Closing the app
+during a throttled local download removed its engine processes; the queue
+reopened paused. The [Debian evidence](gates/evidence/4a/4a-05.md#native-debian-137-deb-review)
+records output hashes, screenshots, graphical install observations, and
+remaining V3 limits.
+
+### Gate 4A-05 Fedora Workstation 45 follow-up
+
+On 2026-11-06, the owner approved **Fedora Workstation 45 x86_64** as the
+non-Debian V3 target; the earlier Fedora 44 WSL trial is historical. The
+available graphical guest was **Fedora Linux 45 (Workstation Edition),
+x86_64**, kernel `7.2.11-300.fc45.x86_64`, GNOME on Wayland under Oracle
+virtualization, not WSL. The installed host diagnostic RPMs were
+`fuse 2.9.9-26.fc45.x86_64`, `fuse3 3.18.3-1.fc45.x86_64`,
+`fuse3-libs 3.18.3-1.fc45.x86_64`,
+`webkit2gtk4.1 2.54.1-2.fc45.x86_64`,
+`gtk3 3.24.52-6.fc45.x86_64`, and `glibc 2.44-1.fc45.x86_64`.
+`fuse-libs` and `libfuse.so.2` were absent; `/dev/fuse` was present.
+These are host package versions, separate from the app results. `/usr/bin/fusermount`
+reported `2.9.9`; the verified AppImage mounted and opened without
+`fuse-libs` or `libfuse.so.2`. No system package was installed.
+
+On the owner's instruction, Linux `gh --version` reported `2.103.3`, and
+`gh auth status` confirmed the `zahidzta` account with `repo` scope. The
+authenticated release list identified draft `app-v0.0.1`, ID `431050689`,
+with nine assets and no later version. Asset ID `704068643` supplied the
+150,657,528-byte AppImage; its locally recomputed SHA-256 was
+`f5275e1bd3166a189ab1f64a63b0a39483c1b42ef7967bf618a12048378e788d`,
+matching V2. An interrupted initial transfer was resumed using authenticated
+byte ranges. The draft remained unpublished and unchanged.
+
+A fresh isolated XDG profile launched the AppImage from a test desktop entry;
+its four app-data engines matched V2 hashes and mode `755`. A second isolated
+profile completed MP3, MP4, and a two-entry MP3 playlist. Closing during a
+throttled download removed yt-dlp and the AppImage mount; the queue reopened
+paused without automatic work. The AppImage's daily update check reported
+`Could not fetch a valid release JSON from the remote`; no later version was
+confirmed or installed. [4A-05 evidence](gates/evidence/4a/4a-05.md#fedora-workstation-45-native-follow-up-2026-11-06)
+contains output/source hashes and screenshots. Real upgrades remain pending.

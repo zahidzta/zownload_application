@@ -3,11 +3,13 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02 and the Gate 4A plan was approved; see the [checkpoint](gates/evidence/3c/checkpoint.md), [task evidence](gates/evidence/3c/tasks.md), and [Gate 4A plan](gates/gate-4a.md). Keep `app-v0.0.1` unpublished.
-- **Next task:** 4A-05 V3 completion — run the native install/update and download matrix on disposable Ubuntu 24.04, Fedora Workstation 45, and Debian 13.7 systems, then finish the checkpoint; see the [4A-05 status report](gates/evidence/4a/4a-05.md). The owner approved the Fedora 44-to-45 target change on 2026-11-06. Gate 4A remains unaccepted; only after owner acceptance may work start on **4B-01 — macOS runtime and release plan (OWNER-REVIEW)**. Keep `app-v0.0.1` unpublished.
+- **Next task:** 4A-05 — resolve remaining V3 installation/update limits and complete real app upgrades when a later version exists, then checkpoint. Gate 4A is not accepted; keep `app-v0.0.1` unpublished.
+- **4A-05 progress:** Ubuntu 24.04.5 AppImage/`.deb`, Debian 13.7 `.deb`, and owner-approved Fedora Workstation 45 AppImage native smoke results are recorded (Fedora commit `f5bd12e`). Fedora's in-app update discovery returned an error while only an unpublished 0.0.1 draft was confirmed; real upgrades, Debian's visible administrator prompt, and the stock Ubuntu App Center flow remain pending. See [V3 evidence](gates/evidence/4a/4a-05.md).
 - Completed 4A-01: Owner approved the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
 - Completed 4A-02: Added Linux runtime paths, pinned engines, verified app-data copies, and process cleanup; commit `0fabf35`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41545291079).
 - Completed 4A-03: Added Linux AppImage signed updates and stable `.deb` direct-link updates; commit `3f6af9c`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41546326421).
 - Completed 4A-04: Built signed Linux AppImage/`.deb`, merged and verified draft metadata, and recorded provenance; commits `571fd8f`–`3ca4bbd`; [V2 evidence](gates/evidence/4a/4a-04.md).
+- 4A-05 Debian native portion: Debian 13.7 `.deb` clean install, MP3/MP4/playlist, engine hashes, and paused queue verified; commit `887bfca`; [V3 progress](gates/evidence/4a/4a-05.md#native-debian-137-deb-review). GNOME Software did not show a password prompt; GDebi prompt confirmation and real upgrades remain open.
 
 ## Accepted gates
 

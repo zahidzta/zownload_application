@@ -12,19 +12,12 @@ The installer uses Microsoft's WebView2 bootstrapper. If the WebView2 Runtime is
 
 ## Linux x86_64 installation
 
-When a Linux release is available, download the artifact for your distribution from [GitHub Releases](https://github.com/zahidzta/zownload_application/releases).
+When a Linux release is available, choose one of its two packages from [GitHub Releases](https://github.com/zahidzta/zownload_application/releases):
 
-### AppImage
+- **AppImage (portable):** Download `Zownload_<version>_amd64.AppImage`. In the file manager, open **Properties → Permissions**, allow the file to run as a program, then double-click it. If your distribution reports that `libfuse.so.2` is missing, install its FUSE 2 compatibility package (`libfuse2t64` on Ubuntu 24.04) through the distribution's package manager and open the AppImage again.
+- **Debian package (Ubuntu/Debian):** Download `Zownload_<version>_amd64.deb`, double-click it, and install it through the graphical software installer. Approve the administrator prompt when asked.
 
-Download the `.AppImage` file. In the file manager, open its **Properties** and enable **Allow executing file as a program** (wording varies by desktop), then double-click it to start Zownload.
-
-If the desktop reports that FUSE v2 is missing, install the compatibility library from your distribution's software center: Ubuntu 24.04 uses [`libfuse2t64`](https://packages.ubuntu.com/noble/libfuse2t64), Ubuntu 22.04 uses [`libfuse2`](https://packages.ubuntu.com/jammy/libfuse2), and Fedora provides it as [`fuse-libs`](https://packages.fedoraproject.org/pkgs/fuse/fuse-libs/). The software center may ask for your administrator password.
-
-### Debian package (`.deb`)
-
-Use the `.deb` on Debian, Ubuntu, or a compatible derivative. Double-click the downloaded file to open it in the distribution's software installer, choose **Install**, and approve the administrator prompt. The installer supplies the required WebKitGTK runtime dependency from the distribution's configured repositories.
-
-For an update, open **Settings** and check for app updates. When Zownload reports **New version available**, choose its update action to open the matching `.deb` release asset, download it, close Zownload, and open the downloaded package in the software installer. Choose **Install** or **Update** and approve the administrator prompt to replace the installed version.
+For a later app release, the AppImage uses Zownload's in-app updater. A `.deb` installation instead shows a link to the matching new `.deb`; download it and install it through the graphical installer, approving its administrator prompt. The unpublished 0.0.1 draft has no earlier version, so an actual upgrade has not yet been verified.
 
 ## Licence
 
