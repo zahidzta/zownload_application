@@ -395,7 +395,7 @@ jobs:
           python3 scripts/gate-4a/release-linux.py verify \
             --config src-tauri/tauri.conf.json \
             --release "$base/release.json" \
-            --latest docs/gates/evidence/4a/windows-latest-baseline.json \
+            --latest "$base/latest.json" \
             --windows-signatures "$base" \
             --bundle-root "$bundle" \
             --output "$base/latest.json"
