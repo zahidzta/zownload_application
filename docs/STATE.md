@@ -3,8 +3,8 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02 and the Gate 4A plan was approved; see the [checkpoint](gates/evidence/3c/checkpoint.md), [task evidence](gates/evidence/3c/tasks.md), and [Gate 4A plan](gates/gate-4a.md). `app-v0.0.1` remains an unchanged draft; the owner authorized stable `app-v0.0.2` for update review.
-- **Next task:** Continue 4A-05 with native V3 update review. Gate 4A remains open and unapproved until V3 is complete and the owner accepts the checkpoint; do not start Gate 4B.
-- **4A-05 progress:** Native smoke evidence remains recorded for Ubuntu 24.04.5, Debian 13.7, and Fedora Workstation 45; owner-reported App Center/GDebi/FUSE follow-ups remain qualified. WSL2 clones discovered stable 0.0.2 and replaced the Ubuntu AppImage and Debian `.deb` with matching release assets; AppImage auto-relaunch, GDebi prompt, and Fedora 45 update remain unproven. See [V3 evidence](gates/evidence/4a/4a-05.md).
+- **Next task:** Complete the 4A-05 V3 evidence review and prepare its checkpoint. Gate 4A remains open and unapproved until V3 is complete and the owner accepts the checkpoint; do not start Gate 4B.
+- **4A-05 progress:** The owner reports successful native update flows on Debian, Ubuntu, and Fedora (2026-11-11); exact builds, hashes/screenshots, GDebi prompt, and Fedora relaunch details were not supplied. Native smoke evidence remains recorded for Ubuntu 24.04.5, Debian 13.7, and Fedora Workstation 45; WSL2 results and limits are in [V3 evidence](gates/evidence/4a/4a-05.md).
 - **Owner direction for app v0.0.2:** horizontal 1350×770 desktop window. Version/config changes are committed; stable release `app-v0.0.2` is published for this review, while Gate 4A remains open.
 - Completed 4A-01: Owner approved the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
 - Completed 4A-02: Added Linux runtime paths, pinned engines, verified app-data copies, and process cleanup; commit `0fabf35`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41545291079).
