@@ -213,6 +213,10 @@ yt-dlp, FFmpeg, or QuickJS. Other platforms do not include these resources.
 | `ffmpeg.exe` | `fa050630ddf5b7c3303d8dab5e5a42e7023547fb78ec9b90b5be0a4f788a7e66` | Gate 0B FFmpeg 8.1.3/LAME 3.100/zlib 1.3.2 build |
 | `qjs.exe` | `bec67f8f87fa22958d3ab8be5508088116b8bff90032323d82c94545e1698b83` | Gate 0B QuickJS 2026-06-04 build |
 
+The FFmpeg and QuickJS hashes above identify the Gate 0B evidence outputs.
+Windows app builds embed hashes from the actual staged files because rebuilt
+FFmpeg outputs may vary between runs.
+
 Context7 was consulted before this Tauri configuration change but returned a
 quota error. The resource mapping and platform configuration were checked
 against the [official resource](https://v2.tauri.app/develop/resources/) and

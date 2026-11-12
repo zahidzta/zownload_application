@@ -291,6 +291,9 @@ The pinned `ar.exe` writes build-time member timestamps into the LAME and zlib
 archives, so their SHA-256 values can change between clean runs even with the
 same source and commands. The evidence identifies hashes from its own run;
 the recipe does not claim byte-identical archives across runs.
+Windows release builds therefore embed the hashes of the staged `ffmpeg.exe`
+and `qjs.exe` resources into the Rust app. A release build fails if those
+resources are missing, so startup verifies the same files the installer ships.
 
 ## 0B-12 — Redistribution license audit
 
