@@ -18,12 +18,12 @@ on:
       previous_version:
         description: Older package version used in the isolated test
         required: true
-        default: 0.0.0
+        default: 0.0.1
         type: string
       candidate_version:
         description: Candidate package version
         required: true
-        default: 0.0.1
+        default: 0.0.2
         type: string
   workflow_call:
     inputs:

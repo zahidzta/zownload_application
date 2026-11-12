@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Zownload",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "identifier": "com.zownload.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Zownload",
-        "width": 420,
-        "height": 700
+        "width": 1350,
+        "height": 770
       }
     ],
     "security": {

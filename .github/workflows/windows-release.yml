@@ -388,6 +388,15 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$base/release.json"
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern latest.json --pattern '*.sig' --pattern '*.AppImage' --pattern '*.deb' --dir "$base"
+          python3 - "$base/latest.json" "$base/windows-latest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          candidate = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          candidate["platforms"].pop("linux-x86_64", None)
+          Path(sys.argv[2]).write_text(json.dumps(candidate, indent=2) + "\n", encoding="utf-8")
+          PY
           mv "$base/Zownload_${version}_amd64.AppImage" \
             "$base/Zownload_${version}_amd64.AppImage.sig" "$bundle/appimage/"
           mv "$base/Zownload_${version}_amd64.deb" \
@@ -395,7 +404,7 @@ jobs:
           python3 scripts/gate-4a/release-linux.py verify \
             --config src-tauri/tauri.conf.json \
             --release "$base/release.json" \
-            --latest docs/gates/evidence/4a/windows-latest-baseline.json \
+            --latest "$base/windows-latest.json" \
             --windows-signatures "$base" \
             --bundle-root "$bundle" \
             --output "$base/latest.json"
