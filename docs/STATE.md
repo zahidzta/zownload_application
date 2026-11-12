@@ -8,6 +8,7 @@
 - **Owner direction for app v0.0.2:** horizontal 1350×770 desktop window. Version/config changes are committed; stable release `app-v0.0.2` is published for this review, while Gate 4A remains open.
 - Completed 4A-01: Owner approved the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
 - Completed 4A-02: Added Linux runtime paths, pinned engines, verified app-data copies, and process cleanup; commit `0fabf35`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41545291079).
+- Completed 4A-02-R1: Embedded hashes for staged Windows FFmpeg/QuickJS, fixing the v0.0.2 baseline refresh failure; commit `42187e4`; [evidence](gates/evidence/4a/4a-02-windows-regression.md).
 - Completed 4A-03: Added Linux AppImage signed updates and stable `.deb` direct-link updates; commit `3f6af9c`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41546326421).
 - Completed 4A-04: Built signed Linux AppImage/`.deb`, merged and verified draft metadata, and recorded provenance; commits `571fd8f`–`3ca4bbd`; [V2 evidence](gates/evidence/4a/4a-04.md).
 - 4A-05 Debian native portion: Debian 13.7 `.deb` clean install, MP3/MP4/playlist, engine hashes, and paused queue verified; commit `887bfca`; [V3 progress](gates/evidence/4a/4a-05.md#native-debian-137-deb-review). GNOME Software did not show a password prompt; the owner later confirmed the GDebi prompt. Real upgrades remain open.
