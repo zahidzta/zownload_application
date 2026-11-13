@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "resources": {
+      "resources/macos-engine/yt-dlp": "binaries/yt-dlp",
+      "resources/macos-engine/ffmpeg": "binaries/ffmpeg",
+      "resources/macos-engine/ffprobe": "binaries/ffprobe",
+      "resources/macos-engine/qjs": "binaries/qjs"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

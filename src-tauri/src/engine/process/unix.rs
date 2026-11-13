@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-//! Linux child supervision. Each engine process gets its own process group so
+//! Unix child supervision. Each engine process gets its own process group so
 //! cancellation and window close terminate its complete descendant tree.
 
 use std::{

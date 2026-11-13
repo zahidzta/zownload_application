@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-//! One Windows media worker at a time. The control lock orders user actions,
+//! One desktop media worker at a time. The control lock orders user actions,
 //! phase changes and terminal settlement; SQLite commits precede every event.
 
 use super::{analysis, process::Supervisor, single, updater, zip_output::ZipOutput, EnginePaths};
@@ -168,7 +168,7 @@ impl QueueCoordinator {
         if self.engine.is_none() {
             return Err(AppError::new(
                 ErrorCode::EngineMissing,
-                Some("Windows engine unavailable".into()),
+                Some("desktop engine unavailable".into()),
             ));
         }
         let id = uuid::Uuid::new_v4().to_string();
@@ -328,7 +328,7 @@ impl QueueCoordinator {
                 Err(reason) => Err(failure(reason)),
             }
         } else {
-            Err(failure("Windows engine unavailable"))
+            Err(failure("desktop engine unavailable"))
         };
         let Ok(mut control) = self.control.lock() else {
             return;
@@ -624,7 +624,7 @@ impl QueueCoordinator {
         let engine = self
             .engine
             .as_ref()
-            .ok_or_else(|| failure("Windows engine unavailable"))?;
+            .ok_or_else(|| failure("desktop engine unavailable"))?;
         let mut archive = state
             .zip_enabled
             .then(|| {
@@ -1030,7 +1030,7 @@ impl QueueCoordinator {
             (result, Some(disk))
         } else {
             (
-                Err(failure("download paths or Windows engine unavailable")),
+                Err(failure("download paths or desktop engine unavailable")),
                 None,
             )
         };
@@ -1167,7 +1167,7 @@ impl QueueCoordinator {
         if self.engine.is_none() {
             return Err(AppError::new(
                 ErrorCode::EngineMissing,
-                Some("Windows engine unavailable".into()),
+                Some("desktop engine unavailable".into()),
             ));
         }
         item.status = ItemStatus::Queued;

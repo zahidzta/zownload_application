@@ -7,7 +7,7 @@ pub mod app_update;
 #[cfg(not(target_os = "android"))]
 mod commands;
 pub mod contract;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod engine;
 pub mod persistence;
 pub(crate) mod playlist;
@@ -29,7 +29,7 @@ pub fn run() {
                     persistence::Database::open_at(&path)?,
                 ));
                 app.manage(std::sync::Arc::clone(&database));
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
                 {
                     // Install the platform supervisor before launching engine work.
                     let supervisor = engine::process::Supervisor::install()?;
@@ -91,7 +91,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 if let Some(queue) =
                     window.try_state::<std::sync::Arc<engine::queue::QueueCoordinator>>()
@@ -104,7 +104,7 @@ pub fn run() {
                     supervisor.shutdown();
                 }
             }
-            #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+            #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
             let _ = (window, event);
         });
     #[cfg(any(target_os = "windows", target_os = "linux"))]

@@ -3,9 +3,9 @@
 
 #[cfg(any(test, not(target_os = "windows")))]
 use crate::contract::{ItemStatus, Progress};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::engine::updater::ReleaseClient;
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::engine::{
     analysis,
     process::Supervisor,
@@ -20,10 +20,10 @@ use crate::{
     },
     persistence::Database,
 };
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 
@@ -79,7 +79,7 @@ impl EventSink for AppHandle {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub(crate) fn queue_sink(app: AppHandle) -> Arc<dyn Fn(QueueEvent) + Send + Sync> {
     Arc::new(move |event| {
         EventSink::emit(
@@ -217,7 +217,7 @@ fn deferred(detail: &'static str) -> AppError {
     AppError::new(ErrorCode::EngineMissing, Some(detail.into()))
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 fn ready_engine(status: &EngineStatus) -> CommandResult<EnginePaths> {
     match status {
         EngineStatus::Ready(paths) => Ok(paths.clone()),
@@ -230,7 +230,7 @@ fn ready_engine(status: &EngineStatus) -> CommandResult<EnginePaths> {
 
 #[tauri::command]
 pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeResult> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     {
         let status = app
             .try_state::<EngineStatus>()
@@ -289,7 +289,7 @@ pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeRe
             )
         })?;
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, url);
         Err(deferred(
@@ -304,7 +304,7 @@ pub fn enqueue_download(
     app: AppHandle,
     request: DownloadRequest,
 ) -> CommandResult<String> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     {
         let _ = database;
         validate_request(&request)?;
@@ -313,18 +313,18 @@ pub fn enqueue_download(
             .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?;
         return queue.enqueue(request);
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     mutate(database.inner(), &app, |db| enqueue(db, request))
 }
 
 #[tauri::command]
 pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .pause(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, id);
         Err(deferred("pause requires a running download engine"))
@@ -333,12 +333,12 @@ pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
 
 #[tauri::command]
 pub fn resume_download(app: AppHandle, id: String) -> CommandResult<()> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .resume(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
         let _ = (app, id);
         Err(deferred("resume requires a running download engine"))
@@ -351,14 +351,14 @@ pub fn remove_download(
     app: AppHandle,
     id: String,
 ) -> CommandResult<()> {
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     let _ = database;
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     return app
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .remove(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     mutate(database.inner(), &app, |db| remove(db, id))
 }
 
@@ -439,7 +439,7 @@ pub fn set_settings(
     })
 }
 
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 fn engine_update_error(reason: String) -> AppError {
     let lower = reason.to_ascii_lowercase();
     let code = if lower.contains("http")
@@ -455,7 +455,7 @@ fn engine_update_error(reason: String) -> AppError {
 }
 
 #[tauri::command]
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub fn engine_check_update(
     app: AppHandle,
     engine: State<'_, EngineStatus>,
@@ -473,7 +473,7 @@ pub fn engine_check_update(
 }
 
 #[tauri::command]
-#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub fn engine_update(
     app: AppHandle,
     engine: State<'_, EngineStatus>,
@@ -512,7 +512,7 @@ pub fn engine_update(
     Ok(status)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 #[tauri::command]
 pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
@@ -520,7 +520,7 @@ pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
     ))
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 #[tauri::command]
 pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
@@ -750,7 +750,7 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             assert_eq!(
                 engine_check_update().unwrap_err().code,

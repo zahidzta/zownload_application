@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::{
     ffi::OsString,
@@ -51,19 +51,24 @@ fn assert_process_stopped(pid: i32) {
 }
 
 fn process_is_reaped_or_zombie(pid: i32) -> bool {
-    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+    let Ok(output) = std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+    else {
         return true;
     };
-    stat.rsplit_once(')')
-        .and_then(|(_, rest)| rest.split_whitespace().next())
-        .is_none_or(|state| state == "Z" || state == "X")
+    if !output.status.success() {
+        return true;
+    }
+    let state = String::from_utf8_lossy(&output.stdout);
+    let state = state.trim();
+    state.is_empty() || state.starts_with('Z') || state.starts_with('X')
 }
 
 #[test]
 fn timeout_and_shutdown_stop_the_complete_engine_process_group() {
     let supervisor = Supervisor::install().unwrap();
-    let root =
-        std::env::temp_dir().join(format!("zownload-linux-process-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("zownload-unix-process-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
 
     let timeout_pid_file = root.join("timeout-child.pid");
