@@ -420,3 +420,29 @@ into each native build. The macOS Tauri overlays map these four resources to
 `binaries/` inside the app, from which the Rust runtime copies and verifies
 them in writable app data before execution. Hosted per-architecture output
 hashes and runtime checks are recorded in the [Gate 4B-02 evidence](gates/evidence/4b/4b-02.md).
+
+## 4B-03 — macOS DMG and updater packaging
+
+The [`macOS release workflow`](../.github/workflows/macos-release.yml) builds
+on `macos-15-intel` for x86_64 and `macos-15` for arm64. It stages the four
+verified engine copies with `build-macos-engine.sh`, then runs the Tauri
+bundler for `dmg` only with the matching architecture overlay. Tauri's signed
+`.app.tar.gz` and signature are validated alongside the DMG; the workflow
+normalizes the six release asset names to:
+
+- `Zownload_<version>_x86_64.dmg` and `Zownload_<version>_aarch64.dmg`
+- `Zownload_<version>_x86_64.app.tar.gz` and `Zownload_<version>_x86_64.app.tar.gz.sig`
+- `Zownload_<version>_aarch64.app.tar.gz` and `Zownload_<version>_aarch64.app.tar.gz.sig`
+
+`prepare-macos-bundles.py` checks that each app contains only its intended
+CPU architecture, has the approved minimum macOS version, and matches the
+Tauri version before staging it. `release-macos.py` verifies updater
+signatures and tamper rejection, checks the owner-created draft allowlist,
+preserves its Windows/Linux updater entries, then adds `darwin-x86_64` and
+`darwin-aarch64`. Each run also builds the designated lower version `0.0.3`
+for both architectures, signs its updater archives, verifies them, and keeps
+those packages only in the Actions artifact `macos-version-pair-<architecture>`.
+Only the higher `0.0.4` DMGs and updater archives are attached to the
+owner-created draft. The workflow never creates or publishes a release. Exact
+runner versions, lower/candidate artifact hashes, draft ID, and final metadata
+checks are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).

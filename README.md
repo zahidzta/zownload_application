@@ -19,6 +19,12 @@ When a Linux release is available, choose one of its two packages from [GitHub R
 
 For a later app release, the AppImage uses Zownload's in-app updater. A `.deb` installation instead shows a link to the matching new `.deb`; download it and install it through the graphical installer, approving its administrator prompt. The unpublished 0.0.1 draft has no earlier version, so an actual upgrade has not yet been verified.
 
+## macOS installation
+
+Choose the DMG for your Mac: `Zownload_<version>_aarch64.dmg` is for Apple Silicon and `Zownload_<version>_x86_64.dmg` is for Intel. Open the DMG and drag Zownload to Applications. The app is not Apple-signed or notarized. After trying to open it, go to **Apple menu → System Settings → Privacy & Security**, then choose **Open Anyway** for Zownload and confirm the prompt. Recent macOS versions do not allow bypassing this warning with right-click → Open.
+
+Tauri's updater uses a separate signed `.app.tar.gz` archive. The DMG is for installation; the updater archive and its `.sig` file are not manual installers.
+
 ## Licence
 
 Zownload source from this change onward is licensed under **GPL-3.0-or-later**. See [LICENSE](LICENSE) for the unmodified GPLv3 text and [third-party notices](docs/THIRD-PARTY-NOTICES.md) for dependencies and engine components, which retain their own licences.

@@ -139,6 +139,12 @@ SHA-256 values and detached FFmpeg signature remain mandatory before a build.
 | macOS x64 and arm64 | Official pinned universal `yt-dlp_macos` includes EJS; its hash is attested from the signed checksum file. | Build native `qjs` separately on each host in 0B-07/08. | Gate 4B builds `ffmpeg` and `ffprobe` from the same locked FFmpeg, LAME encoder, and zlib sources using [`build-macos-engine.sh`](../scripts/gate-4b/build-macos-engine.sh) and the LGPL-compatible configuration. |
 | Android arm64 | No official Android yt-dlp standalone executable is claimed. Keep the pinned source and EJS wheel as inputs; Python runtime packaging is a Gate 0C decision and must be locked before device execution. | Build the native Android `qjs` from the same source with NDK r30 in 0B-09; device run is Gate 0C. | Android executable and dependency configuration belongs to Gate 0C; no Android FFmpeg binary is attested by Gate 0B. |
 
+The Gate 4B-02 evidence records the architecture-specific macOS engine hashes
+and LGPL-compatible FFmpeg configuration. Gate 4B-03's package hashes and
+runner tool versions are recorded in
+[`4b-03.md`](gates/evidence/4b/4b-03.md); its updater bundles contain the same
+verified app-data engine resources.
+
 Source dependencies are the matched EJS 0.8.0, LAME 3.100 and zlib 1.3.2. yt-dlp's
 versioned [`pyproject.toml`](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml)
 lists its pinned Python package set and PyInstaller 6.22.0 for official

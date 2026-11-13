@@ -1,0 +1,390 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
+
+name: macOS release packages
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/macos-release.yml"
+      - "scripts/gate-4b/**"
+      - "scripts/gate-0b/**"
+      - "src-tauri/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+    inputs:
+      previous_macos_version:
+        description: Owner-designated unpublished lower-version macOS app
+        required: true
+        type: string
+      draft_release_id:
+        description: Optional; leave blank to build signed macOS CI artifacts without draft writes
+        required: false
+        type: string
+      release_tag:
+        description: Tag of that draft, for example app-v0.0.4
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-4b-macos-${{ github.event_name == 'workflow_dispatch' && inputs.draft_release_id || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-helper-test:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install signature verification tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends minisign
+          dpkg-query -W -f='${Version}\n' minisign
+      - name: Verify macOS release assembly and tamper rejection
+        run: python3 scripts/gate-4b/test-release-macos.py --minisign minisign
+
+  pull-request-build:
+    if: github.event_name == 'pull_request'
+    needs: release-helper-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            minimum: "10.15"
+            overlay: src-tauri/tauri.macos-x64.conf.json
+          - architecture: arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            minimum: "11.0"
+            overlay: src-tauri/tauri.macos-arm64.conf.json
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.1"
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.minimum }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.0"
+          package-manager-cache: false
+      - name: Check Node and npm pins
+        run: |
+          test "$(node --version)" = 'v24.22.0'
+          test "$(npm --version)" = '11.19.1'
+      - name: Install pinned Rust and target
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup target add '${{ matrix.target }}' --toolchain 1.99.1
+          rustup default 1.99.1
+      - name: Build and verify pinned macOS engines
+        run: |
+          if ! bash scripts/gate-4b/build-macos-engine.sh --verify > "$RUNNER_TEMP/macos-engine-build.log" 2>&1; then
+            tail -n 50 "$RUNNER_TEMP/macos-engine-build.log"
+            exit 1
+          fi
+          tail -n 35 "$RUNNER_TEMP/macos-engine-build.log" | tee -a "$GITHUB_STEP_SUMMARY"
+      - run: npm ci
+      - name: Disable updater signing for pull request package check
+        env:
+          CONFIG_OVERLAY: ${{ matrix.overlay }}
+        run: |
+          python3 - "$CONFIG_OVERLAY" "$RUNNER_TEMP/tauri-macos-ci.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          config.setdefault("bundle", {})["createUpdaterArtifacts"] = False
+          Path(sys.argv[2]).write_text(json.dumps(config), encoding="utf-8")
+          PY
+      - name: Build and validate architecture-specific DMG
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          CONFIG_OVERLAY: ${{ matrix.overlay }}
+        run: |
+          npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$RUNNER_TEMP/tauri-macos-ci.json"
+          python3 scripts/gate-4b/prepare-macos-bundles.py \
+            --bundle-root "src-tauri/target/$TARGET/release/bundle" \
+            --version "$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')" \
+            --architecture "$ARCHITECTURE" \
+            --output "$RUNNER_TEMP/macos-packages" \
+            --unsigned
+
+  release-preflight:
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.draft_release_id != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PREVIOUS_MACOS_VERSION: ${{ inputs.previous_macos_version }}
+      DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify owner-created draft and existing desktop metadata
+        run: |
+          version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          test "$RELEASE_TAG" = "app-v$version"
+          python3 - "$PREVIOUS_MACOS_VERSION" "$version" <<'PY'
+          import re
+          import sys
+          previous, candidate = sys.argv[1:]
+          pattern = r"\d+\.\d+\.\d+"
+          if not re.fullmatch(pattern, previous) or not re.fullmatch(pattern, candidate):
+              raise SystemExit("macOS app versions must use major.minor.patch format")
+          if tuple(map(int, candidate.split("."))) <= tuple(map(int, previous.split("."))):
+              raise SystemExit("candidate macOS version must be higher than the unpublished lower version")
+          PY
+          mkdir -p "$RUNNER_TEMP/macos-baseline"
+          printf '%s -> %s\n' "$PREVIOUS_MACOS_VERSION" "$version" \
+            > "$RUNNER_TEMP/macos-baseline/version-transition.txt"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/macos-baseline/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --pattern '*.sig' --dir "$RUNNER_TEMP/macos-baseline"
+          python3 scripts/gate-4b/release-macos.py preflight \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/macos-baseline/release.json" \
+            --latest "$RUNNER_TEMP/macos-baseline/latest.json" \
+            --signatures "$RUNNER_TEMP/macos-baseline"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-baseline
+          if-no-files-found: error
+          path: ${{ runner.temp }}/macos-baseline
+
+  macos-build:
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && needs.release-helper-test.result == 'success' && (needs.release-preflight.result == 'success' || inputs.draft_release_id == '') }}
+    needs: [release-helper-test, release-preflight]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86_64
+            asset_arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            minimum: "10.15"
+            overlay: src-tauri/tauri.macos-x64.conf.json
+          - architecture: arm64
+            asset_arch: aarch64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            minimum: "11.0"
+            overlay: src-tauri/tauri.macos-arm64.conf.json
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      RUSTUP_TOOLCHAIN: "1.99.1"
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.minimum }}
+      PREVIOUS_MACOS_VERSION: ${{ inputs.previous_macos_version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.0"
+          package-manager-cache: false
+      - name: Check pins and signing secret
+        run: |
+          test "$(node --version)" = 'v24.22.0'
+          test "$(npm --version)" = '11.19.1'
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+      - name: Install pinned Rust and target
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup target add '${{ matrix.target }}' --toolchain 1.99.1
+          rustup default 1.99.1
+      - name: Install signature verification tool
+        run: |
+          brew install minisign
+          brew list --versions minisign
+      - name: Build and verify pinned macOS engines
+        run: |
+          if ! bash scripts/gate-4b/build-macos-engine.sh --verify > "$RUNNER_TEMP/macos-engine-build.log" 2>&1; then
+            tail -n 50 "$RUNNER_TEMP/macos-engine-build.log"
+            exit 1
+          fi
+          tail -n 35 "$RUNNER_TEMP/macos-engine-build.log" | tee -a "$GITHUB_STEP_SUMMARY"
+      - run: npm ci
+      - name: Build and stage signed macOS release packages
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+          ASSET_ARCH: ${{ matrix.asset_arch }}
+          CONFIG_OVERLAY: ${{ matrix.overlay }}
+        run: |
+          CANDIDATE_VERSION="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          python3 - "$CONFIG_OVERLAY" "$PREVIOUS_MACOS_VERSION" "$RUNNER_TEMP/tauri-lower.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          config = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          config["version"] = sys.argv[2]
+          Path(sys.argv[3]).write_text(json.dumps(config), encoding="utf-8")
+          PY
+          mkdir -p \
+            "$RUNNER_TEMP/macos-stage/lower/packages" \
+            "$RUNNER_TEMP/macos-stage/lower/provenance" \
+            "$RUNNER_TEMP/macos-stage/candidate/packages" \
+            "$RUNNER_TEMP/macos-stage/candidate/provenance"
+          printf '%s -> %s\n' "$PREVIOUS_MACOS_VERSION" "$CANDIDATE_VERSION" \
+            > "$RUNNER_TEMP/macos-stage/version-transition.txt"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-lower" npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$RUNNER_TEMP/tauri-lower.json"
+          python3 scripts/gate-4b/prepare-macos-bundles.py \
+            --bundle-root "$RUNNER_TEMP/cargo-target-lower/$TARGET/release/bundle" \
+            --version "$PREVIOUS_MACOS_VERSION" \
+            --architecture "$ARCHITECTURE" \
+            --output "$RUNNER_TEMP/macos-stage/lower/packages" \
+            | tee "$RUNNER_TEMP/macos-stage/lower/provenance/package-hashes.txt"
+          python3 scripts/gate-4b/release-macos.py signed \
+            --config src-tauri/tauri.conf.json \
+            --version "$PREVIOUS_MACOS_VERSION" \
+            --architecture "$ASSET_ARCH" \
+            --bundle-root "$RUNNER_TEMP/macos-stage/lower/packages" \
+            --minisign minisign
+          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-candidate" npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$CONFIG_OVERLAY"
+          python3 scripts/gate-4b/prepare-macos-bundles.py \
+            --bundle-root "$RUNNER_TEMP/cargo-target-candidate/$TARGET/release/bundle" \
+            --version "$CANDIDATE_VERSION" \
+            --architecture "$ARCHITECTURE" \
+            --output "$RUNNER_TEMP/macos-stage/candidate/packages" \
+            | tee "$RUNNER_TEMP/macos-stage/candidate/provenance/package-hashes.txt"
+          python3 scripts/gate-4b/release-macos.py signed \
+            --config src-tauri/tauri.conf.json \
+            --architecture "$ASSET_ARCH" \
+            --bundle-root "$RUNNER_TEMP/macos-stage/candidate/packages" \
+            --minisign minisign
+          {
+            sw_vers
+            xcodebuild -version
+            xcrun --sdk macosx --show-sdk-version
+            printf 'Architecture: %s\nTarget: %s\nMinimum macOS: %s\n' \
+              "$ARCHITECTURE" "$TARGET" "$MACOSX_DEPLOYMENT_TARGET"
+            printf 'Version transition: %s -> %s\n' \
+              "$PREVIOUS_MACOS_VERSION" "$CANDIDATE_VERSION"
+            node --version
+            npm --version
+            rustc --version --verbose
+            cargo --version
+            brew list --versions minisign
+            printf 'Runner image: %s %s\n' "$ImageOS" "$ImageVersion"
+            shasum -a 256 src-tauri/resources/macos-engine/{yt-dlp,qjs,ffmpeg,ffprobe}
+          } > "$RUNNER_TEMP/macos-stage/candidate/provenance/build-environment.txt"
+          cp "$RUNNER_TEMP/macos-stage/candidate/provenance/build-environment.txt" \
+            "$RUNNER_TEMP/macos-stage/lower/provenance/build-environment.txt"
+          cp "$RUNNER_TEMP/macos-engine-build.log" \
+            "$RUNNER_TEMP/macos-stage/candidate/provenance/engine-build.log"
+          cp "$RUNNER_TEMP/macos-engine-build.log" \
+            "$RUNNER_TEMP/macos-stage/lower/provenance/engine-build.log"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-version-pair-${{ matrix.architecture }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/macos-stage
+          retention-days: 90
+
+  assemble-draft:
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'zahidzta' && inputs.draft_release_id != ''
+    needs: [macos-build, release-preflight]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PREVIOUS_MACOS_VERSION: ${{ inputs.previous_macos_version }}
+      DRAFT_RELEASE_ID: ${{ inputs.draft_release_id }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install signature verification tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends minisign
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-release-baseline
+          path: ${{ runner.temp }}/macos-baseline
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-version-pair-arm64
+          path: ${{ runner.temp }}/macos-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-version-pair-x86_64
+          path: ${{ runner.temp }}/macos-x86_64
+      - name: Recheck draft and unchanged baseline before upload
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos-current"
+          test "$(cat "$RUNNER_TEMP/macos-baseline/version-transition.txt")" = \
+            "$PREVIOUS_MACOS_VERSION -> $(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/macos-current/release.json"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --pattern '*.sig' --dir "$RUNNER_TEMP/macos-current"
+          cmp "$RUNNER_TEMP/macos-baseline/latest.json" "$RUNNER_TEMP/macos-current/latest.json"
+          python3 scripts/gate-4b/release-macos.py preflight \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/macos-current/release.json" \
+            --latest "$RUNNER_TEMP/macos-current/latest.json" \
+            --signatures "$RUNNER_TEMP/macos-current"
+      - name: Assemble the six allowed macOS assets and updater entries
+        run: |
+          mkdir -p \
+            "$RUNNER_TEMP/macos-packages" \
+            "$RUNNER_TEMP/macos-provenance/arm64/lower" \
+            "$RUNNER_TEMP/macos-provenance/arm64/candidate" \
+            "$RUNNER_TEMP/macos-provenance/x86_64/lower" \
+            "$RUNNER_TEMP/macos-provenance/x86_64/candidate"
+          cp "$RUNNER_TEMP/macos-arm64/candidate/packages/"* "$RUNNER_TEMP/macos-packages/"
+          cp "$RUNNER_TEMP/macos-x86_64/candidate/packages/"* "$RUNNER_TEMP/macos-packages/"
+          cp -R "$RUNNER_TEMP/macos-arm64/lower/." "$RUNNER_TEMP/macos-provenance/arm64/lower/"
+          cp -R "$RUNNER_TEMP/macos-arm64/candidate/." "$RUNNER_TEMP/macos-provenance/arm64/candidate/"
+          cp -R "$RUNNER_TEMP/macos-x86_64/lower/." "$RUNNER_TEMP/macos-provenance/x86_64/lower/"
+          cp -R "$RUNNER_TEMP/macos-x86_64/candidate/." "$RUNNER_TEMP/macos-provenance/x86_64/candidate/"
+          cp "$RUNNER_TEMP/macos-arm64/version-transition.txt" \
+            "$RUNNER_TEMP/macos-provenance/version-transition.txt"
+          python3 scripts/gate-4b/release-macos.py signed \
+            --config src-tauri/tauri.conf.json \
+            --bundle-root "$RUNNER_TEMP/macos-packages" \
+            --minisign minisign
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$RUNNER_TEMP/macos-packages/"*
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/macos-provenance/release-after-upload.json"
+          python3 scripts/gate-4b/release-macos.py assemble \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/macos-provenance/release-after-upload.json" \
+            --latest "$RUNNER_TEMP/macos-baseline/latest.json" \
+            --signatures "$RUNNER_TEMP/macos-baseline" \
+            --bundle-root "$RUNNER_TEMP/macos-packages" \
+            --output "$RUNNER_TEMP/macos-provenance/latest.json"
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$RUNNER_TEMP/macos-provenance/latest.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$DRAFT_RELEASE_ID" > "$RUNNER_TEMP/macos-provenance/final-release.json"
+          mkdir -p "$RUNNER_TEMP/macos-provenance/downloaded"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json --dir "$RUNNER_TEMP/macos-provenance/downloaded"
+          python3 scripts/gate-4b/release-macos.py verify \
+            --config src-tauri/tauri.conf.json \
+            --release "$RUNNER_TEMP/macos-provenance/final-release.json" \
+            --latest "$RUNNER_TEMP/macos-baseline/latest.json" \
+            --signatures "$RUNNER_TEMP/macos-baseline" \
+            --bundle-root "$RUNNER_TEMP/macos-packages" \
+            --output "$RUNNER_TEMP/macos-provenance/downloaded/latest.json" \
+            --minisign minisign
+          shasum -a 256 "$RUNNER_TEMP/macos-packages/"* \
+            > "$RUNNER_TEMP/macos-provenance/release-package-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release-provenance
+          if-no-files-found: error
+          path: ${{ runner.temp }}/macos-provenance
