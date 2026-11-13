@@ -110,7 +110,7 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
           CONFIG_OVERLAY: ${{ matrix.overlay }}
         run: |
-          npm run tauri -- build --target "$TARGET" --bundles dmg --config "$RUNNER_TEMP/tauri-macos-ci.json"
+          npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$RUNNER_TEMP/tauri-macos-ci.json"
           python3 scripts/gate-4b/prepare-macos-bundles.py \
             --bundle-root "src-tauri/target/$TARGET/release/bundle" \
             --version "$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')" \
@@ -240,7 +240,7 @@ jobs:
             "$RUNNER_TEMP/macos-stage/candidate/provenance"
           printf '%s -> %s\n' "$PREVIOUS_MACOS_VERSION" "$CANDIDATE_VERSION" \
             > "$RUNNER_TEMP/macos-stage/version-transition.txt"
-          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-lower" npm run tauri -- build --target "$TARGET" --bundles dmg --config "$RUNNER_TEMP/tauri-lower.json"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-lower" npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$RUNNER_TEMP/tauri-lower.json"
           python3 scripts/gate-4b/prepare-macos-bundles.py \
             --bundle-root "$RUNNER_TEMP/cargo-target-lower/$TARGET/release/bundle" \
             --version "$PREVIOUS_MACOS_VERSION" \
@@ -253,7 +253,7 @@ jobs:
             --architecture "$ASSET_ARCH" \
             --bundle-root "$RUNNER_TEMP/macos-stage/lower/packages" \
             --minisign minisign
-          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-candidate" npm run tauri -- build --target "$TARGET" --bundles dmg --config "$CONFIG_OVERLAY"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/cargo-target-candidate" npm run tauri -- build --target "$TARGET" --bundles app,dmg --config "$CONFIG_OVERLAY"
           python3 scripts/gate-4b/prepare-macos-bundles.py \
             --bundle-root "$RUNNER_TEMP/cargo-target-candidate/$TARGET/release/bundle" \
             --version "$CANDIDATE_VERSION" \
