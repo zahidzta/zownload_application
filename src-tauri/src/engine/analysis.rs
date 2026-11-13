@@ -597,7 +597,7 @@ mod tests {
             yt_dlp: PathBuf::from(r"C:\App Data\engine\yt-dlp.exe"),
             ffmpeg: PathBuf::from(r"C:\App Data\engine\ffmpeg.exe"),
             quickjs: PathBuf::from(r"C:\App Data\engine\qjs.exe"),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ffprobe: PathBuf::from(r"C:\App Data\engine\ffprobe"),
         };
         for (url, mode) in [

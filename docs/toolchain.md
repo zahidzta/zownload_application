@@ -77,11 +77,39 @@ Verify `source.properties` reports Platform-Tools `37.0.1`, Command-Line Tools `
 | Target | Selected minimum / test baseline | Evidence and later proof |
 |---|---|---|
 | Windows x64 | Windows 10 version 1803 or later | [Tauri prerequisites](https://tauri.app/start/prerequisites/#windows) identify WebView2 availability from 1803. Test clean Windows 10/11 installs before release. Set Tauri `bundle.windows.webviewInstallMode.type` to `downloadBootstrapper` for both NSIS and MSI to keep the WebView2 payload out of the installers; Internet is required only if the runtime is absent. See [Tauri installer options](https://tauri.app/distribute/windows-installer/#webview2-installation-options). |
-| macOS x64/arm64 | macOS 10.15 or later; arm64 testing starts on macOS 11 hardware | [Tauri prerequisites](https://tauri.app/start/prerequisites/#macos) support Catalina 10.15+. Set `bundle.macOS.minimumSystemVersion` to `10.15`; validate both architectures on hosted/macOS test machines in later gates. |
+| macOS x64 | macOS 10.15 or later | Set `bundle.macOS.minimumSystemVersion` to `10.15` with `src-tauri/tauri.macos-x64.conf.json`; Gate 4B-02 builds and tests the x86_64 engine, with minimum-OS install proof in 4B-04. |
+| macOS arm64 | macOS 11.0 or later | Set `bundle.macOS.minimumSystemVersion` to `11.0` with `src-tauri/tauri.macos-arm64.conf.json`; Gate 4B-02 builds and tests the arm64 engine, with minimum-OS install proof in 4B-04. |
 | Android arm64-v8a | Android 7.0 / API 24 or later | [Tauri Android minimum](https://tauri.app/distribute/google-play/) and [config default](https://tauri.app/reference/config/#minsdkversion) are API 24. Set `bundle.android.minSdkVersion = 24`; build the skeleton in 0A-09 and test an API 24 device/emulator and a current Android version in the Android spike. |
 | Linux x64 | Ubuntu 24.04 LTS is the Gate 0A CI build baseline; minimum user distribution is set in Stage 4A | `PROJECT.md:208` explicitly defers the Linux support matrix to Stage 4A. [Tauri Linux prerequisites](https://tauri.app/start/prerequisites/#linux) vary by distribution. Gate 0A CI can prove this build baseline, not a portable minimum. |
 
-These OS minima are the proposed `PROJECT.md:208,715` baseline checked against framework documentation. Device/install proof is still required by those lines and the Gate 0A/0C checkpoints; a version pin alone does not prove runtime support. The selected Windows `downloadBootstrapper` mode keeps WebView2 payloads out of the installers; Internet is required only when the runtime is absent, as documented in `PROJECT.md:200` and the Windows installation instructions.
+The macOS minima are the per-architecture baselines approved in Gate 4B-01; the two Tauri overlays enforce them independently. Gate 4B native clean-install proof is still required on the corresponding minimum OS versions. The selected Windows `downloadBootstrapper` mode keeps WebView2 payloads out of the installers; Internet is required only when the runtime is absent, as documented in `PROJECT.md:200` and the Windows installation instructions.
+
+## Gate 4B-02 macOS runtime builds
+
+The hosted runtime matrix uses `macos-15-intel` for x86_64 and `macos-15`
+for arm64. Both jobs require Xcode 16.4 build 16F6 and the macOS 15.5 SDK,
+matching the clean Gate 0B QuickJS builds. The runner supplies Xcode/Command
+Line Tools (`clang`, `ar`, `ranlib`, `nm`, `strip`), `make`, `curl`, `tar`,
+`file`, `shasum`, and `otool`; the macOS engine script fails if any required
+tool or pinned version is absent. Node/npm and Rust versions are the same pins
+as Foundation CI: Node 24.22.0/npm 11.19.1 and Rust 1.99.1.
+
+From the repository root on each matching runner, run:
+
+```bash
+bash scripts/gate-4b/build-macos-engine.sh --verify
+npm ci
+npm run check:contracts
+npm run build
+npm run test:ui
+cargo fmt --check --manifest-path src-tauri/Cargo.toml
+ZOWNLOAD_TEST_REAL_ENGINE=1 cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+The build pins x86_64 to macOS 10.15 and arm64 to macOS 11.0 using
+`MACOSX_DEPLOYMENT_TARGET`. Hosted build/test success on macOS 15 does not by
+itself prove execution on those minimum versions; Gate 4B-04 owns that native
+install review.
 
 ## Local installation evidence on 2026-10-17
 

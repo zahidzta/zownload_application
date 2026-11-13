@@ -1132,7 +1132,7 @@ mod tests {
             yt_dlp: "C:/Data/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/ffmpeg.exe".into(),
             quickjs: "C:/Data/qjs.exe".into(),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ffprobe: "C:/Data/ffprobe".into(),
         };
         let request = DownloadRequest {
@@ -1262,7 +1262,7 @@ mod tests {
             yt_dlp: "C:/Data/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/ffmpeg.exe".into(),
             quickjs: "C:/Data/qjs.exe".into(),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ffprobe: "C:/Data/ffprobe".into(),
         };
         let args = download_args(
@@ -1289,7 +1289,7 @@ mod tests {
             yt_dlp: "C:/Data/engine/yt-dlp.exe".into(),
             ffmpeg: "C:/Data/engine/ffmpeg.exe".into(),
             quickjs: "C:/Data/engine/qjs.exe".into(),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ffprobe: "C:/Data/engine/ffprobe".into(),
         };
         let source = Source {

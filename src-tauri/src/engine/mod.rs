@@ -34,40 +34,50 @@ const FFMPEG_HASH: &str = "9cf7a8b7c78c09d74491cc8d601f88acae33ac50c3f6bbbf86b2b
 const FFPROBE_HASH: &str = "3cf692569a96f03a4ff848af639a6142ab32706d336386d4fc0f7646e738bd9d";
 #[cfg(target_os = "linux")]
 const QUICKJS_HASH: &str = "50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c";
+#[cfg(target_os = "macos")]
+const YT_DLP_HASH: &str = "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202";
+#[cfg(target_os = "macos")]
+const FFMPEG_HASH: &str = env!("ZOWNLOAD_BASELINE_FFMPEG_SHA256");
+#[cfg(target_os = "macos")]
+const FFPROBE_HASH: &str = env!("ZOWNLOAD_BASELINE_FFPROBE_SHA256");
+#[cfg(target_os = "macos")]
+const QUICKJS_HASH: &str = env!("ZOWNLOAD_BASELINE_QUICKJS_SHA256");
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[cfg(target_os = "windows")]
 pub(crate) const YT_DLP_ASSET: &str = "yt-dlp.exe";
 #[cfg(target_os = "linux")]
 pub(crate) const YT_DLP_ASSET: &str = "yt-dlp_linux";
+#[cfg(target_os = "macos")]
+pub(crate) const YT_DLP_ASSET: &str = "yt-dlp_macos";
 #[cfg(target_os = "windows")]
 pub(crate) const YT_DLP_FILENAME: &str = "yt-dlp.exe";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) const YT_DLP_FILENAME: &str = "yt-dlp";
 #[cfg(target_os = "windows")]
 const FFMPEG_FILENAME: &str = "ffmpeg.exe";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const FFMPEG_FILENAME: &str = "ffmpeg";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const FFPROBE_FILENAME: &str = "ffprobe";
 #[cfg(target_os = "windows")]
 const QUICKJS_FILENAME: &str = "qjs.exe";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const QUICKJS_FILENAME: &str = "qjs";
 #[cfg(target_os = "windows")]
 pub(crate) const CANDIDATE_FILENAME: &str = "candidate.exe";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) const CANDIDATE_FILENAME: &str = "candidate";
 #[cfg(target_os = "windows")]
 pub(crate) const CANDIDATE_DOWNLOAD_FILENAME: &str = "candidate-download.exe";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) const CANDIDATE_DOWNLOAD_FILENAME: &str = "candidate-download";
 
 struct Hashes<'a> {
     yt_dlp: &'a str,
     ffmpeg: &'a str,
     quickjs: &'a str,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     ffprobe: &'a str,
 }
 
@@ -75,7 +85,7 @@ const BASELINE_HASHES: Hashes<'static> = Hashes {
     yt_dlp: YT_DLP_HASH,
     ffmpeg: FFMPEG_HASH,
     quickjs: QUICKJS_HASH,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     ffprobe: FFPROBE_HASH,
 };
 
@@ -90,7 +100,7 @@ pub struct EnginePaths {
     pub yt_dlp: PathBuf,
     pub ffmpeg: PathBuf,
     pub quickjs: PathBuf,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub ffprobe: PathBuf,
 }
 
@@ -100,7 +110,7 @@ impl EnginePaths {
             yt_dlp: dir.join(YT_DLP_FILENAME),
             ffmpeg: dir.join(FFMPEG_FILENAME),
             quickjs: dir.join(QUICKJS_FILENAME),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ffprobe: dir.join(FFPROBE_FILENAME),
         }
     }
@@ -114,7 +124,7 @@ impl EnginePaths {
         ]
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn entries<'a>(&'a self, hashes: &'a Hashes<'_>) -> [(&'a Path, &'a str); 4] {
         [
             (&self.yt_dlp, hashes.yt_dlp),
@@ -126,7 +136,7 @@ impl EnginePaths {
 }
 
 fn set_executable(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = fs::metadata(path)
@@ -239,7 +249,7 @@ fn health_check(paths: &EnginePaths, version: &str) -> Result<(), String> {
         &["-e", "print('quickjs-ready')"],
         "quickjs-ready",
     )?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     probe(&paths.ffprobe, &["-version"], "ffprobe version 8.1.3")?;
     Ok(())
 }
@@ -287,7 +297,7 @@ fn active_is_healthy(
         && hash_file(&paths.ffmpeg).is_ok_and(|hash| hash == hashes.ffmpeg)
         && hash_file(&paths.quickjs).is_ok_and(|hash| hash == hashes.quickjs)
         && {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             {
                 hash_file(&paths.ffprobe).is_ok_and(|hash| hash == hashes.ffprobe)
             }
@@ -542,14 +552,14 @@ mod tests {
             fs::write(&files.yt_dlp, b"yt-dlp stub").unwrap();
             fs::write(&files.ffmpeg, b"ffmpeg stub").unwrap();
             fs::write(&files.quickjs, b"quickjs stub").unwrap();
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             fs::write(&files.ffprobe, b"ffprobe stub").unwrap();
             let hashes = vec![
                 hash_file(&files.yt_dlp).unwrap(),
                 hash_file(&files.ffmpeg).unwrap(),
                 hash_file(&files.quickjs).unwrap(),
             ];
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             let hashes = {
                 let mut hashes = hashes;
                 hashes.push(hash_file(&files.ffprobe).unwrap());
@@ -568,7 +578,7 @@ mod tests {
                 yt_dlp: &self.hashes[0],
                 ffmpeg: &self.hashes[1],
                 quickjs: &self.hashes[2],
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
                 ffprobe: &self.hashes[3],
             }
         }
@@ -596,6 +606,29 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_engine_uses_unix_names_and_universal_ytdlp_asset() {
+        let paths = EnginePaths::in_dir(Path::new("Contents/Resources/binaries"));
+        assert_eq!(YT_DLP_ASSET, "yt-dlp_macos");
+        assert_eq!(
+            paths.yt_dlp,
+            PathBuf::from("Contents/Resources/binaries/yt-dlp")
+        );
+        assert_eq!(
+            paths.ffmpeg,
+            PathBuf::from("Contents/Resources/binaries/ffmpeg")
+        );
+        assert_eq!(
+            paths.ffprobe,
+            PathBuf::from("Contents/Resources/binaries/ffprobe")
+        );
+        assert_eq!(
+            paths.quickjs,
+            PathBuf::from("Contents/Resources/binaries/qjs")
+        );
+    }
+
     #[test]
     fn first_launch_writes_verified_copies_and_manifest_under_app_data() {
         let fixture = Fixture::new();
@@ -613,7 +646,7 @@ mod tests {
         assert_eq!(value["baselineAppVersion"], "0.0.1");
         assert_eq!(value["failedVersions"], serde_json::json!([]));
         assert!(value["lastUpdateCheck"].is_null());
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             use std::os::unix::fs::PermissionsExt;
             for path in [&paths.yt_dlp, &paths.ffmpeg, &paths.quickjs] {
@@ -759,7 +792,7 @@ mod tests {
         fs::write(&resources.quickjs, b"new quickjs").unwrap();
         fixture.hashes[1] = hash_file(&resources.ffmpeg).unwrap();
         fixture.hashes[2] = hash_file(&resources.quickjs).unwrap();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             fs::write(&resources.ffprobe, b"new ffprobe").unwrap();
             fixture.hashes[3] = hash_file(&resources.ffprobe).unwrap();
@@ -768,7 +801,7 @@ mod tests {
         assert_eq!(fs::read(&paths.yt_dlp).unwrap(), b"updated yt-dlp stub");
         assert_eq!(fs::read(&paths.ffmpeg).unwrap(), b"new ffmpeg");
         assert_eq!(fs::read(&paths.quickjs).unwrap(), b"new quickjs");
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         assert_eq!(fs::read(&paths.ffprobe).unwrap(), b"new ffprobe");
     }
 
@@ -879,6 +912,8 @@ mod tests {
         let resources = root.join("resources/windows-engine");
         #[cfg(target_os = "linux")]
         let resources = root.join("resources/linux-engine");
+        #[cfg(target_os = "macos")]
+        let resources = root.join("resources/macos-engine");
         let data =
             std::env::temp_dir().join(format!("zownload-real-engine-{}", uuid::Uuid::new_v4()));
         let result = bootstrap(&resources, &data, "0.0.1");
@@ -887,6 +922,8 @@ mod tests {
                 assert!(paths.yt_dlp.starts_with(&data));
                 assert!(paths.ffmpeg.starts_with(&data));
                 assert!(paths.quickjs.starts_with(&data));
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
+                assert!(paths.ffprobe.starts_with(&data));
                 verify_files(&paths, &BASELINE_HASHES).unwrap();
             }
             EngineStatus::Unavailable(reason) => {

@@ -392,3 +392,31 @@ for yt-dlp/EJS, QuickJS, FFmpeg, LAME, and zlib. Static FFmpeg and LAME
 linkage still requires matching source and relinking materials in the
 versioned compliance bundle before public release; a signed unpublished
 draft is not the final compliance bundle.
+
+## 4B-02 — macOS x64 and arm64 runtime engine
+
+Run on the matching `macos-15-intel` x86_64 or `macos-15` arm64 runner with
+Xcode 16.4 build 16F6 and SDK 15.5:
+
+```bash
+bash scripts/gate-4b/build-macos-engine.sh --verify
+```
+
+The script verifies the universal yt-dlp 2026.08.19 release and its published
+SHA-256, then runs the pinned Gate 0B QuickJS build and checks its
+architecture-specific output hash. It builds FFmpeg/ffprobe 8.1.3 with LAME
+3.100's encoder and zlib 1.3.2 from the source archives and hashes in
+[`engine-sources.md`](engine-sources.md). FFmpeg is configured for the native
+Darwin architecture with autodetection, GPL, nonfree, version-3, shared
+libraries, ffplay, docs, and debug output disabled; it must report
+LGPL-2.1-or-later and omit the GPL-only LAME decoder. The script verifies the
+MP3/MP4 smoke outputs and that the executables have no non-system dynamic
+dependencies. X86_64 targets macOS 10.15; arm64 targets macOS 11.0.
+
+The script stages only `yt-dlp`, `ffmpeg`, `ffprobe`, and `qjs` under the
+ignored `src-tauri/resources/macos-engine/` directory. `build.rs` verifies the
+yt-dlp and QuickJS hashes and embeds the staged FFmpeg/ffprobe/QuickJS hashes
+into each native build. The macOS Tauri overlays map these four resources to
+`binaries/` inside the app, from which the Rust runtime copies and verifies
+them in writable app data before execution. Hosted per-architecture output
+hashes and runtime checks are recorded in the [Gate 4B-02 evidence](gates/evidence/4b/4b-02.md).

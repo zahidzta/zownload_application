@@ -1,0 +1,60 @@
+name: Gate 4B macOS runtime
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86_64
+            runner: macos-15-intel
+          - architecture: arm64
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check runner architecture
+        run: test "$(uname -m)" = '${{ matrix.architecture }}'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.22.0'
+          package-manager-cache: false
+      - name: Check Node and npm pins
+        run: |
+          test "$(node --version)" = 'v24.22.0'
+          test "$(npm --version)" = '11.19.1'
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup component add rustfmt --toolchain 1.99.1
+          rustup default 1.99.1
+      - name: Build and verify pinned macOS engine files
+        run: |
+          if ! bash scripts/gate-4b/build-macos-engine.sh --verify > "$RUNNER_TEMP/macos-engine-build.log" 2>&1; then
+            tail -n 50 "$RUNNER_TEMP/macos-engine-build.log"
+            exit 1
+          fi
+          tail -n 35 "$RUNNER_TEMP/macos-engine-build.log"
+          {
+            echo '### macOS engine build'
+            echo "Runner: ${{ matrix.runner }} (${ImageOS:-unknown} ${ImageVersion:-unknown}), architecture ${{ matrix.architecture }}"
+            grep -E '^(Host|Minimum macOS|Xcode|SDK|Compiler|Build tool|yt-dlp SHA-256|QuickJS SHA-256|FFmpeg SHA-256|ffprobe SHA-256|FFmpeg build configuration|FFmpeg linked libraries|MP3 and MP4)' "$RUNNER_TEMP/macos-engine-build.log"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - run: npm ci
+      - name: Verify frontend, contracts, Rust, formatting, and native engine
+        env:
+          ZOWNLOAD_TEST_REAL_ENGINE: '1'
+        run: |
+          npm run check:contracts
+          npm run build
+          npm run test:ui
+          cargo fmt --check --manifest-path src-tauri/Cargo.toml
+          cargo test --manifest-path src-tauri/Cargo.toml
+          echo 'Frontend, contract, Rust formatting, Rust tests, and real staged-engine health checks passed.' >> "$GITHUB_STEP_SUMMARY"

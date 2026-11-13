@@ -471,7 +471,7 @@ fn replace_dir(
         fs::copy(&source.yt_dlp, &target.yt_dlp).map_err(|error| error.to_string())?;
         fs::copy(&source.ffmpeg, &target.ffmpeg).map_err(|error| error.to_string())?;
         fs::copy(&source.quickjs, &target.quickjs).map_err(|error| error.to_string())?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         fs::copy(&source.ffprobe, &target.ffprobe).map_err(|error| error.to_string())?;
         if hash_file(&target.yt_dlp)? != expected_hash
             || hash_file(&target.ffmpeg)? != BASELINE_HASHES.ffmpeg
@@ -479,11 +479,11 @@ fn replace_dir(
         {
             return Err("staged engine checksum mismatch".into());
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if hash_file(&target.ffprobe)? != BASELINE_HASHES.ffprobe {
             return Err("staged ffprobe checksum mismatch".into());
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         for path in [
             &target.yt_dlp,
             &target.ffmpeg,
@@ -560,7 +560,7 @@ pub(crate) fn activate_pending(data: &Path) -> Result<Option<String>, String> {
         yt_dlp: candidate,
         ffmpeg: active.ffmpeg,
         quickjs: active.quickjs,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         ffprobe: active.ffprobe,
     };
     if let Err(reason) = replace_dir(data, &source, &promoted, &expected, |paths, version| {
@@ -641,7 +641,7 @@ pub(crate) fn restore_baseline_locked(
         yt_dlp: bundled.yt_dlp,
         ffmpeg: active.ffmpeg,
         quickjs: active.quickjs,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         ffprobe: bundled.ffprobe,
     };
     replace_dir(
@@ -987,6 +987,9 @@ mod tests {
         #[cfg(target_os = "linux")]
         let resources =
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/linux-engine");
+        #[cfg(target_os = "macos")]
+        let resources =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/macos-engine");
         if !resources.join(super::super::YT_DLP_FILENAME).is_file() {
             return;
         }
