@@ -439,6 +439,10 @@ CPU architecture, has the approved minimum macOS version, and matches the
 Tauri version before staging it. `release-macos.py` verifies updater
 signatures and tamper rejection, checks the owner-created draft allowlist,
 preserves its Windows/Linux updater entries, then adds `darwin-x86_64` and
-`darwin-aarch64`. The workflow never creates or publishes a release. Exact
-runner versions, artifact SHA-256 values, draft ID, and final metadata checks
-are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).
+`darwin-aarch64`. Each run also builds the designated lower version `0.0.3`
+for both architectures, signs its updater archives, verifies them, and keeps
+those packages only in the Actions artifact `macos-version-pair-<architecture>`.
+Only the higher `0.0.4` DMGs and updater archives are attached to the
+owner-created draft. The workflow never creates or publishes a release. Exact
+runner versions, lower/candidate artifact hashes, draft ID, and final metadata
+checks are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).

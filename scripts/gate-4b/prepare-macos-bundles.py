@@ -71,9 +71,13 @@ def main():
         require(archive.is_file() and signature.is_file(),
                 "Tauri macOS updater archive or signature is missing")
 
-    executable = app / "Contents" / "MacOS" / "Zownload"
     info = app / "Contents" / "Info.plist"
-    require(executable.is_file() and info.is_file(), "Tauri app executable or Info.plist is missing")
+    require(info.is_file(), "Tauri app Info.plist is missing")
+    executable_name = output([
+        "/usr/libexec/PlistBuddy", "-c", "Print :CFBundleExecutable", str(info)
+    ])
+    executable = app / "Contents" / "MacOS" / executable_name
+    require(executable.is_file(), "Tauri app executable is missing")
     archs = set(output(["lipo", "-archs", str(executable)]).split())
     require(archs == {architecture}, f"app binary architectures differ: {sorted(archs)}")
     minimum = output(["/usr/libexec/PlistBuddy", "-c", "Print :LSMinimumSystemVersion", str(info)])

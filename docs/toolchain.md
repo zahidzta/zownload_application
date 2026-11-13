@@ -123,11 +123,13 @@ and macOS 15.5 SDK recorded for Gate 4B-02. It builds x86_64 on
 `macos-15-intel` and arm64 on `macos-15`, using `dmg` as the only installer
 format. The owner-dispatched release job uses the configured
 `TAURI_SIGNING_PRIVATE_KEY` Actions secret and installs Minisign to verify
-each updater signature and reject modified archives. It only accepts an
-owner-created draft whose tag matches `src-tauri/tauri.conf.json`; the
-workflow does not create or publish releases. Exact runner/tool versions,
-per-architecture package hashes, and the candidate ID/tag are recorded in
-the [4B-03 evidence](gates/evidence/4b/4b-03.md) after the hosted run.
+each updater signature and reject modified archives. It builds the designated
+lower version `0.0.3` on both architectures as an unpublished Actions
+artifact, then adds the higher `0.0.4` packages and updater entries to an
+owner-created draft whose tag matches `src-tauri/tauri.conf.json`. The workflow
+does not create or publish releases. Exact runner/tool versions, both
+versions' package hashes, and the candidate ID/tag are recorded in the
+[4B-03 evidence](gates/evidence/4b/4b-03.md) after the hosted run.
 
 ## Local installation evidence on 2026-10-17
 

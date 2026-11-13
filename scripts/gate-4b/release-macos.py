@@ -143,10 +143,19 @@ def check_base_metadata(latest, release, version, signature_dir):
                     f"existing {key} signature differs from the draft")
 
 
-def macos_files(root, version):
+def macos_files(root, version, architecture=None):
     root = Path(root)
     require(root.is_dir(), "macOS staging directory is missing")
     expected = macos_asset_names(version)
+    if architecture:
+        require(architecture in MACOS_PACKAGES.values(),
+                f"unknown macOS asset architecture: {architecture}")
+        archive = f"Zownload_{version}_{architecture}.app.tar.gz"
+        expected = {
+            f"Zownload_{version}_{architecture}.dmg",
+            archive,
+            f"{archive}.sig",
+        }
     actual = {path.name for path in root.iterdir() if path.is_file()}
     require(actual == expected, f"macOS package allowlist mismatch: {sorted(actual)}")
     require(not any(path.is_dir() for path in root.iterdir()),
@@ -242,13 +251,15 @@ def main():
     parser.add_argument("--signatures")
     parser.add_argument("--bundle-root")
     parser.add_argument("--output")
+    parser.add_argument("--version")
+    parser.add_argument("--architecture", choices=sorted(set(MACOS_PACKAGES.values())))
     parser.add_argument("--minisign", default="minisign")
     arguments = parser.parse_args()
     config = load(arguments.config)
-    version = config["version"]
+    version = arguments.version or config["version"]
 
     if arguments.stage == "signed":
-        files = macos_files(arguments.bundle_root, version)
+        files = macos_files(arguments.bundle_root, version, arguments.architecture)
         verify_signatures(files, config, arguments.minisign)
         print("Signed macOS package allowlist and updater tamper rejection passed.")
         return

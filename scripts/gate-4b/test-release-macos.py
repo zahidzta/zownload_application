@@ -100,6 +100,16 @@ def main(minisign):
             shutil.copyfile(fixture, bundle / archive)
             (bundle / signature_name).write_text(signature, encoding="utf-8")
 
+        for architecture in ("aarch64", "x86_64"):
+            architecture_bundle = root / f"bundle-{architecture}"
+            architecture_bundle.mkdir()
+            prefix = f"Zownload_{VERSION}_{architecture}."
+            for path in bundle.iterdir():
+                if path.name.startswith(prefix):
+                    shutil.copyfile(path, architecture_bundle / path.name)
+            run("signed", root, minisign, bundle_root=architecture_bundle,
+                version=VERSION, architecture=architecture)
+
         next_asset_id = 1000
         for path in sorted(bundle.iterdir()):
             data = path.read_bytes()
