@@ -45,8 +45,8 @@ jobs:
           {
             echo '### macOS engine build'
             echo "Runner: ${{ matrix.runner }} (${ImageOS:-unknown} ${ImageVersion:-unknown}), architecture ${{ matrix.architecture }}"
-            grep -E '^(Host|Minimum macOS|Xcode|SDK|Compiler|Build tool|yt-dlp SHA-256|QuickJS SHA-256|FFmpeg SHA-256|ffprobe SHA-256|FFmpeg build configuration|FFmpeg linked libraries|MP3 and MP4)' "$RUNNER_TEMP/macos-engine-build.log"
           } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(Host|Minimum macOS|Xcode|SDK|Compiler|Build tool|yt-dlp SHA-256|QuickJS SHA-256|FFmpeg SHA-256|ffprobe SHA-256|FFmpeg build configuration|FFmpeg linked libraries|MP3 and MP4)' "$RUNNER_TEMP/macos-engine-build.log" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: npm ci
       - name: Verify frontend, contracts, Rust, formatting, and native engine
         env:
