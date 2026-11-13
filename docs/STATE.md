@@ -2,16 +2,10 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3C was accepted on 2026-11-02 and the Gate 4A plan was approved; see the [checkpoint](gates/evidence/3c/checkpoint.md), [task evidence](gates/evidence/3c/tasks.md), and [Gate 4A plan](gates/gate-4a.md). `app-v0.0.1` remains an unchanged draft; the owner authorized stable `app-v0.0.2` for update review.
-- **Next task:** Complete the 4A-05 V3 evidence review and prepare its checkpoint. Gate 4A remains open and unapproved until V3 is complete and the owner accepts the checkpoint; do not start Gate 4B.
-- **4A-05 progress:** The owner reports successful native update flows on Debian, Ubuntu, and Fedora (2026-11-11); exact builds, hashes/screenshots, GDebi prompt, and Fedora relaunch details were not supplied. Native smoke evidence remains recorded for Ubuntu 24.04.5, Debian 13.7, and Fedora Workstation 45; WSL2 results and limits are in [V3 evidence](gates/evidence/4a/4a-05.md).
-- **Owner direction for app v0.0.2:** horizontal 1350×770 desktop window. Version/config changes are committed; stable release `app-v0.0.2` is published for this review, while Gate 4A remains open.
-- Completed 4A-01: Owner approved the Linux runtime, distro, package, updater, and verification plan; commit `1c9c221`; [plan and V0 evidence](gates/gate-4a.md#verification).
-- Completed 4A-02: Added Linux runtime paths, pinned engines, verified app-data copies, and process cleanup; commit `0fabf35`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41545291079).
-- Completed 4A-02-R1: Embedded hashes for staged Windows FFmpeg/QuickJS, fixing the v0.0.2 baseline refresh failure; commit `42187e4`; [evidence](gates/evidence/4a/4a-02-windows-regression.md).
-- Completed 4A-03: Added Linux AppImage signed updates and stable `.deb` direct-link updates; commit `3f6af9c`; [V1 CI](https://github.com/zahidzta/zownload_application/actions/runs/41546326421).
-- Completed 4A-04: Built signed Linux AppImage/`.deb`, merged and verified draft metadata, and recorded provenance; commits `571fd8f`–`3ca4bbd`; [V2 evidence](gates/evidence/4a/4a-04.md).
-- 4A-05 Debian native portion: Debian 13.7 `.deb` clean install, MP3/MP4/playlist, engine hashes, and paused queue verified; commit `887bfca`; [V3 progress](gates/evidence/4a/4a-05.md#native-debian-137-deb-review). GNOME Software did not show a password prompt; the owner later confirmed the GDebi prompt. Real upgrades remain open.
+- **Checkpoint:** Gate 3C was accepted on 2026-11-02 and Gate 4A was accepted by the owner on 2026-11-12; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4A task evidence](gates/evidence/4a/tasks.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
+- **Next task:** Prepare the Gate 4B macOS plan for owner review. Do not begin implementation until the plan is approved.
+- **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
+- **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
 
 ## Accepted gates
 
@@ -28,6 +22,7 @@
 - 3A — accepted 2026-10-30; [checkpoint](gates/evidence/3a/checkpoint.md) and [task evidence](gates/evidence/3a/tasks.md).
 - 3B — accepted 2026-10-31; [checkpoint](gates/evidence/3b/checkpoint.md) and [task evidence](gates/evidence/3b/tasks.md).
 - 3C — accepted 2026-11-02; commit `1c9c221`; [checkpoint](gates/evidence/3c/checkpoint.md) and [task evidence](gates/evidence/3c/tasks.md).
+- 4A — accepted by owner 2026-11-12; [checkpoint](gates/evidence/4a/checkpoint.md) and [task evidence](gates/evidence/4a/tasks.md).
 
 ## Standing decisions
 
