@@ -87,12 +87,16 @@ The macOS minima are the per-architecture baselines approved in Gate 4B-01; the 
 ## Gate 4B-02 macOS runtime builds
 
 The hosted runtime matrix uses `macos-15-intel` for x86_64 and `macos-15`
-for arm64. Both jobs require Xcode 16.4 build 16F6 and the macOS 15.5 SDK,
-matching the clean Gate 0B QuickJS builds. The runner supplies Xcode/Command
-Line Tools (`clang`, `ar`, `ranlib`, `nm`, `strip`), `make`, `curl`, `tar`,
-`file`, `shasum`, and `otool`; the macOS engine script fails if any required
-tool or pinned version is absent. Node/npm and Rust versions are the same pins
-as Foundation CI: Node 24.22.0/npm 11.19.1 and Rust 1.99.1.
+for arm64. Gate 4B-02 run [43355603828](https://github.com/zahidzta/zownload_application/actions/runs/43355603828)
+reported macOS 15.7.9 on the Intel runner and macOS 15.8.2 on the arm64 runner.
+Both used Xcode 16.4 build 16F6, the macOS 15.5 SDK, Apple clang 17.0.0
+(`clang-1700.0.13.5`), and GNU Make 3.81. These match the clean Gate 0B
+QuickJS builds. The runner supplies Xcode/Command Line Tools (`clang`, `ar`,
+`ranlib`, `nm`, `strip`), `make`, `curl`, `tar`, `file`, `shasum`, and `otool`;
+the macOS engine script fails if any required tool or pinned version is absent.
+Node/npm and Rust versions are the same pins as Foundation CI: Node 24.22.0/npm
+11.19.1 and Rust 1.99.1. The [4B-02 evidence](gates/evidence/4b/4b-02.md)
+records each runner architecture, baseline, engine hash, and result.
 
 From the repository root on each matching runner, run:
 
