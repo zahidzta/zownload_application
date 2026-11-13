@@ -12,8 +12,8 @@ import sys
 
 
 ARCHITECTURES = {
-    "x86_64": ("x86_64", "x86_64", "10.15"),
-    "arm64": ("arm64", "aarch64", "11.0"),
+    "x86_64": ("x86_64", "x86_64", "x64", "10.15"),
+    "arm64": ("arm64", "aarch64", "aarch64", "11.0"),
 }
 
 
@@ -36,6 +36,10 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def names_in(directory):
+    return {path.name for path in directory.iterdir()}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle-root", required=True)
@@ -45,21 +49,38 @@ def main():
     parser.add_argument("--unsigned", action="store_true")
     arguments = parser.parse_args()
 
-    architecture, asset_architecture, minimum_system_version = ARCHITECTURES[arguments.architecture]
+    (architecture, asset_architecture, dmg_architecture,
+     minimum_system_version) = ARCHITECTURES[arguments.architecture]
     bundle_root = Path(arguments.bundle_root)
     dmg_root = bundle_root / "dmg"
     macos_root = bundle_root / "macos"
+    share_root = bundle_root / "share"
     bundle_entries = list(bundle_root.iterdir())
     observed_entries = sorted(
         f"{path.name}{'/' if path.is_dir() else ''}" for path in bundle_entries
     )
-    require({path.name for path in bundle_entries} == {"dmg", "macos"} and
+    require({path.name for path in bundle_entries} == {"dmg", "macos", "share"} and
             all(path.is_dir() for path in bundle_entries),
             f"Tauri created an unexpected bundle format: {observed_entries}")
+    create_dmg_root = share_root / "create-dmg"
+    support_root = create_dmg_root / "support"
+    support_files = {"template.applescript", "eula-resources-template.xml"}
+    require(
+        names_in(share_root) == {"create-dmg"} and
+        create_dmg_root.is_dir() and
+        names_in(create_dmg_root) == {"support"} and
+        support_root.is_dir() and
+        names_in(support_root) == support_files and
+        all(path.is_file() for path in support_root.iterdir()),
+        "Tauri created unexpected DMG support files")
     dmg_entries = list(dmg_root.iterdir())
-    require(len(dmg_entries) == 1 and dmg_entries[0].is_file() and
-            dmg_entries[0].suffix == ".dmg",
-            "Tauri must create exactly one DMG")
+    expected_dmg = f"Zownload_{arguments.version}_{dmg_architecture}.dmg"
+    expected_dmg_files = {expected_dmg, "bundle_dmg.sh", "icon.icns"}
+    require(
+        {path.name for path in dmg_entries} == expected_dmg_files and
+        all(path.is_file() for path in dmg_entries),
+        f"Tauri created unexpected DMG output files: "
+        f"{sorted(path.name for path in dmg_entries)}")
 
     app = macos_root / "Zownload.app"
     archive = macos_root / "Zownload.app.tar.gz"
@@ -93,7 +114,8 @@ def main():
     destination = Path(arguments.output)
     destination.mkdir(parents=True, exist_ok=True)
     require(not any(destination.iterdir()), "staging directory must be empty")
-    names = {dmg_entries[0]: f"Zownload_{arguments.version}_{asset_architecture}.dmg"}
+    dmg = dmg_root / expected_dmg
+    names = {dmg: f"Zownload_{arguments.version}_{asset_architecture}.dmg"}
     if not arguments.unsigned:
         names[archive] = f"Zownload_{arguments.version}_{asset_architecture}.app.tar.gz"
         names[signature] = f"Zownload_{arguments.version}_{asset_architecture}.app.tar.gz.sig"
