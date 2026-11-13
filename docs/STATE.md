@@ -6,7 +6,7 @@
 - **Gate 4B plan:** Accepted by the owner on 2026-11-12; see the [plan](gates/gate-4b.md).
 - Completed 4B-01: Owner-approved macOS plan, commit `6078d02`; V0 passed; [plan and evidence](gates/gate-4b.md#verification).
 - Completed 4B-02: macOS x64/arm64 runtime, V1 passed; commits `4433e9a`, `3bf09cf`, `78246bc`, `aa685bb`; [evidence](gates/evidence/4b/4b-02.md).
-- **Next task:** 4B-03 — complete V2 on the owner-designated unpublished macOS candidate after the implementation PR is accepted and merged; the candidate version transition and draft release ID remain owner-provided.
+- **Next task:** 4B-03 — complete V2 for the designated `0.0.3` → `0.0.4` macOS pair after PR acceptance/merge; the `0.0.4` draft release ID and matching Windows/Linux assets are still pending.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
 
