@@ -115,6 +115,20 @@ The build pins x86_64 to macOS 10.15 and arm64 to macOS 11.0 using
 itself prove execution on those minimum versions; Gate 4B-04 owns that native
 install review.
 
+## Gate 4B-03 macOS package and updater builds
+
+The [`macOS release workflow`](../.github/workflows/macos-release.yml) uses
+the same pinned Node `24.22.0` / npm `11.19.1`, Rust `1.99.1`, Xcode 16.4,
+and macOS 15.5 SDK recorded for Gate 4B-02. It builds x86_64 on
+`macos-15-intel` and arm64 on `macos-15`, using `dmg` as the only installer
+format. The owner-dispatched release job uses the configured
+`TAURI_SIGNING_PRIVATE_KEY` Actions secret and installs Minisign to verify
+each updater signature and reject modified archives. It only accepts an
+owner-created draft whose tag matches `src-tauri/tauri.conf.json`; the
+workflow does not create or publish releases. Exact runner/tool versions,
+per-architecture package hashes, and the candidate ID/tag are recorded in
+the [4B-03 evidence](gates/evidence/4b/4b-03.md) after the hosted run.
+
 ## Local installation evidence on 2026-10-17
 
 Before scaffold work, this Windows checkout reported Node `24.14.0`, npm `11.21.0`, Rust/Cargo `1.99.0`, and Oracle JDK `26.0.2`; its SDK had Command-Line Tools `19.0`, Platform-Tools `37.0.0`, Build-Tools `36.0.0`, and API 36. These are observations, not accepted pins.
