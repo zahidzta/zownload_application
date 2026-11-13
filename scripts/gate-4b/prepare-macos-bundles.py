@@ -50,9 +50,12 @@ def main():
     dmg_root = bundle_root / "dmg"
     macos_root = bundle_root / "macos"
     bundle_entries = list(bundle_root.iterdir())
+    observed_entries = sorted(
+        f"{path.name}{'/' if path.is_dir() else ''}" for path in bundle_entries
+    )
     require({path.name for path in bundle_entries} == {"dmg", "macos"} and
             all(path.is_dir() for path in bundle_entries),
-            "Tauri created an unexpected bundle format")
+            f"Tauri created an unexpected bundle format: {observed_entries}")
     dmg_entries = list(dmg_root.iterdir())
     require(len(dmg_entries) == 1 and dmg_entries[0].is_file() and
             dmg_entries[0].suffix == ".dmg",
