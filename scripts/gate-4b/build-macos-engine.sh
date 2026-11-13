@@ -159,8 +159,7 @@ install -m 0644 "$zlib/libz.a" "$deps/lib/libz.a"
 for binary in "$ffmpeg/ffmpeg" "$ffmpeg/ffprobe"; do
   [[ "$(file -b "$binary")" == *"Mach-O 64-bit executable $architecture"* ]] || fail "unexpected architecture: $(file -b "$binary")"
   dependencies="$(otool -L "$binary" | tail -n +2)"
-  while IFS= read -r line; do
-    dependency="${line%% (compatibility version*}"
+  while read -r dependency _; do
     [[ -n "$dependency" ]] || continue
     case "$dependency" in /usr/lib/*|/System/Library/*) ;; *) fail "unexpected non-system runtime dependency: $dependency" ;; esac
   done <<< "$dependencies"
