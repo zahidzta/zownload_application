@@ -3,8 +3,9 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02 and Gate 4A was accepted by the owner on 2026-11-12; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4A task evidence](gates/evidence/4a/tasks.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
-- **Plan under review:** Gate 4B macOS plan, commit `6078d02`; V0 passed; see the [plan](gates/gate-4b.md#verification).
-- **Next task:** Owner review and explicit acceptance of the Gate 4B plan. Do not begin implementation before approval.
+- **Gate 4B plan:** Accepted by the owner on 2026-11-12; see the [plan](gates/gate-4b.md).
+- Completed 4B-01: Owner-approved macOS plan, commit `6078d02`; V0 passed; [plan and evidence](gates/gate-4b.md#verification).
+- **Next task:** 4B-02 macOS engine paths, sidecars, and process handling. Start in a fresh task session.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
 

@@ -9,6 +9,8 @@ Gate 4B ports the desktop engine to macOS on Intel x86_64 and Apple Silicon arm6
 
 Gate 4A was accepted by the owner on 2026-11-12; see the [Gate 4A checkpoint](evidence/4a/checkpoint.md) and [task evidence](evidence/4a/tasks.md). Preserve the validated Windows and Linux assets and updater metadata while adding macOS outputs. Use only an owner-designated unpublished candidate for release-assembly and updater review; do not modify an existing published release or publish a release.
 
+The owner accepted the Gate 4B plan on 2026-11-12. Begin implementation with task 4B-02 in a fresh task session.
+
 Read only these `PROJECT.md` ranges for this gate: `180-195,196-211,263-308,618-629,630-645,664-684,734-745,780-785`. These define the desktop engine/updater behavior, proposed macOS baseline, exact architecture-specific artifact set, Gatekeeper instructions, platform test matrix, release criteria, and owner checkpoint rule.
 
 ## Owner review decisions and constraints
@@ -31,7 +33,7 @@ Run from the repository root. Build and test each architecture on a matching mac
 
 ## Tasks
 
-### 4B-01 — macOS runtime and release plan — OWNER-REVIEW
+### 4B-01 — macOS runtime and release plan — ACCEPTED 2026-11-12
 
 - Goal: approve per-architecture macOS minimums, unsigned distribution and Gatekeeper handling, updater candidate/version transition, exact package set, native test availability, and evidence before implementation.
 - Files: `docs/gates/gate-4b.md` and `docs/STATE.md`.
