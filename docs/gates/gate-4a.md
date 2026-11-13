@@ -62,7 +62,7 @@ Run from the repository root. Use disposable Linux VMs or CI runners for package
 - Dependencies: 4A-02 and 4A-03; owner-controlled unpublished draft; production signing secret already provisioned securely.
 - Acceptance: CI emits only the two Linux packages and supported updater files; the complete allowlist contains the verified Windows and Linux outputs; metadata maps each supported installer correctly; tampering fails verification; no signing secret is logged or committed; source and notices map every Linux engine binary to exact inputs and build commands. Exact verification: V2.
 
-### 4A-05 — Native install/update review, documentation, and checkpoint — OWNER-REVIEW
+### 4A-05 — Native install/update review, documentation, and checkpoint — ACCEPTED 2026-11-12
 
 - Goal: prove Linux single/playlist downloads and clean install/update behavior on the approved matrix; document AppImage FUSE guidance and `.deb` install/update steps; record release provenance and remaining cross-platform obligations.
 - Files: `README.md`, focused Linux verification fixes, `docs/gates/evidence/4a/`, and `docs/STATE.md`.
@@ -73,3 +73,5 @@ Run from the repository root. Use disposable Linux VMs or CI runners for package
 ## Stage exit
 
 Gate 4A exits when Linux x86_64 engine files run from verified app-data copies with correct execute permissions, AppImage and `.deb` install and download smoke tests pass on the owner-approved distro matrix, supported update behavior is proven, Linux provenance/notices are recorded, and the unpublished desktop draft contains exactly the allowed Windows and Linux assets. A failed criterion stays in 4A. Do not start Gate 4B until the owner explicitly accepts the Gate 4A checkpoint.
+
+Gate 4A was accepted by the owner on 2026-11-12; see the [checkpoint](evidence/4a/checkpoint.md) and [task evidence](evidence/4a/tasks.md).
