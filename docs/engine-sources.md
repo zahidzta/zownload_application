@@ -235,3 +235,25 @@ the project's current LGPL-compatible Android FFmpeg plan, so Android engine
 integration stops for owner architecture/licensing decision 0C-01A. The audit
 records exact source links, tagged binary hashes, and open package/device
 checks. Gate 0B's pinned yt-dlp/ejs/QuickJS sources remain unchanged.
+
+## Gate 5A Android Python runtime inputs
+
+The approved Android path packages Python 3.13 for `arm64-v8a` with Chaquopy
+17.2.0, then installs only the pinned pure-Python yt-dlp 2026.08.19 and
+yt-dlp-ejs 0.8.0 wheels. URLs, exact source and wheel SHA-256 values, upstream
+source commit, and declared licenses are kept in
+[`runtime-lock.psd1`](../scripts/gate-5a/runtime-lock.psd1). The Chaquopy
+source archive is pinned to commit `1f63c93d8beaf7062fbe51888ab9235475df3bb8`;
+the Python source archive is 3.13.16. Chaquopy's Android CPython target is an
+upstream prebuilt artifact fetched by its pinned Gradle plugin, not compiled
+from CPython source on the Windows build host. The lock and build evidence
+identify that boundary and the published artifact version.
+Gradle's committed dependency-verification file also records the SHA-256 of
+the resolved Chaquopy plugin, CPython Android target, bootstrap image, and
+runtime libraries.
+
+Python 3.13.18 is a newer security-only release than Chaquopy 17.2's published
+3.13.16 target. Keep Android distribution blocked until the target is updated
+or a patched runtime is built and reviewed. The Python package includes EJS
+solver scripts, but EJS challenge execution still requires the QuickJS runtime
+and Android bridge planned for 5A-05/5A-07.

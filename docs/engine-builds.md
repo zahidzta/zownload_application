@@ -446,3 +446,29 @@ Only the higher `0.0.4` DMGs and updater archives are attached to the
 owner-created draft. The workflow never creates or publishes a release. Exact
 runner versions, lower/candidate artifact hashes, draft ID, and final metadata
 checks are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).
+
+## Gate 5A Python and yt-dlp Android package
+
+The app module applies Chaquopy Gradle plugin 17.2.0 and requests Python 3.13.
+Its `arm64-v8a` ABI filter is the only Android native ABI. `runtime-lock.psd1`
+pins the Chaquopy source commit, CPython 3.13.16 source archive, yt-dlp and EJS
+source archives, and the two pure-Python wheels. `verify.ps1` checks every
+downloaded archive/wheel SHA-256 before the Gradle build. Pip uses `--no-index`
+and `--only-binary=:all:` with the ignored local lock-input directory, so it
+cannot resolve a different version or fetch an unpinned package from an index.
+
+On Windows, provision the pinned Corretto 21 and Python 3.13.17 build hosts
+with `powershell -NoProfile -File scripts/gate-5a/setup-jdk-host.ps1` and
+`powershell -NoProfile -File scripts/gate-5a/setup-python-host.ps1`, then run
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+The verifier builds the debug APK, asserts that its native libraries contain
+only `arm64-v8a` and that Chaquopy's `libpython` is present, then reports APK
+size and SHA-256. It also reads the Chaquopy requirements archive inside the
+APK and checks the yt-dlp/EJS distribution metadata and solver scripts.
+`src-tauri/gen/android/gradle/verification-metadata.xml` pins the resolved
+Gradle artifacts, including Chaquopy's prebuilt CPython target and bootstrap.
+The generated Tauri ABI task list is limited to `arm64-v8a`; other ABI variants
+are disabled because Python 3.13 is unavailable for them. Configuration cache
+is disabled for this Android project due to an AGP resource-task serialization
+failure. The exact packaging result is in
+[`5A-03 evidence`](gates/evidence/5a/python-runtime-build.md).

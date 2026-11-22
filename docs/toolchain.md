@@ -710,3 +710,23 @@ paused without automatic work. The AppImage's daily update check reported
 `Could not fetch a valid release JSON from the remote`; no later version was
 confirmed or installed. [4A-05 evidence](gates/evidence/4a/4a-05.md#fedora-workstation-45-native-follow-up-2026-11-06)
 contains output/source hashes and screenshots. Real upgrades remain pending.
+
+## Gate 5A-03 Android Python packaging host
+
+- Chaquopy Gradle plugin: 17.2.0; application Python: 3.13, currently mapped
+  by the published Chaquopy target to CPython 3.13.16; package ABI: `arm64-v8a`.
+- Windows build Python: 3.13.17 x64. `scripts/gate-5a/setup-python-host.ps1`
+  downloads the official installer and checks SHA-256
+  `5da012101ba2e17113a9a1cd901e9ce1441086f2b7ecb5de06ec94163899a190` before
+  installing under ignored `work/android/gate-5a/5a-03/python-host/`.
+- Android build JDK: the owner-approved Amazon Corretto 21.0.11.10.1 pin from
+  the project toolchain. `scripts/gate-5a/setup-jdk-host.ps1` verifies the
+  official Windows x64 ZIP SHA-256
+  `5d63fdb5a19393081919afc0daa4ce82a7fadcced569981a995529caed28fb14` and
+  extracts it under ignored `work/android/gate-5a/5a-03/jdk-host/`.
+- Android build toolchain remains the project-pinned Gradle wrapper, AGP 9.3.1,
+  and the Android SDK/NDK already recorded above. Python, yt-dlp, and EJS source
+  and wheel hashes are in `scripts/gate-5a/runtime-lock.psd1`.
+- Run the JDK and Python setup scripts above before the verifier. Exact
+  commands are in
+  [`engine-builds.md`](engine-builds.md#gate-5a-python-and-ytdlp-android-package).
