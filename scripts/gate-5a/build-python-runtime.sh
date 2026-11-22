@@ -74,15 +74,7 @@ grep -Eq "^Pkg.Revision[[:space:]]*=[[:space:]]*$ndk_version$" "$ndk_properties"
 }
 
 command_line_tools="$ANDROID_HOME/cmdline-tools/22.0"
-latest_tools="$ANDROID_HOME/cmdline-tools/latest"
 [[ -x "$command_line_tools/bin/sdkmanager" ]] || { echo 'Pinned Command-Line Tools 22.0 are missing.' >&2; exit 1; }
-if [[ ! -e "$latest_tools" ]]; then
-    ln -s "$command_line_tools" "$latest_tools"
-fi
-[[ "$(realpath "$latest_tools")" == "$(realpath "$command_line_tools")" ]] || {
-    echo 'cmdline-tools/latest must resolve to the pinned 22.0 directory.' >&2
-    exit 1
-}
 
 safe_remove_task_output() {
     output_path="$(realpath -m "$1")"
@@ -92,6 +84,20 @@ safe_remove_task_output() {
         *) echo "Refusing to remove output outside the task work directory: $output_path" >&2; exit 1 ;;
     esac
 }
+
+# CPython uses cmdline-tools/latest directly. Build through an isolated SDK
+# view so an existing runner or developer SDK is left untouched.
+android_sdk_view="$task_work_root/android-sdk-view"
+safe_remove_task_output "$android_sdk_view"
+mkdir -p "$android_sdk_view/cmdline-tools"
+ln -s "$command_line_tools" "$android_sdk_view/cmdline-tools/latest"
+for sdk_package in 'build-tools/36.0.0' 'licenses' 'platform-tools' 'platforms/android-36'; do
+    [[ -d "$sdk_root/$sdk_package" ]] || { echo "Pinned Android SDK package is missing: $sdk_root/$sdk_package" >&2; exit 1; }
+    mkdir -p "$android_sdk_view/$(dirname "$sdk_package")"
+    ln -s "$sdk_root/$sdk_package" "$android_sdk_view/$sdk_package"
+done
+export ANDROID_HOME="$android_sdk_view"
+export ANDROID_SDK_ROOT="$android_sdk_view"
 
 download_verified() {
     input_name="$1"
