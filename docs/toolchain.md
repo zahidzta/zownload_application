@@ -18,7 +18,7 @@ Selected 2026-10-17 for the empty Tauri 2 foundation. The JavaScript/Rust scaffo
 | Android NDK | r30, `30.0.16248370` | Google's [NDK download page](https://developer.android.com/ndk/downloads) identifies r30 as its current LTS and gives this `ndkVersion`. |
 | Android SDK platform | Android 16, API `36` (`platforms;android-36`) | [Stable Android 16 SDK platform](https://developer.android.com/tools/releases/platforms). Set `compileSdk = 36`; set `targetSdk = 36` for the skeleton, subject to Android behavior checks in later gates. |
 | Android SDK Build-Tools | `36.0.0` (`build-tools;36.0.0`) | [AGP 9.4 compatibility table](https://developer.android.com/build/releases/agp-9-4-0-release-notes) lists Build-Tools 36.0.0. |
-| Android SDK Platform-Tools | `37.0.1` (`platform-tools`) | Google's [Platform-Tools release notes](https://developer.android.com/tools/releases/platform-tools). Verify the installed revision because `platform-tools` resolves to the current package. |
+| Android SDK Platform-Tools | `37.0.3` (`platform-tools`) | Google's [Platform-Tools release notes](https://developer.android.com/tools/releases/platform-tools) list 37.0.3 as the November 2026 release. The CI action installs the current package, so the workflow checks this resolved revision. |
 | Android SDK Command-Line Tools | `22.0` (`cmdline-tools;22.0`, standalone archive build `15859902`) | Google's [current standalone download](https://developer.android.com/studio#command-line-tools-only) names archive build `15859902`; install the versioned SDK package to avoid a moving `latest` path. |
 | Tauri updater plugin | `2.13.0` | Already required by `PROJECT.md:385`; [updater release](https://github.com/tauri-apps/plugins-workspace/releases/tag/updater-v2.13.0). No updater code belongs in Gate 0A. |
 
@@ -70,7 +70,7 @@ $env:NDK_HOME = Join-Path $env:ANDROID_HOME 'ndk\30.0.16248370'
 & "$env:ANDROID_HOME\cmdline-tools\22.0\bin\sdkmanager.bat" --list_installed
 ```
 
-Verify `source.properties` reports Platform-Tools `37.0.1`, Command-Line Tools `22.0`, NDK `30.0.16248370`, and Build-Tools `36.0.0`. The exact Android install and build results belong in 0A-08/0A-09, after the scaffold exists.
+Verify `source.properties` reports Platform-Tools `37.0.3`, Command-Line Tools `22.0`, NDK `30.0.16248370`, and Build-Tools `36.0.0`. The exact Android install and build results belong in 0A-08/0A-09, after the scaffold exists.
 
 ## Minimum OS and validation matrix
 
@@ -149,7 +149,7 @@ The owner subsequently installed the pinned Android NDK r30 (`30.0.16248370`) in
 
 `.github/workflows/ci.yml` runs on pushes and pull requests with read-only repository permission. Its Windows 2025 job uses Node `24.22.0` with bundled npm `11.19.1`, installs Rust `1.99.1`, runs `npm ci`, and invokes `powershell -NoProfile -File scripts/verify-foundation.ps1`. That script runs `npm run build`, `npm run check:contracts`, `cargo test --manifest-path src-tauri/Cargo.toml`, and `powershell -NoProfile -File scripts/check-design.ps1`, stopping at the first failure.
 
-The Ubuntu 24.04 Android job uses the same Node/npm and Rust pins, adds Rust target `aarch64-linux-android`, and installs SDK platform API 36, Build-Tools `36.0.0`, Platform-Tools `37.0.1`, Command-Line Tools `22.0` (archive build `15859902`), and NDK `30.0.16248370`. It checks each installed SDK revision before running `npm ci` and `npm run android:debug`. Google's unversioned `platform-tools` package is checked against the recorded `37.0.1` pin so a changed upstream resolution fails instead of silently changing the build. The generated Gradle wrapper is marked executable on the Linux runner; its committed file currently lacks the executable bit.
+The Ubuntu 24.04 Android job uses the same Node/npm and Rust pins, adds Rust target `aarch64-linux-android`, and installs SDK platform API 36, Build-Tools `36.0.0`, Platform-Tools `37.0.3`, Command-Line Tools `22.0` (archive build `15859902`), and NDK `30.0.16248370`. It checks each installed SDK revision before running `npm ci` and `npm run android:debug`. Google's unversioned `platform-tools` package is checked against the recorded `37.0.3` revision so an upstream change fails instead of silently changing the build. The generated Gradle wrapper is marked executable on the Linux runner; its committed file currently lacks the executable bit.
 
 The Android job downloads the exact [Corretto 21.0.11.10.1 Linux x64 archive](https://github.com/corretto/corretto-21/releases/tag/21.0.11.10.1) and checks the vendor's SHA-256 `5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394` before extracting it to the runner's temporary directory and setting `JAVA_HOME`. Workflow setup uses [setup-node](https://github.com/actions/setup-node), [setup-android](https://github.com/android-actions/setup-android), and Tauri's [Linux prerequisites](https://tauri.app/start/prerequisites/). No installer, release, publish, or artifact-upload step is configured. Hosted-run evidence is assigned to 0A-12.
 
