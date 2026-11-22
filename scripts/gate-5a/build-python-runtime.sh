@@ -50,7 +50,7 @@ import sys
 
 value = json.load(open(sys.argv[1], encoding="utf-8"))
 for key in sys.argv[2].split("."):
-    value = value[key]
+    value = value[int(key)] if isinstance(value, list) else value[key]
 if isinstance(value, (dict, list)):
     raise SystemExit("Expected a scalar lock value")
 print(value)
