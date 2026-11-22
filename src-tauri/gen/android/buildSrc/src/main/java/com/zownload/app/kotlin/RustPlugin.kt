@@ -1,6 +1,5 @@
 import com.android.build.api.dsl.ApplicationExtension
 import org.gradle.api.DefaultTask
-import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
@@ -61,12 +60,6 @@ open class RustPlugin : Plugin<Project> {
                 tasks["mergeUniversal${profileCapitalized}JniLibFolders"].dependsOn(buildTask)
 
                 for (targetPair in targetsList.withIndex()) {
-                    val targetAbi = defaultAbiList.getOrNull(targetPair.index)
-                        ?: throw GradleException("No ABI mapping for target ${targetPair.value}")
-                    if (targetAbi !in abiList) {
-                        continue
-                    }
-
                     val targetName = targetPair.value
                     val targetArch = archList[targetPair.index]
                     val targetArchCapitalized = targetArch.replaceFirstChar { it.uppercase() }

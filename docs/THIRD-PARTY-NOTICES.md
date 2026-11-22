@@ -130,18 +130,3 @@ The Gate 0B audit proves the fixed binaries, source archives, embedded
 notices and release plan. It does not claim that dependency sources,
 relinkable objects, Microsoft entitlement or a release source bundle have
 already been published.
-
-## Gate 5A-03 Android Python runtime
-
-| Component | Pinned version | License recorded for this package | Source and hash record |
-|---|---:|---|---|
-| Chaquopy Gradle plugin and Android target | 17.2.0 | MIT | `scripts/gate-5a/runtime-lock.psd1`; source commit and archive SHA-256 |
-| CPython Android target | 3.13.16 | PSF-2.0 | Python source archive URL and SHA-256 in the runtime lock |
-| yt-dlp | 2026.08.19 | Unlicense | Source archive and pure-Python wheel URLs/SHA-256 in the runtime lock |
-| yt-dlp-ejs | 0.8.0 | Unlicense; bundled solver code includes MIT and ISC notices | Source archive and pure-Python wheel URLs/SHA-256 in the runtime lock |
-
-These notices describe the Python packaging task only. The full Android APK
-transitive-license and native-binary audit remains in 5A-06. EJS scripts are
-not a JavaScript runtime; QuickJS and its notices are handled by 5A-05. The
-published Chaquopy Python 3.13.16 target also needs a security update review
-before Android distribution.

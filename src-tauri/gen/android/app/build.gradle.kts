@@ -4,7 +4,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.chaquo.python")
     id("rust")
 }
 
@@ -25,9 +24,6 @@ android {
         applicationId = "com.zownload.app"
         minSdk = 24
         targetSdk = 36
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -71,32 +67,6 @@ android {
     packaging {
         jniLibs.useLegacyPackaging = true
         jniLibs.pickFirsts.add("**/libqjs.so")
-    }
-}
-
-androidComponents {
-    beforeVariants { variant ->
-        val abiFlavor = variant.productFlavors.firstOrNull { it.first == "abi" }?.second
-        if (abiFlavor != null && abiFlavor != "universal" && abiFlavor != "arm64") {
-            variant.enable = false
-        }
-    }
-}
-
-chaquopy {
-    defaultConfig {
-        version = "3.13"
-        buildPython(System.getenv("CHAQUOPY_BUILD_PYTHON") ?: "python")
-        pip {
-            options(
-                "--no-index",
-                "--only-binary=:all:",
-                "--find-links",
-                rootProject.file("../../../work/android/gate-5a/5a-03/source-inputs").absolutePath
-            )
-            install("yt-dlp==2026.08.19")
-            install("yt-dlp-ejs==0.8.0")
-        }
     }
 }
 

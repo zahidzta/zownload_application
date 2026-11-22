@@ -711,22 +711,34 @@ paused without automatic work. The AppImage's daily update check reported
 confirmed or installed. [4A-05 evidence](gates/evidence/4a/4a-05.md#fedora-workstation-45-native-follow-up-2026-11-06)
 contains output/source hashes and screenshots. Real upgrades remain pending.
 
-## Gate 5A-03 Android Python packaging host
+## Gate 5A CPython Android build host
 
-- Chaquopy Gradle plugin: 17.2.0; application Python: 3.13, currently mapped
-  by the published Chaquopy target to CPython 3.13.16; package ABI: `arm64-v8a`.
-- Windows build Python: 3.13.17 x64. `scripts/gate-5a/setup-python-host.ps1`
-  downloads the official installer and checks SHA-256
-  `5da012101ba2e17113a9a1cd901e9ce1441086f2b7ecb5de06ec94163899a190` before
-  installing under ignored `work/android/gate-5a/5a-03/python-host/`.
-- Android build JDK: the owner-approved Amazon Corretto 21.0.11.10.1 pin from
-  the project toolchain. `scripts/gate-5a/setup-jdk-host.ps1` verifies the
-  official Windows x64 ZIP SHA-256
-  `5d63fdb5a19393081919afc0daa4ce82a7fadcced569981a995529caed28fb14` and
-  extracts it under ignored `work/android/gate-5a/5a-03/jdk-host/`.
-- Android build toolchain remains the project-pinned Gradle wrapper, AGP 9.3.1,
-  and the Android SDK/NDK already recorded above. Python, yt-dlp, and EJS source
-  and wheel hashes are in `scripts/gate-5a/runtime-lock.psd1`.
-- Run the JDK and Python setup scripts above before the verifier. Exact
-  commands are in
-  [`engine-builds.md`](engine-builds.md#gate-5a-python-and-ytdlp-android-package).
+The approved CPython `3.14.10` runtime is built on Ubuntu `24.04` x86_64.
+Keep the Android SDK and NDK on the existing project pins: Corretto JDK
+`21.0.11.10.1`, SDK platform API `36`, Build-Tools `36.0.0`, Platform-Tools
+`37.0.3`, Command-Line Tools `22.0` (archive build `15859902`), and NDK r30
+`30.0.16248370`. CPython's helper uses Android API `24` for the
+`aarch64-linux-android` runtime, matching the app's minimum API; this does not
+change the app's compile or target API `36`.
+
+The CPython Android helper searches for `cmdline-tools/latest`. Keep the
+versioned `22.0` installation as the actual SDK package and, on a fresh Linux
+builder, provide the expected path alias:
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+ln -s 22.0 "$ANDROID_HOME/cmdline-tools/latest"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
+export NDK_HOME="$ANDROID_NDK_HOME"
+export ANDROID_API_LEVEL=24
+```
+
+The host needs Java 21, Python 3 for CPython's helper, Git, curl, archive and
+patch tools, and GNU C/C++ build tools for the pinned source recipes. Use the
+Ubuntu 24.04 build environment and record the resolved host package versions
+and SDK `source.properties` in 5A-03 evidence; do not substitute a different
+JDK, SDK package, NDK, or runtime API to make a failing build pass. The official
+[CPython Android build instructions](https://github.com/python/cpython/blob/v3.14.10/Android/README.md)
+are the command reference; the locked dependency cache and invocation are in
+the [Gate 5A runtime recipe](engine-builds.md#5a-03--cpython-and-yt-dlp-android-runtime).

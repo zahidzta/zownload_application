@@ -1,192 +1,161 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # SPDX-FileCopyrightText: 2026 zahidzta
-[CmdletBinding()]
+
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-runtime')]
+    [ValidateSet('python-source-lock')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
-$repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$lock = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'runtime-lock.psd1')
-$workRoot = Join-Path $repositoryRoot 'work/android/gate-5a/5a-03'
-$inputDirectory = Join-Path $workRoot 'source-inputs'
-$buildLog = Join-Path $workRoot 'android-build.log'
-New-Item -ItemType Directory -Path $inputDirectory -Force | Out-Null
 
-$lockedInputs = @(
-    @{ Name = 'chaquopy-17.2.0.tar.gz'; Url = $lock.Chaquopy.SourceUrl; Sha256 = $lock.Chaquopy.SourceSha256 },
-    @{ Name = 'Python-3.13.16.tgz'; Url = $lock.Python.SourceUrl; Sha256 = $lock.Python.SourceSha256 },
-    @{ Name = 'yt-dlp-2026.08.19.tar.gz'; Url = $lock.YtDlp.SourceUrl; Sha256 = $lock.YtDlp.SourceSha256 },
-    @{ Name = 'yt_dlp-2026.8.19-py3-none-any.whl'; Url = $lock.YtDlp.WheelUrl; Sha256 = $lock.YtDlp.WheelSha256 },
-    @{ Name = 'yt-dlp-ejs-0.8.0.tar.gz'; Url = $lock.Ejs.SourceUrl; Sha256 = $lock.Ejs.SourceSha256 },
-    @{ Name = 'yt_dlp_ejs-0.8.0-py3-none-any.whl'; Url = $lock.Ejs.WheelUrl; Sha256 = $lock.Ejs.WheelSha256 }
-)
+function Assert-True {
+    param([bool]$Condition, [string]$Message)
+    if (-not $Condition) { throw $Message }
+}
 
-foreach ($input in $lockedInputs) {
-    $inputPath = Join-Path $inputDirectory $input.Name
-    if (-not (Test-Path -LiteralPath $inputPath)) {
-        $partialPath = "$inputPath.partial"
-        Invoke-WebRequest -Uri $input.Url -OutFile $partialPath
-        $downloadHash = (Get-FileHash -LiteralPath $partialPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($downloadHash -ne $input.Sha256) {
-            Remove-Item -LiteralPath $partialPath -Force
-            throw "SHA-256 mismatch for downloaded $($input.Name): $downloadHash"
-        }
-        Move-Item -LiteralPath $partialPath -Destination $inputPath
-    }
-
-    $actualHash = (Get-FileHash -LiteralPath $inputPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualHash -ne $input.Sha256) {
-        throw "SHA-256 mismatch for $($input.Name): $actualHash"
+function Assert-Equal {
+    param([object]$Actual, [object]$Expected, [string]$Label)
+    if ([string]$Actual -cne [string]$Expected) {
+        throw "$Label expected '$Expected', found '$Actual'."
     }
 }
 
-$defaultPython = Join-Path $workRoot 'python-host/python.exe'
-$pythonCommand = if ($env:CHAQUOPY_BUILD_PYTHON) {
-    $env:CHAQUOPY_BUILD_PYTHON
-} elseif (Test-Path -LiteralPath $defaultPython) {
-    $defaultPython
-} else {
-    'python'
-}
-$pythonVersion = (& $pythonCommand --version 2>&1 | Out-String).Trim()
-if ($pythonVersion -notmatch '^Python 3\.13\.') {
-    throw "Chaquopy requires a Python 3.13 host interpreter; found '$pythonVersion'. Set CHAQUOPY_BUILD_PYTHON."
-}
-$env:CHAQUOPY_BUILD_PYTHON = $pythonCommand
-
-$localJdkRoot = Join-Path $workRoot 'jdk-host'
-$localJava = if (Test-Path -LiteralPath $localJdkRoot) {
-    Get-ChildItem -LiteralPath $localJdkRoot -Filter 'java.exe' -File -Recurse |
-        Where-Object { $_.FullName -match '\\bin\\java\.exe$' } |
-        Select-Object -First 1
-}
-$candidateJavaHome = if ($localJava) {
-    Split-Path (Split-Path $localJava.FullName -Parent) -Parent
-} else {
-    $env:JAVA_HOME
-}
-$javaHomeConfig = if ($candidateJavaHome) { Join-Path $candidateJavaHome 'lib/jvm.cfg' } else { '' }
-if (-not $javaHomeConfig -or -not (Test-Path -LiteralPath $javaHomeConfig)) {
-    $javaExecutable = (Get-Command 'java.exe' -ErrorAction Stop).Source
-    $candidateJavaHome = Split-Path (Split-Path $javaExecutable -Parent) -Parent
-    if (-not (Test-Path -LiteralPath (Join-Path $candidateJavaHome 'lib/jvm.cfg'))) {
-        throw "JAVA_HOME '$env:JAVA_HOME' is invalid and the java.exe on PATH has no lib/jvm.cfg."
-    }
-}
-$env:JAVA_HOME = $candidateJavaHome
-$env:PATH = "$(Join-Path $candidateJavaHome 'bin');$env:PATH"
-"Using Java home: $candidateJavaHome"
-
-$npmCommand = Get-Command 'npm.cmd' -ErrorAction SilentlyContinue
-if (-not $npmCommand) {
-    $npmCommand = Get-Command 'npm' -ErrorAction Stop
+function Read-JsonFence {
+    param([string]$Text, [string]$FenceName)
+    $pattern = '(?ms)^```json ' + [regex]::Escape($FenceName) + '\s*(.*?)\r?\n```'
+    $match = [regex]::Match($Text, $pattern)
+    Assert-True $match.Success "Missing JSON block '$FenceName'."
+    return (ConvertFrom-Json -InputObject $match.Groups[1].Value)
 }
 
-Push-Location $repositoryRoot
-$savedErrorActionPreference = $ErrorActionPreference
 try {
-    # Windows PowerShell 5 treats native stderr as a terminating error when
-    # ErrorActionPreference is Stop, even though the build's exit code is valid.
-    $ErrorActionPreference = 'Continue'
-    & $npmCommand.Source run android:debug 2>&1 |
-        ForEach-Object { "$_" } |
-        Set-Content -LiteralPath $buildLog -Encoding utf8
-    $buildExitCode = $LASTEXITCODE
-}
-finally {
-    $ErrorActionPreference = $savedErrorActionPreference
-    Pop-Location
-}
+    $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    $sourcesPath = Join-Path $root 'docs\engine-sources.md'
+    $buildsPath = Join-Path $root 'docs\engine-builds.md'
+    $toolchainPath = Join-Path $root 'docs\toolchain.md'
+    $decisionPath = Join-Path $root 'docs\gates\evidence\5a\python-runtime-decision.md'
 
-if ($buildExitCode -ne 0) {
-    Get-Content -LiteralPath $buildLog -Tail 50 | ForEach-Object {
-        if ($_.Length -gt 500) { $_.Substring(0, 500) + ' ... [long line truncated]' } else { $_ }
+    foreach ($path in @($sourcesPath, $buildsPath, $toolchainPath, $decisionPath)) {
+        Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Required task file is missing: $path"
     }
-    throw "Android package build failed with exit code $buildExitCode."
-}
 
-$apkDirectory = Join-Path $repositoryRoot 'src-tauri/gen/android/app/build/outputs/apk'
-$apk = Get-ChildItem -LiteralPath $apkDirectory -Filter '*.apk' -Recurse |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-if (-not $apk) {
-    throw "No APK was produced under $apkDirectory."
-}
+    $sourcesText = Get-Content -LiteralPath $sourcesPath -Raw
+    $buildsText = Get-Content -LiteralPath $buildsPath -Raw
+    $toolchainText = Get-Content -LiteralPath $toolchainPath -Raw
+    $decisionText = Get-Content -LiteralPath $decisionPath -Raw
+    $lock = Read-JsonFence $sourcesText 'android-python-runtime-lock'
+    $sourceLock = Read-JsonFence $sourcesText 'source-lock'
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$package = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
-try {
-    $abis = @(
-        $package.Entries |
-            ForEach-Object {
-                if ($_.FullName -match '^lib/([^/]+)/') { $Matches[1] }
-                elseif ($_.FullName -match '^assets/chaquopy/bootstrap-native/([^/]+)/') { $Matches[1] }
-            } |
-            Sort-Object -Unique
+    Assert-Equal $lock.schema 1 'Runtime lock schema'
+    Assert-Equal $lock.status 'owner-approved' 'Runtime lock status'
+    Assert-Equal $lock.approvedOn '2026-11-22' 'Owner approval date'
+    Assert-Equal $lock.approach 'cpython-source-embedded-jni' 'Approved approach'
+    Assert-Equal $lock.python.version '3.14.10' 'CPython version'
+    Assert-Equal $lock.python.license 'PSF-2.0' 'CPython license'
+    Assert-Equal $lock.python.sourceUrl 'https://www.python.org/ftp/python/3.14.10/Python-3.14.10.tar.xz' 'CPython source URL'
+    Assert-Equal $lock.python.sha256 'de414a57119abef52784d8993e341d53aed635fc2b05c2607d9f98a2c5b72032' 'CPython source SHA-256'
+    Assert-Equal $lock.python.androidHost 'aarch64-linux-android' 'Android target'
+    Assert-Equal $lock.python.apiLevel 24 'Runtime API level'
+    Assert-Equal $lock.python.ndkPatch.file 'Android/android-env.sh' 'CPython NDK patch target'
+    Assert-Equal $lock.python.ndkPatch.from '27.3.13750724' 'CPython original NDK pin'
+    Assert-Equal $lock.python.ndkPatch.to '30.0.16248370' 'CPython patched NDK pin'
+    Assert-Equal $lock.sourceDependenciesRepository.url 'https://github.com/beeware/cpython-android-source-deps' 'Native recipe repository'
+    Assert-Equal $lock.sourceDependenciesRepository.license 'MIT' 'Native recipe repository license'
+    Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.file 'android-env.sh' 'Recipe repository NDK patch target'
+    Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.from '27.2.12479018' 'Recipe repository original NDK pin'
+    Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.to '30.0.16248370' 'Recipe repository patched NDK pin'
+
+    $expectedNative = @(
+        @{ name = 'bzip2'; version = '1.0.8'; build = '3'; sha256 = 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269'; recipeTag = 'bzip2-1.0.8-3'; recipeCommit = 'dcea166d40d573e963a35435e48b047afe243c2d'; patches = 'symlink.patch' },
+        @{ name = 'libffi'; version = '3.4.4'; build = '3'; sha256 = 'd66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676'; recipeTag = 'libffi-3.4.4-3'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = 'long_double.patch,open_temp_exec_file.patch' },
+        @{ name = 'openssl'; version = '3.5.9'; build = '0'; sha256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'; recipeTag = 'openssl-3.5.9-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'at_secure.patch,configuration.patch,soname-3.patch' },
+        @{ name = 'sqlite'; version = '3.53.4'; build = '0'; sha256 = '0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c'; recipeTag = 'sqlite-3.53.4-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'soname.patch' },
+        @{ name = 'xz'; version = '5.4.6'; build = '1'; sha256 = 'aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c'; recipeTag = 'xz-5.4.6-1'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = '' },
+        @{ name = 'zstd'; version = '1.5.7'; build = '2'; sha256 = 'eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3'; recipeTag = 'zstd-1.5.7-2'; recipeCommit = 'f4c94a0fbc359d17993547b66f0627d436f8897b'; patches = '' }
     )
-    if ($abis.Count -ne 1 -or $abis[0] -ne $lock.Abi) {
-        throw "Expected only $($lock.Abi) native libraries; APK contains: $($abis -join ', ')"
+    $nativeDependencyCount = @($lock.nativeDependencies).Count
+    Assert-Equal $nativeDependencyCount $expectedNative.Count 'Native dependency count'
+    foreach ($expected in $expectedNative) {
+        $entries = @($lock.nativeDependencies | Where-Object { $_.name -ceq $expected.name })
+        Assert-Equal $entries.Count 1 "Native dependency '$($expected.name)' count"
+        $entry = $entries[0]
+        foreach ($field in @('version', 'build', 'sha256', 'recipeTag', 'recipeCommit')) {
+            Assert-Equal $entry.$field $expected[$field] "$($expected.name) $field"
+        }
+        Assert-Equal (@($entry.patches) -join ',') $expected.patches "$($expected.name) patches"
+        Assert-True ($entry.sourceUrl -cmatch '^https://') "$($expected.name) source URL is not pinned."
+        Assert-True (-not [string]::IsNullOrWhiteSpace([string]$entry.license)) "$($expected.name) license is missing."
     }
 
-    $pythonLibraries = @($package.Entries | Where-Object { $_.FullName -match '^lib/arm64-v8a/libpython[^/]*\.so$' })
-    if ($pythonLibraries.Count -eq 0) {
-        throw 'The APK does not contain Chaquopy Python shared libraries for arm64-v8a.'
-    }
-
-    $buildMetadataEntry = $package.GetEntry('assets/chaquopy/build.json')
-    if (-not $buildMetadataEntry) { throw 'The APK is missing Chaquopy build metadata.' }
-    $metadataReader = [System.IO.StreamReader]::new($buildMetadataEntry.Open())
-    try { $buildMetadata = $metadataReader.ReadToEnd() | ConvertFrom-Json }
-    finally { $metadataReader.Dispose() }
-    if ($buildMetadata.python_version -ne '3.13') {
-        throw "Expected Python 3.13 in the APK; found '$($buildMetadata.python_version)'."
-    }
-
-    $requirementsEntry = $package.GetEntry('assets/chaquopy/requirements-common.imy')
-    if (-not $requirementsEntry) { throw 'The APK is missing the pinned Python requirements archive.' }
-    $requirementsStream = $requirementsEntry.Open()
-    $requirementsBytes = [System.IO.MemoryStream]::new()
-    try { $requirementsStream.CopyTo($requirementsBytes) }
-    finally { $requirementsStream.Dispose() }
-    $requirementsBytes.Position = 0
-    $requirementsArchive = [System.IO.Compression.ZipArchive]::new(
-        $requirementsBytes,
-        [System.IO.Compression.ZipArchiveMode]::Read,
-        $true
+    $expectedPackages = @(
+        @{ name = 'Brotli'; version = '1.2.0'; sha256 = 'e310f77e41941c13340a95976fe66a8a95b01e783d430eeaf7a2f87e0a57dd0a' },
+        @{ name = 'certifi'; version = '2026.7.22'; sha256 = '741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55' },
+        @{ name = 'charset-normalizer'; version = '3.5.0'; sha256 = '49bd5feb59b0bf3cbf6ebcf4352e371c95b9da9bacd4449f8b64d0ad2c10a26e' },
+        @{ name = 'idna'; version = '3.18'; sha256 = 'ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848' },
+        @{ name = 'mutagen'; version = '1.48.1'; sha256 = '8f95637ab9f6f305cec6bd1294e197debe207998e3e068596563c74f86b0a173' },
+        @{ name = 'pycryptodomex'; version = '3.23.0'; sha256 = '71909758f010c82bc99b0abf4ea12012c98962fbf0583c2164f8b84533c2e4da' },
+        @{ name = 'requests'; version = '2.34.2'; sha256 = 'f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed' },
+        @{ name = 'urllib3'; version = '2.7.0'; sha256 = '231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c' },
+        @{ name = 'websockets'; version = '17.0.1'; sha256 = '5baa9bc0dfbae8c507e51c8cf1b6d4628086f7a87bbd3a9952bd5f035451f1cc' }
     )
-    try {
-        $expectedPackages = @(
-            @{ Metadata = "yt_dlp-$($lock.YtDlp.MetadataVersion).dist-info/METADATA"; Version = $lock.YtDlp.MetadataVersion },
-            @{ Metadata = "yt_dlp_ejs-$($lock.Ejs.Version).dist-info/METADATA"; Version = $lock.Ejs.Version }
-        )
-        foreach ($expected in $expectedPackages) {
-            $entry = $requirementsArchive.GetEntry($expected.Metadata)
-            if (-not $entry) { throw "The APK is missing package metadata $($expected.Metadata)." }
-            $reader = [System.IO.StreamReader]::new($entry.Open())
-            try { $packageMetadata = $reader.ReadToEnd() }
-            finally { $reader.Dispose() }
-            if ($packageMetadata -notmatch "(?m)^Version:\s*$([regex]::Escape($expected.Version))\s*$") {
-                throw "APK package metadata does not confirm version $($expected.Version) for $($expected.Metadata)."
-            }
-        }
-        foreach ($solverScript in @('yt_dlp_ejs/yt/solver/core.min.js', 'yt_dlp_ejs/yt/solver/lib.min.js')) {
-            if (-not $requirementsArchive.GetEntry($solverScript)) {
-                throw "The APK is missing the pinned EJS solver script $solverScript."
-            }
-        }
+    $pythonPackageCount = @($lock.pythonPackages).Count
+    Assert-Equal $pythonPackageCount $expectedPackages.Count 'Python package count'
+    foreach ($expected in $expectedPackages) {
+        $entries = @($lock.pythonPackages | Where-Object { $_.name -ceq $expected.name })
+        Assert-Equal $entries.Count 1 "Python package '$($expected.name)' count"
+        $entry = $entries[0]
+        Assert-Equal $entry.version $expected.version "$($expected.name) version"
+        Assert-Equal $entry.sha256 $expected.sha256 "$($expected.name) source SHA-256"
+        Assert-True ($entry.sourceUrl -cmatch '^https://files\.pythonhosted\.org/') "$($expected.name) source URL is not a PyPI source archive."
+        Assert-True (-not [string]::IsNullOrWhiteSpace([string]$entry.license)) "$($expected.name) license is missing."
     }
-    finally {
-        $requirementsArchive.Dispose()
-        $requirementsBytes.Dispose()
-    }
-}
-finally {
-    $package.Dispose()
-}
 
-$apkHash = (Get-FileHash -LiteralPath $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-"PASS python-runtime: Chaquopy $($lock.Chaquopy.Version), Python $($lock.Python.Version), yt-dlp $($lock.YtDlp.Version), EJS $($lock.Ejs.Version), ABI $($lock.Abi)"
-"APK $($apk.FullName) bytes=$($apk.Length) sha256=$apkHash"
+    foreach ($name in @('ytDlp', 'ejs', 'quickjs')) {
+        Assert-True ($null -ne $lock.$name) "Missing $name pointer in runtime lock."
+    }
+    Assert-Equal $lock.ytDlp.sourceLockKey 'ytDlp' 'yt-dlp source-lock key'
+    Assert-Equal $lock.ytDlp.sha256 $sourceLock.ytDlp.source.sha256 'yt-dlp source-lock SHA-256'
+    Assert-Equal $lock.ytDlp.sourceUrl $sourceLock.ytDlp.source.url 'yt-dlp source-lock URL'
+    Assert-Equal $lock.ytDlp.version $sourceLock.ytDlp.version 'yt-dlp source-lock version'
+    Assert-Equal $lock.ytDlp.version '2026.08.19' 'yt-dlp version'
+    Assert-Equal $lock.ejs.sourceLockKey 'ejs' 'EJS source-lock key'
+    Assert-Equal $lock.ejs.sha256 $sourceLock.ejs.source.sha256 'EJS source-lock SHA-256'
+    Assert-Equal $lock.ejs.sourceUrl $sourceLock.ejs.source.url 'EJS source-lock URL'
+    Assert-Equal $lock.ejs.version $sourceLock.ejs.version 'EJS source-lock version'
+    Assert-Equal $lock.ejs.version '0.8.0' 'EJS version'
+    Assert-Equal $lock.quickjs.sourceLockKey 'quickjs' 'QuickJS source-lock key'
+    Assert-Equal $lock.quickjs.sha256 $sourceLock.quickjs.source.sha256 'QuickJS source-lock SHA-256'
+    Assert-Equal $lock.quickjs.sourceUrl $sourceLock.quickjs.source.url 'QuickJS source-lock URL'
+    Assert-Equal $lock.quickjs.version $sourceLock.quickjs.version 'QuickJS source-lock version'
+    Assert-Equal $lock.quickjs.version '2026-06-04' 'QuickJS version'
+
+    $expectedTools = @{
+        host = 'ubuntu-24.04-x86_64'; jdk = '21.0.11.10.1'; androidApi = '36'
+        buildTools = '36.0.0'; platformTools = '37.0.3'; commandLineTools = '22.0'
+        ndk = '30.0.16248370'; abi = 'arm64-v8a'
+    }
+    foreach ($name in $expectedTools.Keys) {
+        Assert-Equal $lock.buildTools.$name $expectedTools[$name] "Build tool '$name'"
+    }
+
+    Assert-True ($decisionText.Contains('Owner decision: CPython approved on 2026-11-22')) 'Decision memo does not record owner approval.'
+    Assert-True ($decisionText.Contains('AndroidEnginePackage')) 'Decision memo omits the package boundary.'
+    Assert-True ($decisionText.Contains('22–35 MB')) 'Decision memo omits the unmeasured package-size estimate.'
+    Assert-True ($decisionText -match 'desktop-only\s+first-release\s+fallback') 'Decision memo omits the fallback.'
+    Assert-True ($buildsText.Contains('./android.py build aarch64-linux-android')) 'CPython build command is missing.'
+    Assert-True ($buildsText.Contains('./android.py package aarch64-linux-android')) 'CPython package command is missing.'
+    Assert-True ($buildsText.Contains('cross-build/downloads/')) 'Source-built native dependency cache is undocumented.'
+    Assert-True ($buildsText.Contains('prebuilt GitHub release archives are not allowed')) 'Build recipe permits opaque native archives.'
+    Assert-True ($buildsText.Contains('without allowing `pip` to resolve')) 'Build recipe does not block unpinned pip resolution.'
+    Assert-True ($toolchainText.Contains('cmdline-tools/latest')) 'Pinned SDK alias requirement is missing.'
+    Assert-True ($toolchainText.Contains('ANDROID_API_LEVEL=24')) 'Runtime API level setup is missing.'
+    Assert-True ($toolchainText.Contains('30.0.16248370')) 'Pinned NDK setup is missing.'
+
+    Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    exit 0
+}
+catch {
+    [Console]::Error.WriteLine("FAIL: $($_.Exception.Message)")
+    exit 1
+}

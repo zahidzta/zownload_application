@@ -447,28 +447,42 @@ owner-created draft. The workflow never creates or publishes a release. Exact
 runner versions, lower/candidate artifact hashes, draft ID, and final metadata
 checks are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).
 
-## Gate 5A Python and yt-dlp Android package
+## 5A-03 — CPython and yt-dlp Android runtime
 
-The app module applies Chaquopy Gradle plugin 17.2.0 and requests Python 3.13.
-Its `arm64-v8a` ABI filter is the only Android native ABI. `runtime-lock.psd1`
-pins the Chaquopy source commit, CPython 3.13.16 source archive, yt-dlp and EJS
-source archives, and the two pure-Python wheels. `verify.ps1` checks every
-downloaded archive/wheel SHA-256 before the Gradle build. Pip uses `--no-index`
-and `--only-binary=:all:` with the ignored local lock-input directory, so it
-cannot resolve a different version or fetch an unpinned package from an index.
+Build on Ubuntu 24.04 x86_64 with the exact Python, native-source, recipe,
+package, and Android toolchain pins in the [Gate 5A lock](engine-sources.md#gate-5a-android-python-runtime-lock--owner-approved-2026-11-22).
+Use NDK r30 (`30.0.16248370`) and Android API 24 for the runtime target
+`aarch64-linux-android`; keep SDK API 36 for the application. Install the
+pinned SDK Command-Line Tools `22.0` and expose a `latest` path alias to that
+same versioned directory because CPython's helper looks up `cmdline-tools/latest`.
+Do not install a moving SDK tools version to satisfy that path.
 
-On Windows, provision the pinned Corretto 21 and Python 3.13.17 build hosts
-with `powershell -NoProfile -File scripts/gate-5a/setup-jdk-host.ps1` and
-`powershell -NoProfile -File scripts/gate-5a/setup-python-host.ps1`, then run
-`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
-The verifier builds the debug APK, asserts that its native libraries contain
-only `arm64-v8a` and that Chaquopy's `libpython` is present, then reports APK
-size and SHA-256. It also reads the Chaquopy requirements archive inside the
-APK and checks the yt-dlp/EJS distribution metadata and solver scripts.
-`src-tauri/gen/android/gradle/verification-metadata.xml` pins the resolved
-Gradle artifacts, including Chaquopy's prebuilt CPython target and bootstrap.
-The generated Tauri ABI task list is limited to `arm64-v8a`; other ABI variants
-are disabled because Python 3.13 is unavailable for them. Configuration cache
-is disabled for this Android project due to an AGP resource-task serialization
-failure. The exact packaging result is in
-[`5A-03 evidence`](gates/evidence/5a/python-runtime-build.md).
+For each native dependency, check out the exact
+[`cpython-android-source-deps`](https://github.com/beeware/cpython-android-source-deps)
+recipe tag and commit from the lock, apply its listed patch files, and build
+from the corresponding pinned upstream source archive. Patch both upstream
+NDK environment pins to r30. Place only the resulting source-built archives
+under CPython's `cross-build/downloads/` using the exact filenames its pinned
+helper expects; its downloader reuses a matching cached filename. The source
+recipes' prebuilt GitHub release archives are not allowed as build inputs.
+5A-03 must record the exact recipe commands, generated filenames, patches,
+and output hashes before running CPython's package helper.
+
+In the extracted CPython `3.14.10` source root, run the official helper in this
+order after the locked dependencies are cached:
+
+```bash
+./android.py build aarch64-linux-android
+./android.py package aarch64-linux-android
+```
+
+The helper writes package outputs beneath
+`cross-build/aarch64-linux-android/dist`. Package only the pinned Python
+sources, yt-dlp `2026.08.19`, EJS `0.8.0`, and the default Python dependencies
+listed in the lock. Build those package sources against the embedded runtime;
+install from the verified local artifacts without allowing `pip` to resolve
+or download unpinned dependencies. Keep the JNI entrypoint behind
+`AndroidEnginePackage`; Rust remains the queue owner. 5A-03 records the
+resulting runtime/APK size, ABI and ELF dependencies, package hashes, notices,
+and source/build bundle. No Android APK may be shared before the Gate 5A
+source, build-input, notice, and transitive-dependency checks pass.

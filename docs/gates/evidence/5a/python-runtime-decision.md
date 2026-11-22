@@ -1,56 +1,66 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!-- SPDX-FileCopyrightText: 2026 zahidzta -->
 
-# 5A-02 — Android Python runtime decision
+# Gate 5A-02 — Approved CPython runtime strategy
 
-## Owner decision
+**Owner decision: CPython approved on 2026-11-22.** The owner selected an
+upstream CPython source build embedded behind the existing Kotlin
+`AndroidEnginePackage` boundary. This records the packaging strategy and
+source lock; it does not build or integrate the runtime. Those steps belong to
+5A-03 and later tasks.
 
-The owner approved Chaquopy 17.2.0, Python 3.13, and `arm64-v8a` only, and
-approved using an Android Java/Kotlin `ProcessBuilder` bridge for QuickJS with
-a yt-dlp EJS provider adaptation. This records the runtime/package boundary;
-the JavaScript bridge and actual YouTube challenge proof belong to later Gate
-5A tasks.
+## Selected approach
 
-## Pinned package boundary
+Build CPython `3.14.10` for `arm64-v8a` from its official source archive and
+embed `libpython` plus the standard library in the Android app. A small JNI
+bridge will let the Kotlin package provider call Python; Rust remains the queue
+owner and the public command/event contract stays unchanged. yt-dlp
+`2026.08.19`, EJS `0.8.0`, QuickJS `2026-06-04`, the pinned Python package
+sources, and six native dependencies are recorded in the machine-readable lock
+in [`engine-sources.md`](../../../engine-sources.md#gate-5a-android-python-runtime-lock--owner-approved-2026-11-22).
+yt-dlp's pinned release supports CPython `3.10+` and tests through `3.14`, so
+the selected runtime stays within its documented Python compatibility range
+([tagged project metadata](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/pyproject.toml)).
 
-- Chaquopy Gradle plugin/source: 17.2.0, upstream commit
-  `1f63c93d8beaf7062fbe51888ab9235475df3bb8`.
-- App Python target: 3.13, `arm64-v8a` only. Chaquopy 17.2 currently resolves
-  this to CPython 3.13.16 (`3.13.16-0` Android target); the exact CPython source
-  and package inputs are in [`runtime-lock.psd1`](../../../../scripts/gate-5a/runtime-lock.psd1).
-- Python packages: yt-dlp 2026.08.19 and yt-dlp-ejs 0.8.0, installed only from
-  their SHA-256-pinned pure-Python wheels. Their source archives are also
-  pinned for provenance.
-- Kotlin will call yt-dlp through Chaquopy's in-process Python API. Python's
-  subprocess module is unavailable on Android, so the QuickJS provider must
-  call the approved Java bridge rather than the upstream Python subprocess
-  runner. 5A-03 does not implement that adapter.
+The CPython Android guide describes this embedded `libpython` arrangement.
+The official Android build helper supports Linux/macOS hosts; this project
+selects Ubuntu 24.04 x86_64 with Corretto JDK `21.0.11.10.1`, Android SDK API
+36, Build-Tools `36.0.0`, Command-Line Tools `22.0`, and NDK r30
+`30.0.16248370`. The helper defaults to Android API 24 and target
+`aarch64-linux-android`, matching the app's minimum API and `arm64-v8a` ABI.
+See the [CPython Android guide](https://github.com/python/cpython/blob/v3.14.10/Doc/using/android.rst),
+[build instructions](https://github.com/python/cpython/blob/v3.14.10/Android/README.md),
+and the task's [build recipe](../../../engine-builds.md#5a-03--cpython-and-yt-dlp-android-runtime).
 
-## Build and fallback
+CPython's helper pins a different NDK than the repository, and its dependency
+repository publishes prebuilt archives. The lock records one-line NDK patches
+for both source trees. 5A-03 must build bzip2, libffi, OpenSSL, SQLite, xz,
+and zstd from their exact locked source archives with the pinned recipe tags,
+then place those outputs in CPython's local download cache. The helper reuses
+same-named cache files, so this avoids treating upstream prebuilt archives as
+source evidence. Do not build until the task captures the recipe patches,
+commands, notices, and dependency hashes.
 
-The Windows build host uses Python 3.13.17 x64; Chaquopy requires matching
-major/minor versions, and its documented buildPython micro version may differ.
-The repeatable setup and APK verification commands are in
-[`engine-builds.md`](../../../engine-builds.md#gate-5a-python-and-ytdlp-android-package).
-The 5A-03 build produced a 122,161,575-byte local debug APK; see the
-[build evidence](python-runtime-build.md) for its hash. This includes existing
-app assets and legacy engine dependencies, so it is not a final release-size
-estimate. If the approved runtime cannot be packaged or the QuickJS bridge
-cannot be made to work, stop Android engine integration and return to the owner
-for a runtime or release-scope decision; do not distribute an APK while the
-Android release blocker is open.
+The official CPython Android package is listed as 22.0 MB. Planning estimates
+a 22–35 MB compressed APK increase for the source-built runtime before the
+other Android engines; this has not been measured. 5A-03 must report the actual
+APK delta and runtime size.
 
-## Security and runtime limits
+## Alternatives considered
 
-Chaquopy 17.2's published Python 3.13 target is 3.13.16. Python 3.13.18 is a
-later security-only source release with security fixes, but Chaquopy 17.2 does
-not publish that target ([Chaquopy target docs](https://chaquo.com/chaquopy/doc/current/android.html),
-[Python 3.13.18 release](https://www.python.org/downloads/release/python-31318/)).
-Record the version gap as an Android distribution blocker: update Chaquopy's
-target or build and review a patched runtime before release. The local package
-task does not claim Python 3.13.18 security fixes.
+| Path | Fit with `AndroidEnginePackage` | Main cost or risk |
+|---|---|---|
+| **CPython source + JNI — selected** | Preserves the provider boundary with embedded Python calls behind a small JNI bridge. | Most custom native work; runtime size estimate is unmeasured. |
+| Chaquopy 17.2.0 | Offers a documented Kotlin-to-Python call API that a provider could wrap. | Adds a major Gradle/runtime dependency and needs artifact-level Python/package provenance. |
+| python-for-android AAR (`service_library`) | Produces a reusable AAR with Java service entrypoints. | Adds a packaging framework and needs a bridge design for callbacks and cancellation. |
 
-The approved QuickJS bridge is an architectural decision only. EJS scripts
-alone do not execute JavaScript; 5A-05 must package the pinned QuickJS runtime,
-and 5A-07 must prove the adapted provider on Android before the YouTube JS
-challenge acceptance can pass.
+If CPython cannot be built with the pinned sources and tools, or the measured
+size exceeds the accepted budget, stop 5A-03 and return the evidence to the
+owner for a new runtime decision or review of the desktop-only first-release
+fallback recorded in [`STATE.md`](../../../STATE.md). Do not silently switch
+frameworks or ship untraceable binaries.
+
+## Verification
+
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-source-lock`
+passed with: `PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.`
