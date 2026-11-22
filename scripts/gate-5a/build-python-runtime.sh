@@ -91,7 +91,7 @@ android_sdk_view="$task_work_root/android-sdk-view"
 safe_remove_task_output "$android_sdk_view"
 mkdir -p "$android_sdk_view/cmdline-tools"
 ln -s "$command_line_tools" "$android_sdk_view/cmdline-tools/latest"
-for sdk_package in 'build-tools/36.0.0' 'licenses' 'platform-tools' 'platforms/android-36'; do
+for sdk_package in "build-tools/36.0.0" licenses "ndk/$ndk_version" platform-tools 'platforms/android-36'; do
     [[ -d "$sdk_root/$sdk_package" ]] || { echo "Pinned Android SDK package is missing: $sdk_root/$sdk_package" >&2; exit 1; }
     mkdir -p "$android_sdk_view/$(dirname "$sdk_package")"
     ln -s "$sdk_root/$sdk_package" "$android_sdk_view/$sdk_package"
