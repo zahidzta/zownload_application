@@ -46,9 +46,9 @@ jobs:
       - name: Check pinned Android SDK and NDK
         run: |
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}"
-          grep -F 'Pkg.Revision = 22.0' "$sdk_root/cmdline-tools/22.0/source.properties"
-          grep -F 'Pkg.Revision = 36.0.0' "$sdk_root/build-tools/36.0.0/source.properties"
-          grep -F 'Pkg.Revision = 30.0.16248370' "$sdk_root/ndk/30.0.16248370/source.properties"
+          grep -Eq '^Pkg.Revision[[:space:]]*=[[:space:]]*22[.]0[[:space:]]*$' "$sdk_root/cmdline-tools/22.0/source.properties"
+          grep -Eq '^Pkg.Revision[[:space:]]*=[[:space:]]*36[.]0[.]0[[:space:]]*$' "$sdk_root/build-tools/36.0.0/source.properties"
+          grep -Eq '^Pkg.Revision[[:space:]]*=[[:space:]]*30[.]0[.]16248370[[:space:]]*$' "$sdk_root/ndk/30.0.16248370/source.properties"
           test -x "$sdk_root/cmdline-tools/22.0/bin/sdkmanager"
 
       - name: Build and verify source-pinned CPython runtime
