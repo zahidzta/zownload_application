@@ -57,15 +57,15 @@ Run from the repository root. Build and test each architecture on a matching mac
 - Dependencies: 4B-02; owner-designated unpublished candidate and version transition; existing updater signing key available only through Actions secrets. Apple code signing/notarization remains out of scope unless the owner changes the approved plan.
 - Acceptance: CI emits only the two DMGs and their supported updater bundles/signatures; the full allowlist retains verified Windows/Linux assets; `latest.json` maps both macOS architectures correctly; tampering fails verification; no secret is logged or committed; exact source/build inputs and notices cover each macOS engine binary. Exact verification: V2.
 
-### 4B-04 — Native install/update review, documentation, and checkpoint — OWNER-REVIEW / PENDING
+### 4B-04 — Native install/update review, documentation, and checkpoint — ACCEPTED 2026-11-22
 
 - Goal: prove macOS single/playlist downloads, clean installation, Gatekeeper instructions, updater behavior on each architecture, and process cleanup; record evidence and open cross-platform obligations.
 - Files: `README.md`, focused macOS verification fixes, `docs/gates/evidence/4b/`, and `docs/STATE.md`.
 - Read: `PROJECT.md:196-211,289-308,630-645,664-684,734-745,780-785`; approved 4B plan and 4B-02/03 evidence.
 - Dependencies: 4B-02 and 4B-03; owner-provided Intel and Apple Silicon native/virtual test environments; approved lower/higher version candidate pair.
-- Current status (2026-11-21): pending because the owner cannot access an Intel or Apple Silicon Mac, and the available VM is not working. V3 remains unverified; this does not waive the Gate 4B exit criteria.
-- Acceptance: V3 passes on both architectures; checkpoint maps the macOS portions of AC-20, AC-22, AC-23 and AC-36 and records any attested evidence limits; Windows/Linux remain unchanged; no public release is created. Stop for explicit owner acceptance before Gate 5A.
+- Result (2026-11-22): the owner reported that the native review works and directed acceptance and progression to the next task. The attestation and its evidence limits are recorded in [4B-04 evidence](evidence/4b/4b-04.md).
+- Acceptance: V3 is owner-attested for both architectures; the checkpoint maps the macOS portions of AC-20, AC-22, AC-23 and AC-36 and records evidence limits; Windows/Linux remain unchanged; no public release is created. The owner accepted the checkpoint and authorized Gate 5A; see [checkpoint](evidence/4b/checkpoint.md).
 
 ## Stage exit
 
-Gate 4B exits when x86_64 and arm64 engines run only from verified app-data copies, both architecture-specific DMGs install and pass download smoke tests on the approved OS matrix, both updater paths and Gatekeeper instructions are proven, macOS provenance/notices are recorded, and the unpublished candidate has exactly the allowed Windows/Linux/macOS assets. A failed criterion stays in 4B. Do not start Gate 5A until the owner explicitly accepts the Gate 4B checkpoint.
+Gate 4B was accepted by the owner on 2026-11-22 after the V3 native review attestation; see the [checkpoint](evidence/4b/checkpoint.md) and [task evidence](evidence/4b/tasks.md). Gate 5A may proceed. Before Android production-engine work, resolve the Android binary source/build/notice blocker recorded in [STATE.md](../STATE.md#release-blocker--android-distribution).

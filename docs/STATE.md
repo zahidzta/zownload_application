@@ -2,12 +2,8 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3C was accepted on 2026-11-02 and Gate 4A was accepted by the owner on 2026-11-12; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4A task evidence](gates/evidence/4a/tasks.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
-- **Gate 4B plan:** Accepted by the owner on 2026-11-12; see the [plan](gates/gate-4b.md).
-- Completed 4B-01: Owner-approved macOS plan, commit `6078d02`; V0 passed; [plan and evidence](gates/gate-4b.md#verification).
-- Completed 4B-02: macOS x64/arm64 runtime, V1 passed; commits `4433e9a`, `3bf09cf`, `78246bc`, `aa685bb`; [evidence](gates/evidence/4b/4b-02.md).
-- Completed 4B-03: V2 passed; commits `193eeab`, `cab3a80`; [run, asset hashes, and metadata evidence](gates/evidence/4b/4b-03.md).
-- **Next task:** 4B-04 — native install/update review remains pending because the owner has no Intel/Apple Silicon Mac and the VM is unavailable. V3 remains unverified; Gate 5A still requires explicit Gate 4B checkpoint acceptance.
+- **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
+- **Next task:** Prepare the Gate 5A plan for the Android production engine, starting with the Android binary source/build/notice blocker. Stop for owner acceptance before implementation.
 - Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
@@ -28,6 +24,7 @@
 - 3B — accepted 2026-10-31; [checkpoint](gates/evidence/3b/checkpoint.md) and [task evidence](gates/evidence/3b/tasks.md).
 - 3C — accepted 2026-11-02; commit `1c9c221`; [checkpoint](gates/evidence/3c/checkpoint.md) and [task evidence](gates/evidence/3c/tasks.md).
 - 4A — accepted by owner 2026-11-12; [checkpoint](gates/evidence/4a/checkpoint.md) and [task evidence](gates/evidence/4a/tasks.md).
+- 4B — accepted by owner 2026-11-22; [checkpoint](gates/evidence/4b/checkpoint.md) and [task evidence](gates/evidence/4b/tasks.md).
 
 ## Standing decisions
 
