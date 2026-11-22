@@ -57,12 +57,13 @@ Run from the repository root. Build and test each architecture on a matching mac
 - Dependencies: 4B-02; owner-designated unpublished candidate and version transition; existing updater signing key available only through Actions secrets. Apple code signing/notarization remains out of scope unless the owner changes the approved plan.
 - Acceptance: CI emits only the two DMGs and their supported updater bundles/signatures; the full allowlist retains verified Windows/Linux assets; `latest.json` maps both macOS architectures correctly; tampering fails verification; no secret is logged or committed; exact source/build inputs and notices cover each macOS engine binary. Exact verification: V2.
 
-### 4B-04 — Native install/update review, documentation, and checkpoint — OWNER-REVIEW
+### 4B-04 — Native install/update review, documentation, and checkpoint — OWNER-REVIEW / PENDING
 
 - Goal: prove macOS single/playlist downloads, clean installation, Gatekeeper instructions, updater behavior on each architecture, and process cleanup; record evidence and open cross-platform obligations.
 - Files: `README.md`, focused macOS verification fixes, `docs/gates/evidence/4b/`, and `docs/STATE.md`.
 - Read: `PROJECT.md:196-211,289-308,630-645,664-684,734-745,780-785`; approved 4B plan and 4B-02/03 evidence.
 - Dependencies: 4B-02 and 4B-03; owner-provided Intel and Apple Silicon native/virtual test environments; approved lower/higher version candidate pair.
+- Current status (2026-11-21): pending because the owner cannot access an Intel or Apple Silicon Mac, and the available VM is not working. V3 remains unverified; this does not waive the Gate 4B exit criteria.
 - Acceptance: V3 passes on both architectures; checkpoint maps the macOS portions of AC-20, AC-22, AC-23 and AC-36 and records any attested evidence limits; Windows/Linux remain unchanged; no public release is created. Stop for explicit owner acceptance before Gate 5A.
 
 ## Stage exit
