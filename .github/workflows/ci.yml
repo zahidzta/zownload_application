@@ -111,7 +111,7 @@ jobs:
             fi
           }
           check_revision 'cmdline-tools/22.0' '22.0'
-          check_revision 'platform-tools' '37.0.1'
+          check_revision 'platform-tools' '37.0.3'
           check_revision 'build-tools/36.0.0' '36.0.0'
           check_revision 'ndk/30.0.16248370' '30.0.16248370'
           if [[ ! -f "$android_sdk/platforms/android-36/android.jar" ]]; then
