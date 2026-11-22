@@ -7,7 +7,7 @@
 
 Gate 5A delivers the production Android engine provider, Kotlin engine adapter, and Rust `AndroidEngine`, then proves contract-compatible single and playlist downloads on a physical `arm64-v8a` device. Rust remains the queue owner and source of truth. Kotlin provides the engine bridge and callbacks; it does not add queue or business rules.
 
-Gate 4B was accepted on 2026-11-22; see [its checkpoint](evidence/4b/checkpoint.md). Gate 5A is authorized by that checkpoint. This plan must receive explicit owner acceptance before implementation begins.
+Gate 4B was accepted on 2026-11-22; see [its checkpoint](evidence/4b/checkpoint.md). Gate 5A is authorized by that checkpoint. **The owner accepted this plan and its budget checkpoint on 2026-11-22.** The owner also approved the CPython source-build and JNI packaging path under 5A-02; runtime integration begins in 5A-03.
 
 Read only these `PROJECT.md` ranges for this gate: `180-195,341-358,368-393,394-461,555-597,618-645,646-693,787-793`. These define Android engine/lifecycle behavior, platform constraints, the selected Android ownership model, the engine boundary, API contract, security/licensing, tests, Android acceptance criteria, and the Phase 5A deliverable.
 
@@ -41,22 +41,22 @@ All `scripts/gate-5a/verify.ps1` cases below are planned entrypoints to add with
 
 Each task is one roughly 30-minute session, on its own `task-<id>` branch, with a work commit, a separate `docs/STATE.md` commit, and a PR. Long builds and device waits may extend elapsed time. Do not start a dependent task before its prerequisite and owner decisions pass.
 
-### 5A-01 — Plan and owner checkpoint — PLAN READY
+### 5A-01 — Plan and owner checkpoint — ACCEPTED 2026-11-22
 
 - Goal: agree on the gate boundary, binary-provenance hard stop, Python packaging decision, and effort checkpoint before implementation.
 - Files to touch: `docs/gates/gate-5a.md`, `docs/STATE.md`.
 - Read: `PROJECT.md:180-195,341-358,368-393,394-461,555-597,618-645,646-693,787-793`; `docs/STATE.md`; Gate 4B checkpoint; Gate 0C package audit and architecture decision.
 - Dependencies: Gate 4B acceptance (received 2026-11-22). No implementation may begin until the owner accepts this plan.
-- Acceptance: owner explicitly accepts the plan and budget checkpoint; changed relative links resolve; V0 passes. No source, workflow, dependency, binary, or public contract files change.
+- Acceptance: owner accepted the plan and budget checkpoint on 2026-11-22. Changed relative links resolve; V0 passes. No source, workflow, dependency, binary, or public contract files change.
 - Exact verification command: `git diff --check`.
 
-### 5A-02 — Select and pin the Android Python packaging path
+### 5A-02 — Select and pin the Android Python packaging path — ACCEPTED 2026-11-22
 
 - Goal: compare feasible traceable Python runtime/package approaches against the current `AndroidEnginePackage` boundary; lock one owner-approved approach, exact Python source/version, patches, build tools, dependencies, yt-dlp `2026.08.19`, and ejs `0.8.0`. Do not add a runtime framework or major dependency before owner approval.
-- Files to touch: `docs/engine-sources.md`, `docs/engine-builds.md`, `docs/toolchain.md`, `docs/gates/evidence/5a/python-runtime-decision.md`, `scripts/gate-5a/verify.ps1`, `docs/STATE.md`.
+- Files to touch: `docs/engine-sources.md`, `docs/engine-builds.md`, `docs/toolchain.md`, `docs/gates/evidence/5a/python-runtime-decision.md`, `scripts/gate-5a/verify.ps1`, `docs/STATE.md`, and this gate's task status.
 - Read: `PROJECT.md:370-374,388,394-461,618-629,630-645,787-793`; `docs/engine-sources.md`; `docs/engine-builds.md`; Gate 0C package audit and architecture decision.
-- Dependencies: 5A-01 accepted; owner approves the Python packaging approach before build integration. Independent of 5A-04 and 5A-05 after the shared source lock format is agreed.
-- Acceptance: exact corresponding Python source and all runtime package inputs are pinned and licensed; an owner-approved decision records the package boundary, expected size, build prerequisites, and fallback if the approach is not viable. No opaque binary is treated as source evidence.
+- Dependencies: 5A-01 accepted; owner approved CPython on 2026-11-22. Runtime build integration remains in 5A-03. Independent of 5A-04 and 5A-05 after the shared source lock format is agreed.
+- Acceptance: CPython `3.14.10`, all six native source dependencies and recipes, the Python package sources, yt-dlp, EJS, QuickJS, licenses, patches, and build tools are pinned; the owner decision records the package boundary, size estimate, prerequisites, and fallback. The exact verifier passed; no opaque binary is treated as source evidence.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-source-lock`.
 
 ### 5A-03 — Build the traceable Python and yt-dlp runtime

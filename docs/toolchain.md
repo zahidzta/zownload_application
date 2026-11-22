@@ -710,3 +710,35 @@ paused without automatic work. The AppImage's daily update check reported
 `Could not fetch a valid release JSON from the remote`; no later version was
 confirmed or installed. [4A-05 evidence](gates/evidence/4a/4a-05.md#fedora-workstation-45-native-follow-up-2026-11-06)
 contains output/source hashes and screenshots. Real upgrades remain pending.
+
+## Gate 5A CPython Android build host
+
+The approved CPython `3.14.10` runtime is built on Ubuntu `24.04` x86_64.
+Keep the Android SDK and NDK on the existing project pins: Corretto JDK
+`21.0.11.10.1`, SDK platform API `36`, Build-Tools `36.0.0`, Platform-Tools
+`37.0.3`, Command-Line Tools `22.0` (archive build `15859902`), and NDK r30
+`30.0.16248370`. CPython's helper uses Android API `24` for the
+`aarch64-linux-android` runtime, matching the app's minimum API; this does not
+change the app's compile or target API `36`.
+
+The CPython Android helper searches for `cmdline-tools/latest`. Keep the
+versioned `22.0` installation as the actual SDK package and, on a fresh Linux
+builder, provide the expected path alias:
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+ln -s 22.0 "$ANDROID_HOME/cmdline-tools/latest"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
+export NDK_HOME="$ANDROID_NDK_HOME"
+export ANDROID_API_LEVEL=24
+```
+
+The host needs Java 21, Python 3 for CPython's helper, Git, curl, archive and
+patch tools, and GNU C/C++ build tools for the pinned source recipes. Use the
+Ubuntu 24.04 build environment and record the resolved host package versions
+and SDK `source.properties` in 5A-03 evidence; do not substitute a different
+JDK, SDK package, NDK, or runtime API to make a failing build pass. The official
+[CPython Android build instructions](https://github.com/python/cpython/blob/v3.14.10/Android/README.md)
+are the command reference; the locked dependency cache and invocation are in
+the [Gate 5A runtime recipe](engine-builds.md#5a-03--cpython-and-yt-dlp-android-runtime).

@@ -3,8 +3,10 @@
 ## Current checkpoint and next task
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
-- **Next task:** Owner review and acceptance of the Gate 5A plan; do not begin implementation before acceptance.
+- **Gate 5A plan:** Accepted by the owner on 2026-11-22, including its budget checkpoint. The owner selected CPython `3.14.10` for Android; build integration starts in 5A-03.
+- **Next task:** 5A-03 — build the traceable CPython and yt-dlp runtime from the accepted 5A-02 source lock.
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
+- **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
 - Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.

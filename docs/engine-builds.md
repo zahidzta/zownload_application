@@ -446,3 +446,43 @@ Only the higher `0.0.4` DMGs and updater archives are attached to the
 owner-created draft. The workflow never creates or publishes a release. Exact
 runner versions, lower/candidate artifact hashes, draft ID, and final metadata
 checks are recorded in the [4B-03 evidence](gates/evidence/4b/4b-03.md).
+
+## 5A-03 — CPython and yt-dlp Android runtime
+
+Build on Ubuntu 24.04 x86_64 with the exact Python, native-source, recipe,
+package, and Android toolchain pins in the [Gate 5A lock](engine-sources.md#gate-5a-android-python-runtime-lock--owner-approved-2026-11-22).
+Use NDK r30 (`30.0.16248370`) and Android API 24 for the runtime target
+`aarch64-linux-android`; keep SDK API 36 for the application. Install the
+pinned SDK Command-Line Tools `22.0` and expose a `latest` path alias to that
+same versioned directory because CPython's helper looks up `cmdline-tools/latest`.
+Do not install a moving SDK tools version to satisfy that path.
+
+For each native dependency, check out the exact
+[`cpython-android-source-deps`](https://github.com/beeware/cpython-android-source-deps)
+recipe tag and commit from the lock, apply its listed patch files, and build
+from the corresponding pinned upstream source archive. Patch both upstream
+NDK environment pins to r30. Place only the resulting source-built archives
+under CPython's `cross-build/downloads/` using the exact filenames its pinned
+helper expects; its downloader reuses a matching cached filename. The source
+recipes' prebuilt GitHub release archives are not allowed as build inputs.
+5A-03 must record the exact recipe commands, generated filenames, patches,
+and output hashes before running CPython's package helper.
+
+In the extracted CPython `3.14.10` source root, run the official helper in this
+order after the locked dependencies are cached:
+
+```bash
+./android.py build aarch64-linux-android
+./android.py package aarch64-linux-android
+```
+
+The helper writes package outputs beneath
+`cross-build/aarch64-linux-android/dist`. Package only the pinned Python
+sources, yt-dlp `2026.08.19`, EJS `0.8.0`, and the default Python dependencies
+listed in the lock. Build those package sources against the embedded runtime;
+install from the verified local artifacts without allowing `pip` to resolve
+or download unpinned dependencies. Keep the JNI entrypoint behind
+`AndroidEnginePackage`; Rust remains the queue owner. 5A-03 records the
+resulting runtime/APK size, ABI and ELF dependencies, package hashes, notices,
+and source/build bundle. No Android APK may be shared before the Gate 5A
+source, build-input, notice, and transitive-dependency checks pass.
