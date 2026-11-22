@@ -6,8 +6,8 @@
 - **Gate 4B plan:** Accepted by the owner on 2026-11-12; see the [plan](gates/gate-4b.md).
 - Completed 4B-01: Owner-approved macOS plan, commit `6078d02`; V0 passed; [plan and evidence](gates/gate-4b.md#verification).
 - Completed 4B-02: macOS x64/arm64 runtime, V1 passed; commits `4433e9a`, `3bf09cf`, `78246bc`, `aa685bb`; [evidence](gates/evidence/4b/4b-02.md).
-- **Next task:** 4B-03 — finish V2 by adding macOS assets and updater metadata to `app-v0.0.4`; Windows/Linux baseline passed in [Windows run 44980599569](https://github.com/zahidzta/zownload_application/actions/runs/44980599569) and [Linux/draft verification run 44982734664](https://github.com/zahidzta/zownload_application/actions/runs/44982734664). Draft ID `454166864`; [4B-03 evidence](gates/evidence/4b/4b-03.md).
-- **Following task:** 4B-04 — native install/update review is pending because the owner has no Intel/Apple Silicon Mac and the VM is unavailable. V3 remains unverified; Gate 5A still requires 4B-03 V2 and explicit Gate 4B checkpoint acceptance.
+- Completed 4B-03: V2 passed; commits `193eeab`, `cab3a80`; [run, asset hashes, and metadata evidence](gates/evidence/4b/4b-03.md).
+- **Next task:** 4B-04 — native install/update review remains pending because the owner has no Intel/Apple Silicon Mac and the VM is unavailable. V3 remains unverified; Gate 5A still requires explicit Gate 4B checkpoint acceptance.
 - Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
