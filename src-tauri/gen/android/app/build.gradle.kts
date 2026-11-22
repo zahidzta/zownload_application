@@ -62,6 +62,8 @@ android {
     }
     sourceSets.getByName("main").apply {
         jniLibs.srcDir(file("../../../../work/android/0c-05/jniLibs"))
+        jniLibs.srcDir(file("../../../../work/android/gate-5a/5a-03-cpython/android-package/jniLibs"))
+        assets.srcDir(file("../../../../work/android/gate-5a/5a-03-cpython/android-package/assets"))
         res.srcDir(file("../../../../work/android/0c-05/res"))
     }
     packaging {

@@ -217,6 +217,9 @@ record:
     { "name": "urllib3", "version": "2.7.0", "sourceUrl": "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", "sha256": "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", "license": "MIT" },
     { "name": "websockets", "version": "17.0.1", "sourceUrl": "https://files.pythonhosted.org/packages/f7/96/e01084f83a64bcb3a27994bd0cb0db68ff29d9c6707fae37ec19b18ba990/websockets-17.0.1.tar.gz", "sha256": "5baa9bc0dfbae8c507e51c8cf1b6d4628086f7a87bbd3a9952bd5f035451f1cc", "license": "BSD-3-Clause" }
   ],
+  "pythonBuildTools": [
+    { "name": "setuptools", "version": "84.1.0", "license": "MIT", "sourceUrl": "https://files.pythonhosted.org/packages/73/eb/7e5f628ee2eb168fecbf8026de7856b2543d6d609cc85f086b9a91ac93d6/setuptools-84.1.0.tar.gz", "sha256": "23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0", "wheelUrl": "https://files.pythonhosted.org/packages/18/02/b4bbb90f8f29e334898ff45c6d9b1fffaa6f378017052b3023a06262b5f7/setuptools-84.1.0-py3-none-any.whl", "wheelSha256": "5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9" }
+  ],
   "ytDlp": { "version": "2026.08.19", "sourceLockKey": "ytDlp", "sourceUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.tar.gz", "sha256": "072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1" },
   "ejs": { "version": "0.8.0", "sourceLockKey": "ejs", "sourceUrl": "https://files.pythonhosted.org/packages/d3/e6/cceb9530e8f4e5940f6f7822d90e9d94f1b85343329a16baaf47bbbb3de1/yt_dlp_ejs-0.8.0.tar.gz", "sha256": "d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e" },
   "quickjs": { "version": "2026-06-04", "sourceLockKey": "quickjs", "sourceUrl": "https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz", "sha256": "b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a" },

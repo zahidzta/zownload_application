@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock')]
+    [ValidateSet('python-source-lock', 'python-runtime')]
     [string]$Case
 )
 
@@ -139,6 +139,12 @@ try {
         Assert-Equal $lock.buildTools.$name $expectedTools[$name] "Build tool '$name'"
     }
 
+    $setuptools = @($lock.pythonBuildTools | Where-Object { $_.name -ceq 'setuptools' })
+    Assert-Equal $setuptools.Count 1 'Pinned setuptools build tool count'
+    Assert-Equal $setuptools[0].version '84.1.0' 'Setuptools version'
+    Assert-Equal $setuptools[0].sha256 '23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0' 'Setuptools source SHA-256'
+    Assert-Equal $setuptools[0].wheelSha256 '5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9' 'Setuptools build wheel SHA-256'
+
     Assert-True ($decisionText.Contains('Owner decision: CPython approved on 2026-11-22')) 'Decision memo does not record owner approval.'
     Assert-True ($decisionText.Contains('AndroidEnginePackage')) 'Decision memo omits the package boundary.'
     Assert-True ($decisionText.Contains('22–35 MB')) 'Decision memo omits the unmeasured package-size estimate.'
@@ -152,7 +158,28 @@ try {
     Assert-True ($toolchainText.Contains('ANDROID_API_LEVEL=24')) 'Runtime API level setup is missing.'
     Assert-True ($toolchainText.Contains('30.0.16248370')) 'Pinned NDK setup is missing.'
 
-    Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    if ($Case -eq 'python-runtime') {
+        Assert-True $IsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'
+        $buildScript = Join-Path $PSScriptRoot 'build-python-runtime.sh'
+        Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The CPython runtime build script is missing.'
+        & bash $buildScript
+        if ($LASTEXITCODE -ne 0) { throw "CPython runtime builder failed with exit code $LASTEXITCODE." }
+
+        $manifestPath = Join-Path $root 'work/android/gate-5a/5a-03-cpython/runtime-manifest.json'
+        Assert-True (Test-Path -LiteralPath $manifestPath -PathType Leaf) 'The CPython runtime manifest was not produced.'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Assert-Equal $manifest.pythonVersion '3.14.10' 'Built CPython version'
+        Assert-Equal $manifest.target 'aarch64-linux-android' 'Built CPython target'
+        Assert-Equal $manifest.abi 'arm64-v8a' 'Built CPython ABI'
+        Assert-Equal $manifest.ndk '30.0.16248370' 'Built CPython NDK'
+        Assert-Equal $manifest.packages.Count ($lock.pythonPackages.Count + 2) 'Built Python package count'
+        Assert-True ($manifest.nativeLibraries.Count -gt 0) 'The runtime manifest contains no native libraries.'
+        Write-Output "PASS: CPython $($manifest.pythonVersion) runtime and locked yt-dlp/EJS packages built for $($manifest.abi)."
+        Write-Output "Runtime archive SHA-256: $($manifest.runtimeArchive.sha256)"
+    }
+    else {
+        Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    }
     exit 0
 }
 catch {

@@ -486,3 +486,22 @@ or download unpinned dependencies. Keep the JNI entrypoint behind
 resulting runtime/APK size, ABI and ELF dependencies, package hashes, notices,
 and source/build bundle. No Android APK may be shared before the Gate 5A
 source, build-input, notice, and transitive-dependency checks pass.
+
+Run the repository driver on the pinned Ubuntu host with
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+It verifies each source archive, recipe tag/commit, and the NDK r30 patches;
+source-builds the six native inputs; places only those outputs in
+`cross-build/downloads/`; then invokes the two official CPython helper commands
+above. It installs the locked Python sources with `--no-index`, `--no-deps`,
+and `--no-build-isolation`. Setuptools `84.1.0` is a build-only tool whose
+source and wheel hashes are checked; it is not installed into the Android
+runtime. The task workflow builds a local debug APK for packaging inspection
+and does not upload APKs or runtime binaries.
+
+The generated local-only staging tree is
+`work/android/gate-5a/5a-03-cpython/android-package/`: shared libraries are
+under `jniLibs/arm64-v8a/`, and the Python standard library and package sources
+are under `assets/python-runtime/`. The ignored
+`runtime-manifest.json` records source, native output, package, and runtime
+archive hashes plus ELF dependencies. The full build log stays under the same
+ignored work directory.
