@@ -171,9 +171,10 @@ archives. CPython's `Android/android.py` will reuse source-built dependency
 archives placed in its local `cross-build/downloads/` cache under their expected
 filenames, so its download helper will not fetch the precompiled artifacts.
 
-The CPython `3.14.10` Android helper pins NDK `27.3.13750724`; the dependency
-repository's environment script pins NDK `27.2.12479018`. Before building,
-apply the two recorded one-line environment patches to NDK `30.0.16248370`.
+The CPython `3.14.10` Android helper pins NDK `27.3.13750724`. The dependency
+recipe tags pin either `27.1.12297006` or `27.2.12479018`; the exact old pin for
+each tag is recorded below. Before building, patch the helper and each recipe to
+NDK `30.0.16248370`.
 The default Android API level `24` and `aarch64-linux-android` target remain.
 The exact patch targets and all lock values are mirrored in this machine-readable
 record:
@@ -196,15 +197,15 @@ record:
   "sourceDependenciesRepository": {
     "url": "https://github.com/beeware/cpython-android-source-deps",
     "license": "MIT",
-    "ndkPatch": { "file": "android-env.sh", "from": "27.2.12479018", "to": "30.0.16248370" }
+    "ndkPatch": { "file": "android-env.sh", "to": "30.0.16248370" }
   },
   "nativeDependencies": [
-    { "name": "bzip2", "version": "1.0.8", "build": "3", "sourceUrl": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz", "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269", "license": "bzip2", "recipeTag": "bzip2-1.0.8-3", "recipeCommit": "dcea166d40d573e963a35435e48b047afe243c2d", "patches": ["symlink.patch"] },
-    { "name": "libffi", "version": "3.4.4", "build": "3", "sourceUrl": "https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz", "sha256": "d66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676", "license": "MIT", "recipeTag": "libffi-3.4.4-3", "recipeCommit": "65d87e392d69198f3dd1ed2feb3b5fcea1b029a6", "patches": ["long_double.patch", "open_temp_exec_file.patch"] },
-    { "name": "openssl", "version": "3.5.9", "build": "0", "sourceUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz", "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a", "license": "Apache-2.0", "recipeTag": "openssl-3.5.9-0", "recipeCommit": "5521f2c16ee87dd7f9d081421351f675fac2ee45", "patches": ["at_secure.patch", "configuration.patch", "soname-3.patch"] },
-    { "name": "sqlite", "version": "3.53.4", "build": "0", "sourceUrl": "https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz", "sha256": "0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c", "license": "Public-Domain", "recipeTag": "sqlite-3.53.4-0", "recipeCommit": "5521f2c16ee87dd7f9d081421351f675fac2ee45", "patches": ["soname.patch"] },
-    { "name": "xz", "version": "5.4.6", "build": "1", "sourceUrl": "https://github.com/tukaani-project/xz/releases/download/v5.4.6/xz-5.4.6.tar.gz", "sha256": "aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c", "license": "LGPL-2.1-or-later-libLZMA", "recipeTag": "xz-5.4.6-1", "recipeCommit": "65d87e392d69198f3dd1ed2feb3b5fcea1b029a6", "patches": [] },
-    { "name": "zstd", "version": "1.5.7", "build": "2", "sourceUrl": "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz", "sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3", "license": "BSD-3-Clause-library", "recipeTag": "zstd-1.5.7-2", "recipeCommit": "f4c94a0fbc359d17993547b66f0627d436f8897b", "patches": [] }
+    { "name": "bzip2", "version": "1.0.8", "build": "3", "sourceUrl": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz", "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269", "license": "bzip2", "recipeTag": "bzip2-1.0.8-3", "recipeCommit": "dcea166d40d573e963a35435e48b047afe243c2d", "recipeNdkFrom": "27.2.12479018", "patches": ["symlink.patch"] },
+    { "name": "libffi", "version": "3.4.4", "build": "3", "sourceUrl": "https://github.com/libffi/libffi/releases/download/v3.4.4/libffi-3.4.4.tar.gz", "sha256": "d66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676", "license": "MIT", "recipeTag": "libffi-3.4.4-3", "recipeCommit": "65d87e392d69198f3dd1ed2feb3b5fcea1b029a6", "recipeNdkFrom": "27.1.12297006", "patches": ["long_double.patch", "open_temp_exec_file.patch"] },
+    { "name": "openssl", "version": "3.5.9", "build": "0", "sourceUrl": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz", "sha256": "603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a", "license": "Apache-2.0", "recipeTag": "openssl-3.5.9-0", "recipeCommit": "5521f2c16ee87dd7f9d081421351f675fac2ee45", "recipeNdkFrom": "27.2.12479018", "patches": ["at_secure.patch", "configuration.patch", "soname-3.patch"] },
+    { "name": "sqlite", "version": "3.53.4", "build": "0", "sourceUrl": "https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz", "sha256": "0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c", "license": "Public-Domain", "recipeTag": "sqlite-3.53.4-0", "recipeCommit": "5521f2c16ee87dd7f9d081421351f675fac2ee45", "recipeNdkFrom": "27.2.12479018", "patches": ["soname.patch"] },
+    { "name": "xz", "version": "5.4.6", "build": "1", "sourceUrl": "https://github.com/tukaani-project/xz/releases/download/v5.4.6/xz-5.4.6.tar.gz", "sha256": "aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c", "license": "LGPL-2.1-or-later-libLZMA", "recipeTag": "xz-5.4.6-1", "recipeCommit": "65d87e392d69198f3dd1ed2feb3b5fcea1b029a6", "recipeNdkFrom": "27.1.12297006", "patches": [] },
+    { "name": "zstd", "version": "1.5.7", "build": "2", "sourceUrl": "https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz", "sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3", "license": "BSD-3-Clause-library", "recipeTag": "zstd-1.5.7-2", "recipeCommit": "f4c94a0fbc359d17993547b66f0627d436f8897b", "recipeNdkFrom": "27.2.12479018", "patches": [] }
   ],
   "pythonPackages": [
     { "name": "Brotli", "version": "1.2.0", "sourceUrl": "https://files.pythonhosted.org/packages/f7/16/c92ca344d646e71a43b8bb353f0a6490d7f6e06210f8554c8f874e454285/brotli-1.2.0.tar.gz", "sha256": "e310f77e41941c13340a95976fe66a8a95b01e783d430eeaf7a2f87e0a57dd0a", "license": "MIT" },

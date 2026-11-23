@@ -153,7 +153,7 @@ import sys
 lock = json.load(open(sys.argv[1], encoding="utf-8"))
 for item in lock["nativeDependencies"]:
     print("\t".join(str(item[key]) for key in (
-        "name", "version", "build", "sourceUrl", "sha256", "recipeTag", "recipeCommit"
+        "name", "version", "build", "sourceUrl", "sha256", "recipeTag", "recipeCommit", "recipeNdkFrom"
     )))
 PY
 
@@ -174,7 +174,6 @@ cpyt_nkd_new="$(lock_value python.ndkPatch.to)"
 python_ndk_patch="$(lock_value python.ndkPatch.file)"
 replace_once "$python_source_root/$python_ndk_patch" "$cpyt_nkd_old" "$cpyt_nkd_new"
 
-dependency_ndk_old="$(lock_value sourceDependenciesRepository.ndkPatch.from)"
 dependency_ndk_new="$(lock_value sourceDependenciesRepository.ndkPatch.to)"
 dependency_ndk_patch="$(lock_value sourceDependenciesRepository.ndkPatch.file)"
 dependency_url="$(lock_value sourceDependenciesRepository.url)"
@@ -200,7 +199,7 @@ WGET
 chmod +x "$recipe_tool_dir/wget"
 export PATH="$recipe_tool_dir:$PATH"
 
-while IFS=$'\t' read -r name version build source_url source_sha recipe_tag recipe_commit; do
+while IFS=$'\t' read -r name version build source_url source_sha recipe_tag recipe_commit recipe_ndk_old; do
     [[ -n "$name" ]] || continue
     source_archive="$(download_verified "$(basename "$source_url")" "$source_url" "$source_sha")"
     recipe_root="$task_work_root/native-sources/$recipe_tag"
@@ -223,7 +222,7 @@ while IFS=$'\t' read -r name version build source_url source_sha recipe_tag reci
     }
 
     recipe_env="$recipe_root/$dependency_ndk_patch"
-    replace_once "$recipe_env" "$dependency_ndk_old" "$dependency_ndk_new"
+    replace_once "$recipe_env" "$recipe_ndk_old" "$dependency_ndk_new"
     recipe_source_dir="$recipe_root/$name/build/$version"
     mkdir -p "$recipe_source_dir"
     recipe_source="$recipe_source_dir/$(basename "$source_url")"

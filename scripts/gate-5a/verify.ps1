@@ -63,16 +63,15 @@ try {
     Assert-Equal $lock.sourceDependenciesRepository.url 'https://github.com/beeware/cpython-android-source-deps' 'Native recipe repository'
     Assert-Equal $lock.sourceDependenciesRepository.license 'MIT' 'Native recipe repository license'
     Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.file 'android-env.sh' 'Recipe repository NDK patch target'
-    Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.from '27.2.12479018' 'Recipe repository original NDK pin'
     Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.to '30.0.16248370' 'Recipe repository patched NDK pin'
 
     $expectedNative = @(
-        @{ name = 'bzip2'; version = '1.0.8'; build = '3'; sha256 = 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269'; recipeTag = 'bzip2-1.0.8-3'; recipeCommit = 'dcea166d40d573e963a35435e48b047afe243c2d'; patches = 'symlink.patch' },
-        @{ name = 'libffi'; version = '3.4.4'; build = '3'; sha256 = 'd66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676'; recipeTag = 'libffi-3.4.4-3'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = 'long_double.patch,open_temp_exec_file.patch' },
-        @{ name = 'openssl'; version = '3.5.9'; build = '0'; sha256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'; recipeTag = 'openssl-3.5.9-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'at_secure.patch,configuration.patch,soname-3.patch' },
-        @{ name = 'sqlite'; version = '3.53.4'; build = '0'; sha256 = '0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c'; recipeTag = 'sqlite-3.53.4-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'soname.patch' },
-        @{ name = 'xz'; version = '5.4.6'; build = '1'; sha256 = 'aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c'; recipeTag = 'xz-5.4.6-1'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = '' },
-        @{ name = 'zstd'; version = '1.5.7'; build = '2'; sha256 = 'eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3'; recipeTag = 'zstd-1.5.7-2'; recipeCommit = 'f4c94a0fbc359d17993547b66f0627d436f8897b'; patches = '' }
+        @{ name = 'bzip2'; version = '1.0.8'; build = '3'; sha256 = 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269'; recipeTag = 'bzip2-1.0.8-3'; recipeCommit = 'dcea166d40d573e963a35435e48b047afe243c2d'; recipeNdkFrom = '27.2.12479018'; patches = 'symlink.patch' },
+        @{ name = 'libffi'; version = '3.4.4'; build = '3'; sha256 = 'd66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676'; recipeTag = 'libffi-3.4.4-3'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; recipeNdkFrom = '27.1.12297006'; patches = 'long_double.patch,open_temp_exec_file.patch' },
+        @{ name = 'openssl'; version = '3.5.9'; build = '0'; sha256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'; recipeTag = 'openssl-3.5.9-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; recipeNdkFrom = '27.2.12479018'; patches = 'at_secure.patch,configuration.patch,soname-3.patch' },
+        @{ name = 'sqlite'; version = '3.53.4'; build = '0'; sha256 = '0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c'; recipeTag = 'sqlite-3.53.4-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; recipeNdkFrom = '27.2.12479018'; patches = 'soname.patch' },
+        @{ name = 'xz'; version = '5.4.6'; build = '1'; sha256 = 'aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c'; recipeTag = 'xz-5.4.6-1'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; recipeNdkFrom = '27.1.12297006'; patches = '' },
+        @{ name = 'zstd'; version = '1.5.7'; build = '2'; sha256 = 'eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3'; recipeTag = 'zstd-1.5.7-2'; recipeCommit = 'f4c94a0fbc359d17993547b66f0627d436f8897b'; recipeNdkFrom = '27.2.12479018'; patches = '' }
     )
     $nativeDependencyCount = @($lock.nativeDependencies).Count
     Assert-Equal $nativeDependencyCount $expectedNative.Count 'Native dependency count'
@@ -80,7 +79,7 @@ try {
         $entries = @($lock.nativeDependencies | Where-Object { $_.name -ceq $expected.name })
         Assert-Equal $entries.Count 1 "Native dependency '$($expected.name)' count"
         $entry = $entries[0]
-        foreach ($field in @('version', 'build', 'sha256', 'recipeTag', 'recipeCommit')) {
+        foreach ($field in @('version', 'build', 'sha256', 'recipeTag', 'recipeCommit', 'recipeNdkFrom')) {
             Assert-Equal $entry.$field $expected[$field] "$($expected.name) $field"
         }
         Assert-Equal (@($entry.patches) -join ',') $expected.patches "$($expected.name) patches"
