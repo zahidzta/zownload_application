@@ -181,6 +181,25 @@ dependency_url="$(lock_value sourceDependenciesRepository.url)"
 native_output_hashes="$task_work_root/native-output-hashes.tsv"
 : > "$native_output_hashes"
 
+recipe_tool_dir="$task_work_root/recipe-tools"
+safe_remove_task_output "$recipe_tool_dir"
+mkdir -p "$recipe_tool_dir"
+cat > "$recipe_tool_dir/wget" <<'WGET'
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 zahidzta
+set -euo pipefail
+url="${!#}"
+archive="$(basename "${url%%\?*}")"
+if [[ -f "$PWD/$archive" ]]; then
+    printf 'Using checksum-verified source archive %s\n' "$PWD/$archive"
+    exit 0
+fi
+exec /usr/bin/wget "$@"
+WGET
+chmod +x "$recipe_tool_dir/wget"
+export PATH="$recipe_tool_dir:$PATH"
+
 while IFS=$'\t' read -r name version build source_url source_sha recipe_tag recipe_commit; do
     [[ -n "$name" ]] || continue
     source_archive="$(download_verified "$(basename "$source_url")" "$source_url" "$source_sha")"
