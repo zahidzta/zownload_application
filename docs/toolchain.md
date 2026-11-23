@@ -794,3 +794,23 @@ version, and SDK package revisions with the task evidence. The build verifier
 checks Ubuntu 24.04, NDK 30.0.16248370, Clang 21.0.0 and API 24 before it
 downloads or compiles any source. Its exact entrypoint is
 powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case ffmpeg.
+
+## 5A-05 Android QuickJS build
+
+Use Ubuntu 24.04 x86_64, GCC 13, GNU Make, `curl`, `tar`, `file`, and Android
+NDK r30 (`30.0.16248370`). The source builder verifies NDK Clang 21.0.0 and
+targets Android API 24 / `arm64-v8a`; install the pinned NDK with the SDK
+setup documented above. On Windows, run the verifier from PowerShell with the
+`Ubuntu-24.04` WSL distribution and that distribution's Android SDK/NDK setup.
+
+The task verifier first checks the QuickJS, yt-dlp, and EJS source lock values,
+then invokes the established Gate 0B build recipe, verifies the resulting ELF,
+and records its SHA-256. QuickJS debug information contains the absolute build
+path, so that binary hash can vary by checkout root:
+
+~~~powershell
+powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case quickjs
+~~~
+
+Build evidence is recorded in
+[`gates/evidence/5a/5a-05-quickjs.md`](gates/evidence/5a/5a-05-quickjs.md).

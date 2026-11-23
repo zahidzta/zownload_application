@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs')]
     [string]$Case
 )
 
@@ -304,6 +304,61 @@ try {
     }
     elseif ($Case -eq 'python-source-lock') {
         Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    }
+    elseif ($Case -eq 'quickjs') {
+        $quickJsLock = $sourceLock.quickjs
+        $ytDlpLock = $sourceLock.ytDlp
+        $ejsLock = $sourceLock.ejs
+        Assert-Equal $quickJsLock.version '2026-06-04' 'Android QuickJS source version'
+        Assert-Equal $quickJsLock.source.url 'https://bellard.org/quickjs/quickjs-2026-06-04.tar.xz' 'Android QuickJS source URL'
+        Assert-Equal $quickJsLock.source.sha256 'b376e839b322978313d929fd20663b11ba58b75df5a46c126dd19ea2fa70ad2a' 'Android QuickJS source SHA-256'
+        Assert-True ($quickJsLock.targets -contains 'android-arm64') 'QuickJS source lock omits Android arm64.'
+        Assert-Equal $lock.quickjs.version $quickJsLock.version 'Runtime QuickJS version'
+        Assert-Equal $lock.quickjs.sourceUrl $quickJsLock.source.url 'Runtime QuickJS source URL'
+        Assert-Equal $lock.quickjs.sha256 $quickJsLock.source.sha256 'Runtime QuickJS source SHA-256'
+
+        Assert-Equal $ytDlpLock.version '2026.08.19' 'yt-dlp runtime version'
+        Assert-Equal $ytDlpLock.source.url 'https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.tar.gz' 'yt-dlp source URL'
+        Assert-Equal $ytDlpLock.source.sha256 '072aad4f2a7604e92155f61a275a4752dc64046c8f6d90df3710525d94cd37c1' 'yt-dlp source SHA-256'
+        Assert-Equal $ejsLock.version '0.8.0' 'yt-dlp-ejs runtime version'
+        Assert-Equal $ejsLock.source.url 'https://files.pythonhosted.org/packages/d3/e6/cceb9530e8f4e5940f6f7822d90e9d94f1b85343329a16baaf47bbbb3de1/yt_dlp_ejs-0.8.0.tar.gz' 'yt-dlp-ejs source URL'
+        Assert-Equal $ejsLock.source.sha256 'd5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e' 'yt-dlp-ejs source SHA-256'
+
+        Assert-True ($buildsText.Contains('5A-05 Android arm64-v8a QuickJS 2026-06-04')) 'Android QuickJS build recipe is missing.'
+        Assert-True ($buildsText.Contains('LIBS=-lm -ldl')) 'Android QuickJS link inputs are not recorded.'
+        Assert-True ($buildsText.Contains('absolute build path')) 'Android QuickJS debug-path hash behavior is not documented.'
+        Assert-True ($noticesText.Contains('Android arm64/API 24') -and $noticesText.Contains('QuickJS 2026-06-04')) 'Android QuickJS notice entry is missing.'
+        Assert-True ($toolchainText.Contains('5A-05 Android QuickJS build')) 'Android QuickJS build toolchain is undocumented.'
+
+        $buildScript = Join-Path $root 'scripts/gate-0b/build-quickjs.sh'
+        Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The pinned QuickJS source builder is missing.'
+        if ($HostIsLinux) {
+            & bash $buildScript android-arm64 --verify
+            $buildExitCode = $LASTEXITCODE
+        }
+        elseif ($HostIsWindows) {
+            $windowsScriptPath = (Resolve-Path -LiteralPath $buildScript).Path.Replace('\', '/')
+            $linuxScript = (& wsl.exe -d Ubuntu-24.04 -- wslpath -u $windowsScriptPath | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($linuxScript)) {
+                throw 'Could not map the QuickJS build script into Ubuntu-24.04 WSL.'
+            }
+            $linuxTempScript = $linuxScript + '.wsl'
+            $linuxCommand = 'export ANDROID_HOME="$HOME/Android/Sdk" ANDROID_SDK_ROOT="$HOME/Android/Sdk" ANDROID_NDK_HOME="$HOME/Android/Sdk/ndk/30.0.16248370" NDK_HOME="$HOME/Android/Sdk/ndk/30.0.16248370"; tr -d ''\015'' < "' + $linuxScript + '" > "' + $linuxTempScript + '" || exit 1; bash "' + $linuxTempScript + '" android-arm64 --verify; build_status=$?; rm -f "' + $linuxTempScript + '"; exit "$build_status"'
+            & wsl.exe -d Ubuntu-24.04 -- bash -lc $linuxCommand
+            $buildExitCode = $LASTEXITCODE
+        }
+        else {
+            throw 'The Android QuickJS build requires Ubuntu 24.04 or Windows with Ubuntu-24.04 WSL.'
+        }
+        if ($buildExitCode -ne 0) { throw "Android QuickJS builder failed with exit code $buildExitCode." }
+
+        $artifactPath = Join-Path $root 'work/engine/build/quickjs/android-arm64/qjs'
+        Assert-True (Test-Path -LiteralPath $artifactPath -PathType Leaf) 'The Android QuickJS ELF was not produced.'
+        $artifactHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Assert-True ($artifactHash -cmatch '^[0-9a-f]{64}$') 'Android QuickJS artifact SHA-256 is malformed.'
+        Write-Output "PASS: Android QuickJS $($quickJsLock.version) ELF and locked yt-dlp $($ytDlpLock.version)/EJS $($ejsLock.version) inputs are consistent."
+        Write-Output "Android QuickJS SHA-256: $artifactHash"
+        Write-Output 'YouTube JavaScript challenge execution on Android remains a device check after the Gate 5A adapter is wired.'
     }
     else {
         $ffmpegLock = $sourceLock.ffmpeg

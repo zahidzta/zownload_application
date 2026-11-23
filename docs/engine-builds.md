@@ -199,6 +199,41 @@ Device execution and Android packaging are Gate 0C work. The exact compiler,
 flags, ELF inspection, artifact hash and CI run are recorded in
 [`gates/evidence/0b/quickjs-android.txt`](gates/evidence/0b/quickjs-android.txt).
 
+## 5A-05 Android arm64-v8a QuickJS 2026-06-04
+
+Gate 5A reuses the Gate 0B source build without patches. Its archive URL and
+SHA-256 are fixed in the source lock and the 5A-02 Android runtime lock. The
+build runs on Ubuntu 24.04 x86_64 with GCC 13, GNU Make, and Android NDK r30
+(`30.0.16248370`), targeting API 24. Host GCC generates QuickJS's helper C
+source; NDK Clang builds the `arm64-v8a` executable. The exact Make inputs are
+`CC=<NDK Clang> --target=aarch64-linux-android24`, `HOST_CC=gcc-13`,
+`CONFIG_LTO=`, `CONFIG_TEMPORAL_INTL=y`, `CROSS_PREFIX=android-`, and
+`LIBS=-lm -ldl`. Android's pthread functions come from `libc`, so the
+executable must not link a separate `libpthread`.
+
+Run the task verifier from Windows PowerShell or Ubuntu 24.04:
+
+```powershell
+powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case quickjs
+```
+
+The verifier rebuilds from the locked source, requires an AArch64 ELF using
+`/system/bin/linker64`, allows only `libc.so`, `libm.so`, and `libdl.so`, and
+records the artifact SHA-256. QuickJS is built with debug information that
+contains the absolute build path, so the binary hash can differ between
+checkout roots; the source archive and compiler inputs remain pinned. Build
+flags, checkout root, and output hash are captured in
+[`5a-05-quickjs.md`](gates/evidence/5a/5a-05-quickjs.md). The artifact stays in
+ignored build output until 5A-06 stages approved runtime files for the APK.
+The runtime inputs pair yt-dlp `2026.08.19` and EJS `0.8.0` with QuickJS
+`2026-06-04`; the Android YouTube JavaScript challenge test waits for the Gate
+5A adapter and device proof.
+
+The previously attested Gate 0B Android build produced SHA-256
+`4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185` from its
+CI checkout root. The 5A-05 evidence records the hash from its own checkout
+root; both builds use the same locked source and flags.
+
 ## 0B-10 — Windows x64 LGPL FFmpeg configuration
 
 From the repository root, after the 0B-03/10A source acquisition and 0B-04
