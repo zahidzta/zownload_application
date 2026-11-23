@@ -138,12 +138,25 @@ printf 'NDK: %s\n' "$ndk_version" >> "$build_log"
 python_source_url="$(lock_value python.sourceUrl)"
 python_source_sha="$(lock_value python.sha256)"
 python_archive="$(download_verified "$(basename "$python_source_url")" "$python_source_url" "$python_source_sha")"
-setuptools_source_url="$(lock_value pythonBuildTools.0.sourceUrl)"
-setuptools_source_sha="$(lock_value pythonBuildTools.0.sha256)"
-setuptools_source_archive="$(download_verified "$(basename "$setuptools_source_url")" "$setuptools_source_url" "$setuptools_source_sha")"
-setuptools_wheel_url="$(lock_value pythonBuildTools.0.wheelUrl)"
-setuptools_wheel_sha="$(lock_value pythonBuildTools.0.wheelSha256)"
-setuptools_wheel="$(download_verified "$(basename "$setuptools_wheel_url")" "$setuptools_wheel_url" "$setuptools_wheel_sha")"
+python_build_tool_records="$task_work_root/python-build-tools.tsv"
+python3 - "$lock_file" > "$python_build_tool_records" <<'PY'
+import json
+import sys
+
+lock = json.load(open(sys.argv[1], encoding="utf-8"))
+for item in lock["pythonBuildTools"]:
+    print("\t".join(str(item[key]) for key in (
+        "name", "version", "sourceUrl", "sha256", "wheelUrl", "wheelSha256"
+    )))
+PY
+
+python_build_tool_wheels=()
+while IFS=$'\t' read -r tool_name tool_version source_url source_sha wheel_url wheel_sha; do
+    [[ -n "$tool_name" ]] || continue
+    download_verified "$(basename "$source_url")" "$source_url" "$source_sha" >/dev/null
+    tool_wheel="$(download_verified "$(basename "$wheel_url")" "$wheel_url" "$wheel_sha")"
+    python_build_tool_wheels+=("$tool_wheel")
+done < "$python_build_tool_records"
 
 native_records="$task_work_root/native-dependencies.tsv"
 python3 - "$lock_file" > "$native_records" <<'PY'
@@ -271,7 +284,8 @@ target_prefix="$cross_build/$target/prefix"
 [[ "$("$build_python" --version 2>&1)" == "Python $runtime_version" ]] || { echo 'Host build Python version differs from the pin.' >&2; exit 1; }
 
 "$build_python" -m ensurepip --upgrade --default-pip >> "$build_log" 2>&1
-"$build_python" -m pip install --no-index --no-deps --no-compile "$setuptools_wheel" >> "$build_log" 2>&1
+"$build_python" -m pip install --no-index --no-deps --no-compile \
+    "${python_build_tool_wheels[@]}" >> "$build_log" 2>&1
 export PIP_NO_INDEX=1
 export PIP_NO_DEPS=1
 export _PYTHON_HOST_PLATFORM="android_${runtime_api}_arm64_v8a"

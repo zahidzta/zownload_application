@@ -138,11 +138,28 @@ try {
         Assert-Equal $lock.buildTools.$name $expectedTools[$name] "Build tool '$name'"
     }
 
-    $setuptools = @($lock.pythonBuildTools | Where-Object { $_.name -ceq 'setuptools' })
-    Assert-Equal $setuptools.Count 1 'Pinned setuptools build tool count'
-    Assert-Equal $setuptools[0].version '84.1.0' 'Setuptools version'
-    Assert-Equal $setuptools[0].sha256 '23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0' 'Setuptools source SHA-256'
-    Assert-Equal $setuptools[0].wheelSha256 '5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9' 'Setuptools build wheel SHA-256'
+    $expectedBuildTools = @(
+        @{ name = 'setuptools'; version = '84.1.0'; sha256 = '23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0'; wheelSha256 = '5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9' },
+        @{ name = 'flit-core'; version = '3.12.0'; sha256 = '18f63100d6f94385c6ed57a72073443e1a71a4acb4339491615d0f16d6ff01b2'; wheelSha256 = 'e7a0304069ea895172e3c7bb703292e992c5d1555dd1233ab7b5621b5b69e62c' },
+        @{ name = 'hatchling'; version = '1.33.0'; sha256 = '4c422bd4d554fcff5de5b73e9596f85e41e9f97f7e553d8f7595ecb31a627bef'; wheelSha256 = '415290b84f464d2884303fca8974d38e7b85579069fab02a15db0828fbb1446d' },
+        @{ name = 'hatch-vcs'; version = '0.5.0'; sha256 = '0395fa126940340215090c344a2bf4e2a77bcbe7daab16f41b37b98c95809ff9'; wheelSha256 = 'b49677dbdc597460cc22d01b27ab3696f5e16a21ecf2700fb01bc28e1f2a04a7' },
+        @{ name = 'setuptools-scm'; version = '10.3.4'; sha256 = 'a69f28bfc245608781205e912faae437c2b2165773afa4e7b979d77447a69dd2'; wheelSha256 = '82f34c3e3084fc2b57d397200637cc13f2338004052d2fee47baa5f0e902464e' },
+        @{ name = 'packaging'; version = '26.3'; sha256 = '94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79'; wheelSha256 = 'd7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c' },
+        @{ name = 'pathspec'; version = '1.1.1'; sha256 = '17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a'; wheelSha256 = 'a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189' },
+        @{ name = 'pluggy'; version = '1.7.0'; sha256 = 'd1eaa46ebb595891b860ab086b4d09c8588af65ebd4361b8e8f4bb8920b90ba8'; wheelSha256 = '7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec' },
+        @{ name = 'tomlkit'; version = '0.14.0'; sha256 = 'cf00efca415dbd57575befb1f6634c4f42d2d87dbba376128adb42c121b87064'; wheelSha256 = '592064ed85b40fa213469f81ac584f67a4f2992509a7c3ea2d632208623a3680' },
+        @{ name = 'trove-classifiers'; version = '2026.9.21.13'; sha256 = '0a9ebc8d4e2f3e8a22848c5258033035bec17a3012ac3fea16dbaa764489eb71'; wheelSha256 = '8b1ff4f9c191b1040b71c37f1e445ab99732911e3cd91de52838453a854d7a17' },
+        @{ name = 'vcs-versioning'; version = '2.6.0'; sha256 = '22e9159288e2d8bca2fa6f6c31c34c9c66aec157f60e9e526f5d160d2516d60f'; wheelSha256 = 'f8bebd1302ebc12e67ceb30fc7dd698ec969414b6fa43b30c3f14ac9b1e72c41' }
+    )
+    $buildToolCount = @($lock.pythonBuildTools).Count
+    Assert-Equal $buildToolCount $expectedBuildTools.Count 'Pinned Python build tool count'
+    foreach ($expected in $expectedBuildTools) {
+        $entries = @($lock.pythonBuildTools | Where-Object { $_.name -ceq $expected.name })
+        Assert-Equal $entries.Count 1 "Python build tool '$($expected.name)' count"
+        foreach ($field in @('version', 'sha256', 'wheelSha256')) {
+            Assert-Equal $entries[0].$field $expected[$field] "Python build tool '$($expected.name)' $field"
+        }
+    }
 
     Assert-True ($decisionText.Contains('Owner decision: CPython approved on 2026-11-22')) 'Decision memo does not record owner approval.'
     Assert-True ($decisionText.Contains('AndroidEnginePackage')) 'Decision memo omits the package boundary.'

@@ -83,7 +83,17 @@ The runtime package retains upstream package metadata and license files under
 | websockets `17.0.1` | BSD-3-Clause | WebSocket support. |
 | yt-dlp `2026.08.19` | Unlicense | Download engine Python source. |
 | yt-dlp-ejs `0.8.0` | Unlicense; solver scripts include Meriyah ISC and Astring MIT | JavaScript challenge solver source. |
-| setuptools `84.1.0` | MIT | Build-only tool; not shipped in the Android runtime. |
+| setuptools `84.1.0` | MIT | Host build-only tool; not shipped in Android runtime. |
+| flit-core `3.12.0` | BSD-3-Clause | Host-only PEP 517 backend for idna. |
+| hatchling `1.33.0` | MIT | Host-only PEP 517 backend for yt-dlp-ejs and urllib3. |
+| hatch-vcs `0.5.0` | MIT | Host-only Hatch version plugin for yt-dlp-ejs and urllib3. |
+| setuptools-scm `10.3.4` | MIT | Host-only VCS version plugin dependency. |
+| packaging `26.3` | Apache-2.0 or BSD-2-Clause | Host-only build backend dependency. |
+| pathspec `1.1.1` | MPL-2.0 | Host-only Hatchling dependency. |
+| pluggy `1.7.0` | MIT | Host-only Hatchling dependency. |
+| tomlkit `0.14.0` | MIT | Host-only Hatchling dependency. |
+| trove-classifiers `2026.9.21.13` | Apache-2.0 | Host-only Hatchling dependency. |
+| vcs-versioning `2.6.0` | MIT | Host-only setuptools-scm dependency. |
 
 This inventory records the approved 5A-02 source lock and 5A-03 runtime build.
 The later 5A-06 APK provenance task still audits the complete transitive
