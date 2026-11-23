@@ -368,13 +368,17 @@ for path in site.rglob("*.so"):
         path.rename(path.with_name(path.name[:-len(suffix)] + ".so"))
 PY
 
-package_archive="$(find "$cross_build/$target/dist" -maxdepth 1 -type f -name "python-$runtime_version-$target.tar.gz" -print -quit)"
+package_dist="$cross_build/$target/dist"
+package_archive=""
+if [[ -d "$package_dist" ]]; then
+    package_archive="$(find "$package_dist" -maxdepth 1 -type f -name "python-$runtime_version-$target.tar.gz" -print -quit)"
+fi
 if [[ -z "$package_archive" ]]; then
     (
         cd "$python_source_root/Android"
         ./android.py package "$target"
     ) >> "$build_log" 2>&1
-    package_archive="$(find "$cross_build/$target/dist" -maxdepth 1 -type f -name "python-$runtime_version-$target.tar.gz" -print -quit)"
+    package_archive="$(find "$package_dist" -maxdepth 1 -type f -name "python-$runtime_version-$target.tar.gz" -print -quit)"
 fi
 [[ -n "$package_archive" && -f "$package_archive" ]] || { echo 'CPython Android package archive was not produced.' >&2; exit 1; }
 
