@@ -74,6 +74,7 @@ jobs:
 
       - name: Build and package pinned Android QuickJS and yt-dlp
         run: |
+          export NDK_HOME="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.android/sdk}}/ndk/30.0.16248370"
           if ! bash scripts/gate-0b/build-quickjs.sh android-arm64 --verify > "$RUNNER_TEMP/quickjs-build.log" 2>&1; then
             tail -n 50 "$RUNNER_TEMP/quickjs-build.log"
             exit 1
