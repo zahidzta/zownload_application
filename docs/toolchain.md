@@ -750,3 +750,47 @@ checks above. The `Gate 5A-03 CPython runtime` workflow installs the host
 compiler and library headers and runs this entrypoint on pushes to
 `task-5a-03`. The workflow builds a local APK for inspection but does not
 upload build artifacts.
+
+## 5A-04 Android FFmpeg build
+
+Build FFmpeg on Ubuntu 24.04 x86_64 with the existing Android ABI pins:
+NDK r30 30.0.16248370 and Android API 24. The FFmpeg cross compiler is
+NDK Clang 21.0.0 at
+ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin. Do not use the
+Windows NDK host tools for this Linux cross-build.
+
+Install the Ubuntu host utilities used by the source recipe:
+
+~~~bash
+sudo apt-get update
+sudo apt-get install --yes build-essential ca-certificates curl file git gnupg patch python3 tar unzip xz-utils pkg-config
+~~~
+
+Install the same pinned Corretto and Android command-line tools as the Gate
+5A-03 workflow. Corretto 21.0.11.10.1 is downloaded from the
+[Corretto archive](https://corretto.aws/downloads/resources/21.0.11.10.1/amazon-corretto-21.0.11.10.1-linux-x64.tar.gz)
+and verified against SHA-256
+5b4dc8817df13f88f9bfc434e5d018adb535889ff2fe0ccf758bcebcc216f394.
+Command-line tools archive build 15859902 (version 22.0) is downloaded from
+the [official Android SDK tools archive](https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip)
+and verified against SHA-256
+4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583.
+Install that archive as ANDROID_HOME/cmdline-tools/22.0. The Linux NDK package
+is installed with:
+
+~~~bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export JAVA_HOME=/opt/corretto-21
+export PATH="$JAVA_HOME/bin:$PATH"
+"$ANDROID_HOME/cmdline-tools/22.0/bin/sdkmanager" --sdk_root="$ANDROID_HOME" "ndk;30.0.16248370"
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370"
+export NDK_HOME="$ANDROID_NDK_HOME"
+export ANDROID_API_LEVEL=24
+~~~
+
+Record the Ubuntu host, Corretto, GNU Make/GCC, NDK source.properties, Clang
+version, and SDK package revisions with the task evidence. The build verifier
+checks Ubuntu 24.04, NDK 30.0.16248370, Clang 21.0.0 and API 24 before it
+downloads or compiles any source. Its exact entrypoint is
+powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case ffmpeg.

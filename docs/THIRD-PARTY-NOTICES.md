@@ -55,6 +55,27 @@ binary hashes. Preserve the same FFmpeg, LAME, and zlib license texts and
 Linux-specific link commands and relinking objects in the eventual versioned
 source bundle. The unpublished draft is not a public compliance release.
 
+## Android arm64-v8a FFmpeg 8.1.3, LAME and zlib
+
+Gate 5A-04 builds FFmpeg 8.1.3 for arm64-v8a with --enable-gpl,
+--disable-nonfree and --disable-version3. FFmpeg reports GPL version 2 or
+later. The build links only the pinned LAME 3.100 encoder library and zlib
+1.3.2 as external libraries; it excludes LAME's GPL-only mpglib decoder.
+Neither x264 nor x265 is built. The source hashes, FFmpeg signature
+verification, complete configure arguments, toolchain and local output hashes
+are recorded in the [5A-04 build evidence](gates/evidence/5a/5a-04-ffmpeg.md).
+
+| Component | Effective license in the Android build | Corresponding source and notice |
+|---|---|---|
+| FFmpeg 8.1.3 | GPL-2.0-or-later | ffmpeg-8.1.3.tar.xz, SHA-256 7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3; include upstream LICENSE.md and COPYING.GPLv2. |
+| LAME 3.100 encoder library | LGPL-2.0-or-later, linked into the GPL FFmpeg executable | lame-3.100.tar.gz, SHA-256 ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e; include upstream COPYING and LICENSE; mpglib decoder is excluded. |
+| zlib 1.3.2 | Zlib license | zlib-1.3.2.tar.gz, SHA-256 bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16; include the upstream root LICENSE. |
+
+These locally built executables are not APK payloads and must not be shared.
+Before an Android package is assembled, Gate 5A-06 must record the final
+APK-bound hashes and complete source, build-input, notice and transitive
+dependency inventory.
+
 ## Android CPython runtime
 
 The local Android CPython package is built from CPython `3.14.10` under

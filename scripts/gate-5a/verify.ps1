@@ -3,11 +3,17 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg')]
     [string]$Case
 )
 
 $ErrorActionPreference = 'Stop'
+$HostIsWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows
+)
+$HostIsLinux = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Linux
+)
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -29,14 +35,106 @@ function Read-JsonFence {
     return (ConvertFrom-Json -InputObject $match.Groups[1].Value)
 }
 
+function Get-ConnectedAndroidDevice {
+    param([string]$AdbPath)
+    $rows = & $AdbPath devices
+    if ($LASTEXITCODE -ne 0) { throw 'adb devices failed.' }
+    foreach ($row in $rows) {
+        if ($row -match '^(\S+)\s+device$') { return $Matches[1] }
+    }
+    return $null
+}
+
+function Invoke-AndroidFfmpegSmoke {
+    param([string]$RootPath, [string]$ManifestPath)
+
+    if ($HostIsWindows) {
+        $sdkRoot = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+        $adbPath = Join-Path $sdkRoot 'platform-tools\adb.exe'
+        $emulatorPath = Join-Path $sdkRoot 'emulator\emulator.exe'
+    }
+    else {
+        $sdkRoot = $env:ANDROID_HOME
+        $adbPath = Join-Path $sdkRoot 'platform-tools/adb'
+        $emulatorPath = $null
+    }
+    Assert-True (Test-Path -LiteralPath $adbPath -PathType Leaf) 'Android platform-tools adb is required for the FFmpeg runtime probes.'
+
+    $serial = Get-ConnectedAndroidDevice -AdbPath $adbPath
+    $startedEmulator = $false
+    $emulatorProcess = $null
+    if (-not $serial -and $HostIsWindows -and (Test-Path -LiteralPath $emulatorPath -PathType Leaf)) {
+        $emulatorProcess = Start-Process -FilePath $emulatorPath -ArgumentList @(
+            '-avd', 'Pixel_10_Pro', '-no-window', '-no-audio', '-no-boot-anim'
+        ) -WindowStyle Hidden -PassThru
+        $startedEmulator = $true
+    }
+    if (-not $serial -and -not $startedEmulator) {
+        throw 'No Android device or Pixel_10_Pro emulator is available for the FFmpeg runtime probes.'
+    }
+    try {
+        for ($attempt = 0; $attempt -lt 120 -and -not $serial; $attempt++) {
+            Start-Sleep -Seconds 2
+            $serial = Get-ConnectedAndroidDevice -AdbPath $adbPath
+        }
+        Assert-True (-not [string]::IsNullOrWhiteSpace($serial)) 'No Android device or bootable Pixel_10_Pro emulator is available for the FFmpeg runtime probes.'
+
+        $booted = $false
+        for ($attempt = 0; $attempt -lt 120 -and -not $booted; $attempt++) {
+            $bootState = (& $adbPath -s $serial shell getprop sys.boot_completed | Out-String).Trim()
+            if ($LASTEXITCODE -eq 0 -and $bootState -eq '1') { $booted = $true }
+            else { Start-Sleep -Seconds 2 }
+        }
+        Assert-True $booted "Android device '$serial' did not finish booting."
+
+        $deviceAbi = (& $adbPath -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $deviceModel = (& $adbPath -s $serial shell getprop ro.product.model | Out-String).Trim()
+        $deviceApi = (& $adbPath -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $deviceDir = '/data/local/tmp/5a-04-ffmpeg'
+        $outputDir = Join-Path $RootPath 'work/android/gate-5a/5a-04-ffmpeg'
+        & $adbPath -s $serial shell mkdir -p $deviceDir
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create the FFmpeg device test directory.' }
+        & $adbPath -s $serial push (Join-Path $outputDir 'ffmpeg') "$deviceDir/ffmpeg"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not push ffmpeg to the Android test device.' }
+        & $adbPath -s $serial push (Join-Path $outputDir 'ffprobe') "$deviceDir/ffprobe"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not push ffprobe to the Android test device.' }
+        & $adbPath -s $serial push (Join-Path $RootPath 'scripts/gate-5a/ffmpeg-device-smoke.sh') "$deviceDir/ffmpeg-device-smoke.sh"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not push the FFmpeg smoke script to the Android test device.' }
+        & $adbPath -s $serial shell chmod 755 "$deviceDir/ffmpeg" "$deviceDir/ffprobe" "$deviceDir/ffmpeg-device-smoke.sh"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not make the Android FFmpeg test files executable.' }
+        & $adbPath -s $serial shell sh "$deviceDir/ffmpeg-device-smoke.sh"
+        if ($LASTEXITCODE -ne 0) { throw 'Android FFmpeg MP3/MP4 runtime probes failed.' }
+
+        $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+        $manifest | Add-Member -NotePropertyName runtimeSmoke -NotePropertyValue ([ordered]@{
+            status = 'passed'
+            deviceSerial = $serial
+            deviceModel = $deviceModel
+            deviceAbi = $deviceAbi
+            apiLevel = $deviceApi
+            tests = @('MP3 encode/probe', 'MP4 encode/remux/probe', 'x264/x265 absent')
+        }) -Force
+        $manifest | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
+    }
+    finally {
+        if ($startedEmulator) {
+            if ($serial) { & $adbPath -s $serial emu kill *> $null }
+            elseif ($emulatorProcess -and -not $emulatorProcess.HasExited) {
+                Stop-Process -Id $emulatorProcess.Id -Force
+            }
+        }
+    }
+}
+
 try {
     $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     $sourcesPath = Join-Path $root 'docs\engine-sources.md'
     $buildsPath = Join-Path $root 'docs\engine-builds.md'
     $toolchainPath = Join-Path $root 'docs\toolchain.md'
     $decisionPath = Join-Path $root 'docs\gates\evidence\5a\python-runtime-decision.md'
+    $noticesPath = Join-Path $root 'docs\THIRD-PARTY-NOTICES.md'
 
-    foreach ($path in @($sourcesPath, $buildsPath, $toolchainPath, $decisionPath)) {
+    foreach ($path in @($sourcesPath, $buildsPath, $toolchainPath, $decisionPath, $noticesPath)) {
         Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Required task file is missing: $path"
     }
 
@@ -44,6 +142,7 @@ try {
     $buildsText = Get-Content -LiteralPath $buildsPath -Raw
     $toolchainText = Get-Content -LiteralPath $toolchainPath -Raw
     $decisionText = Get-Content -LiteralPath $decisionPath -Raw
+    $noticesText = Get-Content -LiteralPath $noticesPath -Raw
     $lock = Read-JsonFence $sourcesText 'android-python-runtime-lock'
     $sourceLock = Read-JsonFence $sourcesText 'source-lock'
 
@@ -203,8 +302,99 @@ try {
         Write-Output "PASS: CPython $($manifest.pythonVersion) runtime and locked yt-dlp/EJS packages built for $($manifest.abi)."
         Write-Output "Runtime archive SHA-256: $($manifest.runtimeArchive.sha256)"
     }
-    else {
+    elseif ($Case -eq 'python-source-lock') {
         Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    }
+    else {
+        $ffmpegLock = $sourceLock.ffmpeg
+        $lameLock = $sourceLock.lame
+        $zlibLock = $sourceLock.zlib
+        Assert-Equal $ffmpegLock.version '8.1.3' 'Android FFmpeg source version'
+        Assert-Equal $ffmpegLock.source.sha256 '7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3' 'Android FFmpeg source SHA-256'
+        Assert-Equal $ffmpegLock.source.signatureSha256 '5f2880c7fea01f8694d30cb9d06362f77241ee67ce5926b157a226b18f08a538' 'Android FFmpeg signature SHA-256'
+        Assert-Equal $ffmpegLock.signingKey.fingerprint 'FCF986EA15E6E293A5644F10B4322F04D67658D8' 'Android FFmpeg signing key'
+        Assert-True ($ffmpegLock.targets -contains 'android-arm64') 'FFmpeg source lock omits Android arm64.'
+        Assert-Equal $lameLock.version '3.100' 'Android LAME source version'
+        Assert-Equal $lameLock.source.sha256 'ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e' 'Android LAME source SHA-256'
+        Assert-True ($lameLock.targets -contains 'android-arm64') 'LAME source lock omits Android arm64.'
+        Assert-Equal $zlibLock.version '1.3.2' 'Android zlib source version'
+        Assert-Equal $zlibLock.source.sha256 'bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16' 'Android zlib source SHA-256'
+        Assert-True ($zlibLock.targets -contains 'android-arm64') 'zlib source lock omits Android arm64.'
+
+        Assert-True ($buildsText.Contains('Android arm64-v8a GPL FFmpeg 8.1.3')) 'Android FFmpeg build recipe is missing.'
+        Assert-True ($buildsText.Contains('--enable-gpl')) 'Android build recipe does not record its GPL configuration.'
+        Assert-True ($buildsText.Contains('--disable-everything')) 'Android FFmpeg feature allowlist is not recorded.'
+        Assert-True ($buildsText.Contains('--enable-filter=aresample')) 'Android MP3 resampling filter is not recorded.'
+        Assert-True ($buildsText.Contains('--enable-muxer=mp4')) 'Android MP4 muxer is not recorded.'
+        Assert-True ($buildsText.Contains('--enable-decoder=wrapped_avframe')) 'Android lavfi smoke decoder is not recorded.'
+        Assert-True ($buildsText.Contains('x264 and x265 are absent')) 'Android build recipe does not record the x264/x265 exclusion.'
+        Assert-True ($noticesText.Contains('Android arm64-v8a FFmpeg 8.1.3')) 'Android FFmpeg notice entry is missing.'
+        Assert-True ($toolchainText.Contains('5A-04 Android FFmpeg build')) 'Android FFmpeg build toolchain is undocumented.'
+
+        $buildScript = Join-Path $PSScriptRoot 'build-ffmpeg.sh'
+        Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The Android FFmpeg build script is missing.'
+        if ($HostIsLinux) {
+            & bash $buildScript
+            $buildExitCode = $LASTEXITCODE
+        }
+        elseif ($HostIsWindows) {
+            $windowsScriptPath = (Resolve-Path -LiteralPath $buildScript).Path.Replace('\', '/')
+            $linuxScript = (& wsl.exe -d Ubuntu-24.04 -- wslpath -u $windowsScriptPath | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($linuxScript)) {
+                throw 'Could not map the repository build script into Ubuntu-24.04 WSL.'
+            }
+            $linuxCommand = 'export ANDROID_HOME="$HOME/Android/Sdk" ANDROID_SDK_ROOT="$HOME/Android/Sdk" ANDROID_NDK_HOME="$HOME/Android/Sdk/ndk/30.0.16248370" NDK_HOME="$HOME/Android/Sdk/ndk/30.0.16248370" ANDROID_API_LEVEL=24; exec bash "' + $linuxScript + '"'
+            & wsl.exe -d Ubuntu-24.04 -- bash -lc $linuxCommand
+            $buildExitCode = $LASTEXITCODE
+        }
+        else {
+            throw 'The Android FFmpeg build requires Ubuntu 24.04 or Windows with Ubuntu-24.04 WSL.'
+        }
+        if ($buildExitCode -ne 0) {
+            $buildDir = Join-Path $root 'work/android/gate-5a/5a-04-ffmpeg'
+            $lastLog = Get-ChildItem -LiteralPath $buildDir -Filter '*.log' -File -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($lastLog) { Get-Content -LiteralPath $lastLog.FullName -Tail 50 | Write-Output }
+            throw "Android FFmpeg builder failed with exit code $buildExitCode."
+        }
+
+        $buildDir = Join-Path $root 'work/android/gate-5a/5a-04-ffmpeg'
+        $manifestPath = Join-Path $buildDir 'android-ffmpeg-manifest.json'
+        Assert-True (Test-Path -LiteralPath $manifestPath -PathType Leaf) 'The Android FFmpeg manifest was not produced.'
+        foreach ($name in @('ffmpeg', 'ffprobe')) {
+            $binary = Join-Path $buildDir $name
+            Assert-True (Test-Path -LiteralPath $binary -PathType Leaf) "The Android $name executable is missing."
+            $actualHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            Assert-Equal $manifest.artifacts.$name.sha256 $actualHash "$name artifact SHA-256"
+        }
+        $relinkPaths = @{
+            'libmp3lame.a' = 'relink-materials/lib/libmp3lame.a'
+            'libz.a' = 'relink-materials/lib/libz.a'
+            'lame.h' = 'relink-materials/include/lame/lame.h'
+            'zlib.h' = 'relink-materials/include/zlib.h'
+            'zconf.h' = 'relink-materials/include/zconf.h'
+        }
+        foreach ($name in $relinkPaths.Keys) {
+            $relinkFile = Join-Path $buildDir $relinkPaths[$name]
+            Assert-True (Test-Path -LiteralPath $relinkFile -PathType Leaf) "Relinking input '$name' is missing."
+            $actualHash = (Get-FileHash -LiteralPath $relinkFile -Algorithm SHA256).Hash.ToLowerInvariant()
+            Assert-Equal $manifest.relinkMaterials.$name.sha256 $actualHash "$name relinking material SHA-256"
+        }
+        Assert-Equal $manifest.version '8.1.3' 'Built Android FFmpeg version'
+        Assert-Equal $manifest.target 'aarch64-linux-android' 'Built Android FFmpeg target'
+        Assert-Equal $manifest.abi 'arm64-v8a' 'Built Android FFmpeg ABI'
+        Assert-Equal $manifest.apiLevel 24 'Built Android FFmpeg API level'
+        Assert-Equal $manifest.license 'GPL-2.0-or-later' 'Built Android FFmpeg license'
+        Assert-True $manifest.configuration.gpl 'Android FFmpeg GPL configuration is not enabled.'
+        Assert-True (-not $manifest.configuration.nonfree) 'Android FFmpeg nonfree configuration is enabled.'
+        Assert-True (-not $manifest.configuration.x264 -and -not $manifest.configuration.x265) 'Android FFmpeg includes x264 or x265.'
+        Invoke-AndroidFfmpegSmoke -RootPath $root -ManifestPath $manifestPath
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Assert-Equal $manifest.runtimeSmoke.status 'passed' 'Android FFmpeg runtime probe status'
+        Write-Output "PASS: Android FFmpeg $($manifest.version) runtime probes passed on $($manifest.runtimeSmoke.deviceModel) ($($manifest.runtimeSmoke.deviceAbi), API $($manifest.runtimeSmoke.apiLevel))."
+        Write-Output "FFmpeg SHA-256: $($manifest.artifacts.ffmpeg.sha256)"
+        Write-Output "ffprobe SHA-256: $($manifest.artifacts.ffprobe.sha256)"
     }
     exit 0
 }
