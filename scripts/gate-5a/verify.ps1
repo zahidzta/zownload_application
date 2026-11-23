@@ -163,7 +163,14 @@ try {
         $buildScript = Join-Path $PSScriptRoot 'build-python-runtime.sh'
         Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The CPython runtime build script is missing.'
         & bash $buildScript
-        if ($LASTEXITCODE -ne 0) { throw "CPython runtime builder failed with exit code $LASTEXITCODE." }
+        $buildExitCode = $LASTEXITCODE
+        if ($buildExitCode -ne 0) {
+            $buildLog = Join-Path $root 'work/android/gate-5a/5a-03-cpython/python-runtime-build.log'
+            if (Test-Path -LiteralPath $buildLog -PathType Leaf) {
+                Get-Content -LiteralPath $buildLog -Tail 50 | Write-Output
+            }
+            throw "CPython runtime builder failed with exit code $buildExitCode."
+        }
 
         $manifestPath = Join-Path $root 'work/android/gate-5a/5a-03-cpython/runtime-manifest.json'
         Assert-True (Test-Path -LiteralPath $manifestPath -PathType Leaf) 'The CPython runtime manifest was not produced.'
