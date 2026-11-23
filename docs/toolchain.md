@@ -734,22 +734,61 @@ export NDK_HOME="$ANDROID_NDK_HOME"
 export ANDROID_API_LEVEL=24
 ```
 
-The host needs Java 21, Python 3 for CPython's helper, Git, curl, archive and
-patch tools, and GNU C/C++ build tools for the pinned source recipes. Use the
-Ubuntu 24.04 build environment and record the resolved host package versions
-and SDK `source.properties` in 5A-03 evidence; do not substitute a different
-JDK, SDK package, NDK, or runtime API to make a failing build pass. The official
+The host needs Java 21, Node.js `24.22.0` with npm `11.19.1` (the locked EJS
+source build invokes npm), Python 3 for CPython's helper, Git, curl, archive and
+patch tools, and GNU C/C++ build tools for the pinned source recipes. Install
+the official Linux x64 Node archive and verify its published SHA-256 before
+using it:
+
+```bash
+mkdir -p "$HOME/host-tools"
+curl --fail --location --retry 3 --retry-all-errors --silent --show-error \
+  --output "$HOME/host-tools/node-v24.22.0-linux-x64.tar.xz" \
+  https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz
+printf '%s  %s\n' \
+  cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008 \
+  "$HOME/host-tools/node-v24.22.0-linux-x64.tar.xz" | sha256sum --check
+tar -xJf "$HOME/host-tools/node-v24.22.0-linux-x64.tar.xz" -C "$HOME/host-tools"
+export PATH="$HOME/host-tools/node-v24.22.0-linux-x64/bin:$PATH"
+test "$(node --version)" = 'v24.22.0'
+test "$(npm --version)" = '11.19.1'
+```
+
+Use the Ubuntu 24.04 build environment and record the resolved host package
+versions and SDK `source.properties` in 5A-03 evidence; do not substitute a
+different JDK, SDK package, NDK, or runtime API to make a failing build pass. The official
 [CPython Android build instructions](https://github.com/python/cpython/blob/v3.14.10/Android/README.md)
 are the command reference; the locked dependency cache and invocation are in
 the [Gate 5A runtime recipe](engine-builds.md#5a-03--cpython-and-yt-dlp-android-runtime).
 
 The exact build and verification entrypoint is
-`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+`pwsh -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
 It requires the pinned Ubuntu 24.04 x86_64 host and uses the SDK, NDK, and JDK
 checks above. The `Gate 5A-03 CPython runtime` workflow installs the host
 compiler and library headers and runs this entrypoint on pushes to
 `task-5a-03`. The workflow builds a local APK for inspection but does not
 upload build artifacts.
+
+When running locally under Windows, invoke the verifier inside the
+`Ubuntu-24.04` WSL distribution with PowerShell 7 (`pwsh`), so its Linux host
+check sees the Ubuntu runtime. On a fresh Ubuntu 24.04 environment, install
+PowerShell from Microsoft's package repository using the
+[official setup instructions](https://learn.microsoft.com/powershell/scripting/install/install-ubuntu):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl
+curl --fail --location --silent --show-error \
+  https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
+  --output /tmp/packages-microsoft-prod.deb
+sudo dpkg -i /tmp/packages-microsoft-prod.deb
+rm /tmp/packages-microsoft-prod.deb
+sudo apt-get update
+sudo apt-get install -y powershell
+```
+
+Run `pwsh -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`
+from the repository root inside Ubuntu/WSL.
 
 ## 5A-04 Android FFmpeg build
 
