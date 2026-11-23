@@ -397,7 +397,7 @@ cp -a "$packaged_prefix/lib/python3.14" "$android_package/assets/python-runtime/
 if [[ -d "$runtime_package/Android/python" ]]; then
     cp -a "$runtime_package/Android/python" "$android_package/assets/python-runtime/Android-python"
 fi
-find "$android_package/assets/python-runtime" -name '*.so*' -delete
+find "$android_package/assets/python-runtime" \( -name '*.so' -o -name '*.so.*' \) -delete
 find "$android_package/assets/python-runtime" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 
 while IFS= read -r -d '' native_file; do
@@ -408,7 +408,7 @@ print(os.path.relpath(sys.argv[1], sys.argv[2]))
 PY
 )"
     install -D -m 755 "$native_file" "$android_package/jniLibs/$abi/$relative_path"
-done < <(find "$packaged_prefix/lib" \( -type f -o -type l \) -name '*.so*' -print0)
+done < <(find "$packaged_prefix/lib" \( -type f -o -type l \) \( -name '*.so' -o -name '*.so.*' \) -print0)
 
 readelf="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
 [[ -x "$readelf" ]] || { echo 'Pinned NDK llvm-readelf is missing.' >&2; exit 1; }
@@ -417,7 +417,7 @@ native_libraries="$task_work_root/native-libraries.tsv"
 declare -A available_libraries=()
 while IFS= read -r -d '' native_file; do
     available_libraries["$(basename "$native_file")"]=1
-done < <(find "$packaged_prefix/lib" \( -type f -o -type l \) -name '*.so*' -print0)
+done < <(find "$packaged_prefix/lib" \( -type f -o -type l \) \( -name '*.so' -o -name '*.so.*' \) -print0)
 
 system_libraries='libandroid.so libc.so libdl.so liblog.so libm.so libz.so libatomic.so libc++_shared.so libjnigraphics.so'
 while IFS= read -r -d '' native_file; do
@@ -439,7 +439,7 @@ PY
 )"
     native_sha="$(sha256sum "$native_file" | awk '{print $1}')"
     printf '%s\t%s\t%s\n' "$relative_path" "$native_sha" "$(tr '\n' ' ' <<< "$needed" | sed 's/[[:space:]]*$//')" >> "$native_libraries"
-done < <(find "$packaged_prefix/lib" -type f -name '*.so*' -print0)
+done < <(find "$packaged_prefix/lib" -type f \( -name '*.so' -o -name '*.so.*' \) -print0)
 
 python3 - "$lock_file" "$package_archive" "$packaged_prefix" "$native_libraries" "$native_output_hashes" "$task_work_root/runtime-manifest.json" "$task_work_root" <<'PY'
 import hashlib
