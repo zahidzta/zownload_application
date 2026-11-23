@@ -376,7 +376,9 @@ fi
 if [[ -z "$package_archive" ]]; then
     (
         cd "$python_source_root/Android"
-        ./android.py package "$target"
+        # The CPython helper omits environment values that are already set;
+        # package() then expects STRIP to be present in that returned map.
+        env -u STRIP ./android.py package "$target"
     ) >> "$build_log" 2>&1
     package_archive="$(find "$package_dist" -maxdepth 1 -type f -name "python-$runtime_version-$target.tar.gz" -print -quit)"
 fi

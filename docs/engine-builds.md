@@ -478,8 +478,12 @@ Python before it configures the Android host.
 ./android.py make-build
 ./android.py configure-host aarch64-linux-android
 ./android.py make-host aarch64-linux-android
-./android.py package aarch64-linux-android
+env -u STRIP ./android.py package aarch64-linux-android
 ```
+
+The CPython helper's package step recomputes its Android tool environment and
+expects `STRIP` in the returned mapping. The runtime driver temporarily unsets
+the previously exported `STRIP` for this command so the helper includes it.
 
 The helper writes package outputs beneath
 `cross-build/aarch64-linux-android/dist`. Package only the pinned Python
