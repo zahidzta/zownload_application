@@ -7,6 +7,7 @@
 - **Next task:** 5A-03 — build the traceable CPython and yt-dlp runtime from the accepted 5A-02 source lock.
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
 - **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
+- **Completed 5A-04:** Built pinned Android arm64 FFmpeg/ffprobe and verified MP3/MP4 paths; commit `af2217e`; [build evidence](gates/evidence/5a/5a-04-ffmpeg.md).
 - Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
