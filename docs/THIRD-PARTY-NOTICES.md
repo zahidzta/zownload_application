@@ -134,7 +134,7 @@ and verbatim root `LICENSE`. No source patch was applied.
 | Linux x64 | `50263177cb921024aabc0807a31d71be7fa3c22f0c5824c3c6a2d1cf920f300c` | [`build-quickjs.sh`](../scripts/gate-0b/build-quickjs.sh), [evidence](gates/evidence/0b/quickjs-linux.txt). |
 | macOS x64 | `554102a8a9c0d0c5e24cd138ad7a790f330fd926310c01009265589a446ef90a` | Same script, [evidence](gates/evidence/0b/quickjs-macos-x64.txt). |
 | macOS arm64 | `fba79a316a53ed58a17709a39c173218f8bc825831094b6033ce0510a713bb43` | Same script, [evidence](gates/evidence/0b/quickjs-macos-arm64.txt). |
-| Android arm64/API 24 | `4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185` | Same script with NDK r30, [evidence](gates/evidence/0b/quickjs-android.txt); APK packaging is still pending. |
+| Android arm64/API 24 | Gate 0B CI: `4db3b8aeba709b4907da59a87f1ab3f94585bae3a95f7b02c946b7732cd20185`; Gate 5A-05 checkout: `65ebedfeaa87856788ae8ee508f9ed7836dbec5f7c616b88490a5edee3881ffd` | Both use the locked NDK r30 recipe; QuickJS debug info includes the absolute build path, so artifact hashes vary by checkout root. See [5A-05 build evidence](gates/evidence/5a/5a-05-quickjs.md) and [Gate 0B ELF record](gates/evidence/0b/quickjs-android.txt). APK staging and final provenance audit are Gate 5A-06. |
 
 ## Official yt-dlp executables and yt-dlp-ejs
 
