@@ -257,7 +257,11 @@ mkdir -p "$cross_build/downloads"
 printf 'Build pinned CPython %s for %s with the six source-built Android libraries.\n' "$runtime_version" "$target"
 (
     cd "$python_source_root/Android"
-    ./android.py build "$target"
+    # Configure the host only after the matching build Python is available.
+    ./android.py configure-build
+    ./android.py make-build
+    ./android.py configure-host "$target"
+    ./android.py make-host "$target"
 ) >> "$build_log" 2>&1
 
 build_python="$cross_build/build/python"

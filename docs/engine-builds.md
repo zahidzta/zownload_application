@@ -468,11 +468,16 @@ recipes' prebuilt GitHub release archives are not allowed as build inputs.
 5A-03 must record the exact recipe commands, generated filenames, patches,
 and output hashes before running CPython's package helper.
 
-In the extracted CPython `3.14.10` source root, run the official helper in this
-order after the locked dependencies are cached:
+In the extracted CPython `3.14.10` source root, run the official helper's
+documented discrete steps in this order after the locked dependencies are
+cached. The triplet-specific `build` dispatcher does not configure the build
+Python before it configures the Android host.
 
 ```bash
-./android.py build aarch64-linux-android
+./android.py configure-build
+./android.py make-build
+./android.py configure-host aarch64-linux-android
+./android.py make-host aarch64-linux-android
 ./android.py package aarch64-linux-android
 ```
 
