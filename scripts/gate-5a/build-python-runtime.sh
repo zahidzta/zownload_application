@@ -210,10 +210,16 @@ while IFS=$'\t' read -r name version build source_url source_sha recipe_tag reci
     recipe_source="$recipe_source_dir/$(basename "$source_url")"
     cp -- "$source_archive" "$recipe_source"
     printf 'Build source recipe %s at %s from %s\n' "$recipe_tag" "$recipe_commit" "$(basename "$source_url")"
-    (
-        cd "$recipe_root"
+    if (
+        cd "$recipe_root" &&
         ./build.sh "$name" "$version" "$build" "$target"
-    ) >> "$build_log" 2>&1
+    ) >> "$build_log" 2>&1; then
+        :
+    else
+        printf 'Source recipe %s failed; last build log lines:\n' "$recipe_tag" >&2
+        tail -n 50 "$build_log" >&2
+        exit 1
+    fi
     printf '%s  %s\n' "$source_sha" "$recipe_source" | sha256sum --check --status
 
     generated_archive="$recipe_root/$name/build/$version/$target/$recipe_tag-$target.tar.gz"
