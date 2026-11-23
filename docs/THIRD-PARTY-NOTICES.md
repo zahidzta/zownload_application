@@ -55,6 +55,51 @@ binary hashes. Preserve the same FFmpeg, LAME, and zlib license texts and
 Linux-specific link commands and relinking objects in the eventual versioned
 source bundle. The unpublished draft is not a public compliance release.
 
+## Android CPython runtime
+
+The local Android CPython package is built from CPython `3.14.10` under
+PSF-2.0. Its source archive, source-built native dependencies, and package
+sources are pinned in [`engine-sources.md`](engine-sources.md#gate-5a-android-python-runtime-lock--owner-approved-2026-11-22).
+The runtime package retains upstream package metadata and license files under
+`site-packages/*.dist-info/licenses/` where supplied by each source archive.
+
+| Component | License | Runtime or build use |
+|---|---|---|
+| CPython `3.14.10` | PSF-2.0 | Embedded interpreter and standard library. |
+| bzip2 `1.0.8` | bzip2 license | Source-built CPython compression dependency. |
+| libffi `3.4.4` | MIT | Source-built CPython foreign-function dependency. |
+| OpenSSL `3.5.9` | Apache-2.0 | Source-built TLS and cryptography dependency. |
+| SQLite `3.53.4` | Public domain | Source-built CPython database dependency. |
+| xz/liblzma `5.4.6` | LGPL-2.1-or-later | Source-built CPython compression dependency. |
+| zstd `1.5.7` | BSD-3-Clause | Source-built CPython compression dependency. |
+| Brotli `1.2.0` | MIT | yt-dlp HTTP compression support. |
+| certifi `2026.7.22` | MPL-2.0 | CA certificate bundle. |
+| charset-normalizer `3.5.0` | MIT | Requests response decoding. |
+| idna `3.18` | BSD-3-Clause | Internationalized URL handling. |
+| Mutagen `1.48.1` | GPL-2.0-or-later | Media metadata support. |
+| pycryptodomex `3.23.0` | BSD-2-Clause and public domain | Optional yt-dlp decryption support. |
+| requests `2.34.2` | Apache-2.0 | HTTP support. |
+| urllib3 `2.7.0` | MIT | HTTP transport. |
+| websockets `17.0.1` | BSD-3-Clause | WebSocket support. |
+| yt-dlp `2026.08.19` | Unlicense | Download engine Python source. |
+| yt-dlp-ejs `0.8.0` | Unlicense; solver scripts include Meriyah ISC and Astring MIT | JavaScript challenge solver source. |
+| setuptools `84.1.0` | MIT | Host build-only tool; not shipped in Android runtime. |
+| flit-core `3.12.0` | BSD-3-Clause | Host-only PEP 517 backend for idna. |
+| hatchling `1.33.0` | MIT | Host-only PEP 517 backend for yt-dlp-ejs and urllib3. |
+| hatch-vcs `0.5.0` | MIT | Host-only Hatch version plugin for yt-dlp-ejs and urllib3. |
+| setuptools-scm `10.3.4` | MIT | Host-only VCS version plugin dependency. |
+| packaging `26.3` | Apache-2.0 or BSD-2-Clause | Host-only build backend dependency. |
+| pathspec `1.1.1` | MPL-2.0 | Host-only Hatchling dependency. |
+| pluggy `1.7.0` | MIT | Host-only Hatchling dependency. |
+| tomlkit `0.14.0` | MIT | Host-only Hatchling dependency. |
+| trove-classifiers `2026.9.21.13` | Apache-2.0 | Host-only Hatchling dependency. |
+| vcs-versioning `2.6.0` | MIT | Host-only setuptools-scm dependency. |
+
+This inventory records the approved 5A-02 source lock and 5A-03 runtime build.
+The later 5A-06 APK provenance task still audits the complete transitive
+license set and confirms every corresponding source and notice in the final
+package.
+
 ## QuickJS
 
 QuickJS 2026-06-04 is MIT-licensed. Ship its unmodified source archive

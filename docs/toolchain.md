@@ -742,3 +742,11 @@ JDK, SDK package, NDK, or runtime API to make a failing build pass. The official
 [CPython Android build instructions](https://github.com/python/cpython/blob/v3.14.10/Android/README.md)
 are the command reference; the locked dependency cache and invocation are in
 the [Gate 5A runtime recipe](engine-builds.md#5a-03--cpython-and-yt-dlp-android-runtime).
+
+The exact build and verification entrypoint is
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+It requires the pinned Ubuntu 24.04 x86_64 host and uses the SDK, NDK, and JDK
+checks above. The `Gate 5A-03 CPython runtime` workflow installs the host
+compiler and library headers and runs this entrypoint on pushes to
+`task-5a-03`. The workflow builds a local APK for inspection but does not
+upload build artifacts.

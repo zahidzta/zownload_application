@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock')]
+    [ValidateSet('python-source-lock', 'python-runtime')]
     [string]$Case
 )
 
@@ -63,16 +63,15 @@ try {
     Assert-Equal $lock.sourceDependenciesRepository.url 'https://github.com/beeware/cpython-android-source-deps' 'Native recipe repository'
     Assert-Equal $lock.sourceDependenciesRepository.license 'MIT' 'Native recipe repository license'
     Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.file 'android-env.sh' 'Recipe repository NDK patch target'
-    Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.from '27.2.12479018' 'Recipe repository original NDK pin'
     Assert-Equal $lock.sourceDependenciesRepository.ndkPatch.to '30.0.16248370' 'Recipe repository patched NDK pin'
 
     $expectedNative = @(
-        @{ name = 'bzip2'; version = '1.0.8'; build = '3'; sha256 = 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269'; recipeTag = 'bzip2-1.0.8-3'; recipeCommit = 'dcea166d40d573e963a35435e48b047afe243c2d'; patches = 'symlink.patch' },
-        @{ name = 'libffi'; version = '3.4.4'; build = '3'; sha256 = 'd66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676'; recipeTag = 'libffi-3.4.4-3'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = 'long_double.patch,open_temp_exec_file.patch' },
-        @{ name = 'openssl'; version = '3.5.9'; build = '0'; sha256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'; recipeTag = 'openssl-3.5.9-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'at_secure.patch,configuration.patch,soname-3.patch' },
-        @{ name = 'sqlite'; version = '3.53.4'; build = '0'; sha256 = '0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c'; recipeTag = 'sqlite-3.53.4-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; patches = 'soname.patch' },
-        @{ name = 'xz'; version = '5.4.6'; build = '1'; sha256 = 'aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c'; recipeTag = 'xz-5.4.6-1'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; patches = '' },
-        @{ name = 'zstd'; version = '1.5.7'; build = '2'; sha256 = 'eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3'; recipeTag = 'zstd-1.5.7-2'; recipeCommit = 'f4c94a0fbc359d17993547b66f0627d436f8897b'; patches = '' }
+        @{ name = 'bzip2'; version = '1.0.8'; build = '3'; sha256 = 'ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269'; recipeTag = 'bzip2-1.0.8-3'; recipeCommit = 'dcea166d40d573e963a35435e48b047afe243c2d'; recipeNdkFrom = '27.2.12479018'; patches = 'symlink.patch' },
+        @{ name = 'libffi'; version = '3.4.4'; build = '3'; sha256 = 'd66c56ad259a82cf2a9dfc408b32bf5da52371500b84745f7fb8b645712df676'; recipeTag = 'libffi-3.4.4-3'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; recipeNdkFrom = '27.1.12297006'; patches = 'long_double.patch,open_temp_exec_file.patch' },
+        @{ name = 'openssl'; version = '3.5.9'; build = '0'; sha256 = '603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a'; recipeTag = 'openssl-3.5.9-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; recipeNdkFrom = '27.2.12479018'; patches = 'at_secure.patch,configuration.patch,soname-3.patch' },
+        @{ name = 'sqlite'; version = '3.53.4'; build = '0'; sha256 = '0e9483900e92cd5de8fd48d16bf9200145a61f7fd5be542a5ac81d8a9516eb9c'; recipeTag = 'sqlite-3.53.4-0'; recipeCommit = '5521f2c16ee87dd7f9d081421351f675fac2ee45'; recipeNdkFrom = '27.2.12479018'; patches = 'soname.patch' },
+        @{ name = 'xz'; version = '5.4.6'; build = '1'; sha256 = 'aeba3e03bf8140ddedf62a0a367158340520f6b384f75ca6045ccc6c0d43fd5c'; recipeTag = 'xz-5.4.6-1'; recipeCommit = '65d87e392d69198f3dd1ed2feb3b5fcea1b029a6'; recipeNdkFrom = '27.1.12297006'; patches = '' },
+        @{ name = 'zstd'; version = '1.5.7'; build = '2'; sha256 = 'eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3'; recipeTag = 'zstd-1.5.7-2'; recipeCommit = 'f4c94a0fbc359d17993547b66f0627d436f8897b'; recipeNdkFrom = '27.2.12479018'; patches = '' }
     )
     $nativeDependencyCount = @($lock.nativeDependencies).Count
     Assert-Equal $nativeDependencyCount $expectedNative.Count 'Native dependency count'
@@ -80,7 +79,7 @@ try {
         $entries = @($lock.nativeDependencies | Where-Object { $_.name -ceq $expected.name })
         Assert-Equal $entries.Count 1 "Native dependency '$($expected.name)' count"
         $entry = $entries[0]
-        foreach ($field in @('version', 'build', 'sha256', 'recipeTag', 'recipeCommit')) {
+        foreach ($field in @('version', 'build', 'sha256', 'recipeTag', 'recipeCommit', 'recipeNdkFrom')) {
             Assert-Equal $entry.$field $expected[$field] "$($expected.name) $field"
         }
         Assert-Equal (@($entry.patches) -join ',') $expected.patches "$($expected.name) patches"
@@ -139,11 +138,37 @@ try {
         Assert-Equal $lock.buildTools.$name $expectedTools[$name] "Build tool '$name'"
     }
 
+    $expectedBuildTools = @(
+        @{ name = 'setuptools'; version = '84.1.0'; sha256 = '23657205b63d4d31395ab917815247f694aafad28cd21316bf5fd45a51048ea0'; wheelSha256 = '5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9' },
+        @{ name = 'flit-core'; version = '3.12.0'; sha256 = '18f63100d6f94385c6ed57a72073443e1a71a4acb4339491615d0f16d6ff01b2'; wheelSha256 = 'e7a0304069ea895172e3c7bb703292e992c5d1555dd1233ab7b5621b5b69e62c' },
+        @{ name = 'hatchling'; version = '1.33.0'; sha256 = '4c422bd4d554fcff5de5b73e9596f85e41e9f97f7e553d8f7595ecb31a627bef'; wheelSha256 = '415290b84f464d2884303fca8974d38e7b85579069fab02a15db0828fbb1446d' },
+        @{ name = 'hatch-vcs'; version = '0.5.0'; sha256 = '0395fa126940340215090c344a2bf4e2a77bcbe7daab16f41b37b98c95809ff9'; wheelSha256 = 'b49677dbdc597460cc22d01b27ab3696f5e16a21ecf2700fb01bc28e1f2a04a7' },
+        @{ name = 'setuptools-scm'; version = '10.3.4'; sha256 = 'a69f28bfc245608781205e912faae437c2b2165773afa4e7b979d77447a69dd2'; wheelSha256 = '82f34c3e3084fc2b57d397200637cc13f2338004052d2fee47baa5f0e902464e' },
+        @{ name = 'packaging'; version = '26.3'; sha256 = '94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79'; wheelSha256 = 'd7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c' },
+        @{ name = 'pathspec'; version = '1.1.1'; sha256 = '17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a'; wheelSha256 = 'a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189' },
+        @{ name = 'pluggy'; version = '1.7.0'; sha256 = 'd1eaa46ebb595891b860ab086b4d09c8588af65ebd4361b8e8f4bb8920b90ba8'; wheelSha256 = '7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec' },
+        @{ name = 'tomlkit'; version = '0.14.0'; sha256 = 'cf00efca415dbd57575befb1f6634c4f42d2d87dbba376128adb42c121b87064'; wheelSha256 = '592064ed85b40fa213469f81ac584f67a4f2992509a7c3ea2d632208623a3680' },
+        @{ name = 'trove-classifiers'; version = '2026.9.21.13'; sha256 = '0a9ebc8d4e2f3e8a22848c5258033035bec17a3012ac3fea16dbaa764489eb71'; wheelSha256 = '8b1ff4f9c191b1040b71c37f1e445ab99732911e3cd91de52838453a854d7a17' },
+        @{ name = 'vcs-versioning'; version = '2.6.0'; sha256 = '22e9159288e2d8bca2fa6f6c31c34c9c66aec157f60e9e526f5d160d2516d60f'; wheelSha256 = 'f8bebd1302ebc12e67ceb30fc7dd698ec969414b6fa43b30c3f14ac9b1e72c41' }
+    )
+    $buildToolCount = @($lock.pythonBuildTools).Count
+    Assert-Equal $buildToolCount $expectedBuildTools.Count 'Pinned Python build tool count'
+    foreach ($expected in $expectedBuildTools) {
+        $entries = @($lock.pythonBuildTools | Where-Object { $_.name -ceq $expected.name })
+        Assert-Equal $entries.Count 1 "Python build tool '$($expected.name)' count"
+        foreach ($field in @('version', 'sha256', 'wheelSha256')) {
+            Assert-Equal $entries[0].$field $expected[$field] "Python build tool '$($expected.name)' $field"
+        }
+    }
+
     Assert-True ($decisionText.Contains('Owner decision: CPython approved on 2026-11-22')) 'Decision memo does not record owner approval.'
     Assert-True ($decisionText.Contains('AndroidEnginePackage')) 'Decision memo omits the package boundary.'
     Assert-True ($decisionText.Contains('22–35 MB')) 'Decision memo omits the unmeasured package-size estimate.'
     Assert-True ($decisionText -match 'desktop-only\s+first-release\s+fallback') 'Decision memo omits the fallback.'
-    Assert-True ($buildsText.Contains('./android.py build aarch64-linux-android')) 'CPython build command is missing.'
+    Assert-True ($buildsText.Contains('./android.py configure-build')) 'CPython build-Python configure command is missing.'
+    Assert-True ($buildsText.Contains('./android.py make-build')) 'CPython build-Python compile command is missing.'
+    Assert-True ($buildsText.Contains('./android.py configure-host aarch64-linux-android')) 'CPython Android host configure command is missing.'
+    Assert-True ($buildsText.Contains('./android.py make-host aarch64-linux-android')) 'CPython Android host compile command is missing.'
     Assert-True ($buildsText.Contains('./android.py package aarch64-linux-android')) 'CPython package command is missing.'
     Assert-True ($buildsText.Contains('cross-build/downloads/')) 'Source-built native dependency cache is undocumented.'
     Assert-True ($buildsText.Contains('prebuilt GitHub release archives are not allowed')) 'Build recipe permits opaque native archives.'
@@ -152,7 +177,35 @@ try {
     Assert-True ($toolchainText.Contains('ANDROID_API_LEVEL=24')) 'Runtime API level setup is missing.'
     Assert-True ($toolchainText.Contains('30.0.16248370')) 'Pinned NDK setup is missing.'
 
-    Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    if ($Case -eq 'python-runtime') {
+        Assert-True $IsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'
+        $buildScript = Join-Path $PSScriptRoot 'build-python-runtime.sh'
+        Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The CPython runtime build script is missing.'
+        & bash $buildScript
+        $buildExitCode = $LASTEXITCODE
+        if ($buildExitCode -ne 0) {
+            $buildLog = Join-Path $root 'work/android/gate-5a/5a-03-cpython/python-runtime-build.log'
+            if (Test-Path -LiteralPath $buildLog -PathType Leaf) {
+                Get-Content -LiteralPath $buildLog -Tail 50 | Write-Output
+            }
+            throw "CPython runtime builder failed with exit code $buildExitCode."
+        }
+
+        $manifestPath = Join-Path $root 'work/android/gate-5a/5a-03-cpython/runtime-manifest.json'
+        Assert-True (Test-Path -LiteralPath $manifestPath -PathType Leaf) 'The CPython runtime manifest was not produced.'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Assert-Equal $manifest.pythonVersion '3.14.10' 'Built CPython version'
+        Assert-Equal $manifest.target 'aarch64-linux-android' 'Built CPython target'
+        Assert-Equal $manifest.abi 'arm64-v8a' 'Built CPython ABI'
+        Assert-Equal $manifest.ndk '30.0.16248370' 'Built CPython NDK'
+        Assert-Equal $manifest.packages.Count ($lock.pythonPackages.Count + 2) 'Built Python package count'
+        Assert-True ($manifest.nativeLibraries.Count -gt 0) 'The runtime manifest contains no native libraries.'
+        Write-Output "PASS: CPython $($manifest.pythonVersion) runtime and locked yt-dlp/EJS packages built for $($manifest.abi)."
+        Write-Output "Runtime archive SHA-256: $($manifest.runtimeArchive.sha256)"
+    }
+    else {
+        Write-Output 'PASS: CPython Android source lock, owner decision, and build-tool pins are consistent.'
+    }
     exit 0
 }
 catch {

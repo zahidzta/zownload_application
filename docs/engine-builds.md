@@ -468,13 +468,22 @@ recipes' prebuilt GitHub release archives are not allowed as build inputs.
 5A-03 must record the exact recipe commands, generated filenames, patches,
 and output hashes before running CPython's package helper.
 
-In the extracted CPython `3.14.10` source root, run the official helper in this
-order after the locked dependencies are cached:
+In the extracted CPython `3.14.10` source root, run the official helper's
+documented discrete steps in this order after the locked dependencies are
+cached. The triplet-specific `build` dispatcher does not configure the build
+Python before it configures the Android host.
 
 ```bash
-./android.py build aarch64-linux-android
-./android.py package aarch64-linux-android
+./android.py configure-build
+./android.py make-build
+./android.py configure-host aarch64-linux-android
+./android.py make-host aarch64-linux-android
+env -u STRIP ./android.py package aarch64-linux-android
 ```
+
+The CPython helper's package step recomputes its Android tool environment and
+expects `STRIP` in the returned mapping. The runtime driver temporarily unsets
+the previously exported `STRIP` for this command so the helper includes it.
 
 The helper writes package outputs beneath
 `cross-build/aarch64-linux-android/dist`. Package only the pinned Python
@@ -486,3 +495,23 @@ or download unpinned dependencies. Keep the JNI entrypoint behind
 resulting runtime/APK size, ABI and ELF dependencies, package hashes, notices,
 and source/build bundle. No Android APK may be shared before the Gate 5A
 source, build-input, notice, and transitive-dependency checks pass.
+
+Run the repository driver on the pinned Ubuntu host with
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+It verifies each source archive, recipe tag/commit, and the NDK r30 patches;
+source-builds the six native inputs; places only those outputs in
+`cross-build/downloads/`; then invokes the documented CPython helper commands
+above. It installs the locked Python sources with `--no-index`, `--no-deps`,
+and `--no-build-isolation`. The checksummed `pythonBuildTools` sources and
+wheels provide the PEP 517 backends and their dependencies in the host build
+Python; none are installed into the Android runtime. The task workflow builds
+a local debug APK for packaging inspection and does not upload APKs or runtime
+binaries.
+
+The generated local-only staging tree is
+`work/android/gate-5a/5a-03-cpython/android-package/`: shared libraries are
+under `jniLibs/arm64-v8a/`, and the Python standard library and package sources
+are under `assets/python-runtime/`. The ignored
+`runtime-manifest.json` records source, native output, package, and runtime
+archive hashes plus ELF dependencies. The full build log stays under the same
+ignored work directory.
