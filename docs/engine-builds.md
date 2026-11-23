@@ -515,3 +515,59 @@ are under `assets/python-runtime/`. The ignored
 `runtime-manifest.json` records source, native output, package, and runtime
 archive hashes plus ELF dependencies. The full build log stays under the same
 ignored work directory.
+
+## 5A-04 — Android arm64-v8a GPL FFmpeg 8.1.3
+
+Run the Android arm64 FFmpeg build on Ubuntu 24.04 with the Gate 5A NDK r30
+30.0.16248370 and target API 24. The exact FFmpeg, detached signature, signing
+key, LAME and zlib source pins are reused from the machine-readable
+[source lock](engine-sources.md). The script downloads into the ignored
+work/android/gate-5a/5a-04-ffmpeg/downloads/ directory and checks each SHA-256.
+It verifies FFmpeg's signature against key fingerprint
+FCF986EA15E6E293A5644F10B4322F04D67658D8 before extracting any source.
+
+The build source-builds the LAME 3.100 encoder library with its GPL-only
+mpglib decoder disabled, then source-builds zlib 1.3.2. FFmpeg is cross
+configured with the Android NDK Clang wrapper for aarch64-linux-android24,
+static FFmpeg libraries, and an explicit minimal feature allowlist. It includes
+MP3 output and libmp3lame, MP4/MOV mux and demux, MP3/AAC/Opus/Vorbis/FLAC
+audio inputs, H.264/HEVC/VP8/VP9/AV1 video stream inputs, JPEG/PNG cover
+processing, and aresample for MP3 encoder sample conversion plus the filters
+used for cover conversion. It also enables the wrapped_avframe decoder required
+by FFmpeg's lavfi color source in the runtime smoke test. The configure command
+starts with --disable-everything and includes --enable-filter=aresample,
+--enable-muxer=mp4, and --enable-decoder=wrapped_avframe. Network protocols,
+autodetection, ffplay, unrelated codecs, and external libraries
+other than LAME and zlib are disabled.
+
+The Android build intentionally uses --enable-gpl, disables nonfree and
+version-3 components, and reports GPL version 2 or later. The desktop LGPL
+configurations in Gates 0B, 4A and 4B remain separate. x264 and x265 are absent:
+neither source is built, and the verifier rejects their encoder
+configuration or ELF dependencies.
+
+The build recipe is scripts/gate-5a/build-ffmpeg.sh. Its exact configure
+argument vector is written to the ignored ffmpeg-configure-args.txt and the
+generated android-ffmpeg-manifest.json records every source hash, configure
+argument, tool version, output size and SHA-256. FFmpeg and ffprobe are
+stripped Android AArch64 PIE executables; the verifier checks the Android
+linker, system-only ELF dependencies and GPL/nonfree feature macros. The
+device smoke script builds and probes an MP3, builds and remuxes an MP4, and
+checks that x264/x265 encoders are absent.
+
+The ignored relink-materials/ directory retains the exact source-built
+libmp3lame.a and libz.a plus their installed headers. Their hashes are included
+in the manifest, so Gate 5A-06 can carry the source-built dependencies and
+relinking inputs into the Android provenance review without adding binaries
+to the repository.
+
+Run the task verifier with:
+
+~~~powershell
+powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case ffmpeg
+~~~
+
+Only the two local executables and build evidence are placed under the ignored
+work directory. They are not copied into the Android project or attached to a
+build, APK, commit, or release. Gate 5A-06 owns APK package provenance and
+removal of the opaque Maven payloads.

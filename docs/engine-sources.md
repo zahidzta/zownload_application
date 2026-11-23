@@ -68,7 +68,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
   },
   "ffmpeg": {
     "version": "8.1.3",
-    "license": "LGPL-2.1-or-later only if configuration and linked libraries pass 0B-10/12",
+    "license": "GPL-2.0-or-later when configured with --enable-gpl for Android; LGPL-2.1-or-later for current desktop recipes",
     "source": {
       "url": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz",
       "fallbackUrls": [
@@ -89,7 +89,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "sha256": "397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5",
       "fingerprint": "FCF986EA15E6E293A5644F10B4322F04D67658D8"
     },
-    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"]
+    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64", "android-arm64"]
   },
   "zlib": {
     "version": "1.3.2",
@@ -99,7 +99,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
       "fallbackUrls": ["https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"]
     },
-    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"]
+    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64", "android-arm64"]
   },
   "lame": {
     "version": "3.100",
@@ -108,7 +108,7 @@ versioned release or an immutable commit; no moving release channel is a pin.
       "url": "https://sourceforge.net/projects/lame/files/lame/3.100/lame-3.100.tar.gz/download",
       "sha256": "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
     },
-    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"]
+    "targets": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64", "android-arm64"]
   }
 }
 ```
