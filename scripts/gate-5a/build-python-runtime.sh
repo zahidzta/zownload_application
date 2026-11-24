@@ -13,6 +13,8 @@ abi="arm64-v8a"
 runtime_version="3.14.10"
 runtime_api="24"
 ndk_version="30.0.16248370"
+node_version="v24.22.0"
+npm_version="11.19.1"
 
 mkdir -p "$task_work_root/source-inputs" "$task_work_root/native-sources" "$task_work_root/package-sources"
 : > "$build_log"
@@ -25,9 +27,11 @@ on_error() {
 }
 trap 'on_error "$LINENO"' ERR
 
-for command_name in bash curl git make patch python3 sha256sum tar wget; do
+for command_name in bash curl git make node npm patch python3 sha256sum tar wget; do
     command -v "$command_name" >/dev/null || { printf 'Missing host command: %s\n' "$command_name" >&2; exit 1; }
 done
+[[ "$(node --version)" == "$node_version" ]] || { printf 'Expected Node %s.\n' "$node_version" >&2; exit 1; }
+[[ "$(npm --version)" == "$npm_version" ]] || { printf 'Expected npm %s.\n' "$npm_version" >&2; exit 1; }
 
 python3 - "$source_document" "$lock_file" <<'PY'
 import json
@@ -123,15 +127,22 @@ import sys
 path = pathlib.Path(sys.argv[1])
 content = path.read_text(encoding="utf-8")
 old, new = sys.argv[2], sys.argv[3]
-if content.count(old) != 1:
-    raise SystemExit(f"Expected one occurrence of {old!r} in {path}")
-path.write_text(content.replace(old, new), encoding="utf-8")
+old_count, new_count = content.count(old), content.count(new)
+if (old_count, new_count) == (1, 0):
+    path.write_text(content.replace(old, new), encoding="utf-8")
+elif (old_count, new_count) != (0, 1):
+    raise SystemExit(
+        f"Expected exactly one original or pinned value in {path}; "
+        f"found {old_count} original and {new_count} pinned occurrences"
+    )
 PY
 }
 
 printf 'Host: %s\n' "$(uname -a)" >> "$build_log"
 printf 'Java: ' >> "$build_log"
 java -version >> "$build_log" 2>&1
+printf 'Node: %s\n' "$(node --version)" >> "$build_log"
+printf 'npm: %s\n' "$(npm --version)" >> "$build_log"
 printf 'Python: %s\n' "$(python3 --version 2>&1)" >> "$build_log"
 printf 'NDK: %s\n' "$ndk_version" >> "$build_log"
 

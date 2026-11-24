@@ -116,7 +116,9 @@ The runtime package retains upstream package metadata and license files under
 | trove-classifiers `2026.9.21.13` | Apache-2.0 | Host-only Hatchling dependency. |
 | vcs-versioning `2.6.0` | MIT | Host-only setuptools-scm dependency. |
 
-This inventory records the approved 5A-02 source lock and 5A-03 runtime build.
+This inventory records the approved 5A-02 source lock and 5A-03 runtime build;
+see the [5A-03 build evidence](gates/evidence/5a/5a-03-cpython-runtime.md) for
+the package hashes and APK inspection.
 The later 5A-06 APK provenance task still audits the complete transitive
 license set and confirms every corresponding source and notice in the final
 package.

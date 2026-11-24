@@ -277,11 +277,23 @@ try {
     Assert-True ($toolchainText.Contains('30.0.16248370')) 'Pinned NDK setup is missing.'
 
     if ($Case -eq 'python-runtime') {
-        Assert-True $IsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'
+        Assert-True $HostIsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'
         $buildScript = Join-Path $PSScriptRoot 'build-python-runtime.sh'
         Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The CPython runtime build script is missing.'
-        & bash $buildScript
-        $buildExitCode = $LASTEXITCODE
+        $linuxBuildScript = Join-Path $PSScriptRoot ".build-python-runtime-$PID.sh"
+        $buildScriptText = Get-Content -LiteralPath $buildScript -Raw
+        [System.IO.File]::WriteAllText(
+            $linuxBuildScript,
+            ($buildScriptText -replace "`r`n?", "`n"),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        try {
+            & bash $linuxBuildScript
+            $buildExitCode = $LASTEXITCODE
+        }
+        finally {
+            Remove-Item -LiteralPath $linuxBuildScript -Force -ErrorAction SilentlyContinue
+        }
         if ($buildExitCode -ne 0) {
             $buildLog = Join-Path $root 'work/android/gate-5a/5a-03-cpython/python-runtime-build.log'
             if (Test-Path -LiteralPath $buildLog -PathType Leaf) {

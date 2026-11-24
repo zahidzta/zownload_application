@@ -29,10 +29,12 @@ The previous Gate 0C architecture estimate for an owned Android engine was about
 
 ## Verification
 
-All `scripts/gate-5a/verify.ps1` cases below are planned entrypoints to add with their owning task. They must print concise results (or a failure tail of at most 50 lines); keep full build logs and APKs under ignored `work/android/`.
+The `scripts/gate-5a/verify.ps1` cases below are added by their owning task.
+They print concise results (or a failure tail of at most 50 lines); keep full
+build logs and APKs under ignored `work/android/`.
 
 - **V0 (5A-01 plan):** resolve changed relative Markdown links; run `git diff --check` and, after staging, `git diff --cached --check`.
-- **V1 (5A-02..05 runtime inputs):** verify locked source URLs/commits and SHA-256 values, Python/yt-dlp/ejs compatibility, QuickJS version, FFmpeg configure flags, `arm64-v8a` ELF dependencies, and required MP3/MP4/YouTube-JS smoke behavior. Commands: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`, `-Case ffmpeg`, and `-Case quickjs`.
+- **V1 (5A-02..05 runtime inputs):** verify locked source URLs/commits and SHA-256 values, Python/yt-dlp/ejs compatibility, QuickJS version, FFmpeg configure flags, `arm64-v8a` ELF dependencies, and required MP3/MP4/YouTube-JS smoke behavior. Commands: `pwsh -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime` on Ubuntu; `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case ffmpeg` and `-Case quickjs` on Windows with WSL.
 - **V2 (5A-06 package/provenance):** run `npm run android:debug`; verify the APK contains only the intended `arm64-v8a` native engine files, each packaged hash matches the source-build manifest, no `0.18.1` AAR/native payload remains, and corresponding sources/build materials/notices cover every shipped dependency. Command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case package-provenance`.
 - **V3 (5A-07..08 adapter/contract):** run `npm run check:contracts`, `cargo test --manifest-path src-tauri/Cargo.toml`, and the focused Android bridge verifier. Cover analysis, one-entry download, progress, cancellation, typed errors, update methods, and unchanged contract parity.
 - **V4 (5A-09 device/checkpoint):** on a physical `arm64-v8a` device, prove a YouTube single MP3 with QuickJS/ejs, a single MP4, and a playlist through the existing Gate 0C path; verify queue/history/settings integration, progress, cancellation, and no Kotlin-owned queue. Record device/API/ABI, fixture provenance, hashes, output inspection, and limits in `docs/gates/evidence/5a/`. Command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case device-engine`.
@@ -66,7 +68,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Read: `PROJECT.md:348-349,370-374,388,394-461,618-629,630-645,787-793`; the accepted 5A-02 decision.
 - Dependencies: 5A-02 owner-approved source/package lock.
 - Acceptance: clean build from pinned sources emits only required arm64 runtime files; yt-dlp/ejs versions and hashes match the lock; source archives, patches, build inputs, and notices are captured. No adapter or Rust behavior changes.
-- Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+- Exact verification command: `pwsh -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
 
 ### 5A-04 — Build minimal Android FFmpeg and ffprobe
 

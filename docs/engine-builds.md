@@ -525,14 +525,15 @@ The helper writes package outputs beneath
 sources, yt-dlp `2026.08.19`, EJS `0.8.0`, and the default Python dependencies
 listed in the lock. Build those package sources against the embedded runtime;
 install from the verified local artifacts without allowing `pip` to resolve
-or download unpinned dependencies. Keep the JNI entrypoint behind
-`AndroidEnginePackage`; Rust remains the queue owner. 5A-03 records the
-resulting runtime/APK size, ABI and ELF dependencies, package hashes, notices,
-and source/build bundle. No Android APK may be shared before the Gate 5A
-source, build-input, notice, and transitive-dependency checks pass.
+or download unpinned dependencies. The EJS source build invokes npm, so use
+the pinned Node.js `24.22.0` / npm `11.19.1` host tools. Keep the JNI
+entrypoint behind `AndroidEnginePackage`; Rust remains the queue owner. 5A-03
+records the resulting runtime/APK size, ABI and ELF dependencies, package
+hashes, notices, and source/build bundle. No Android APK may be shared before
+the Gate 5A source, build-input, notice, and transitive-dependency checks pass.
 
 Run the repository driver on the pinned Ubuntu host with
-`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
+`pwsh -NoProfile -File scripts/gate-5a/verify.ps1 -Case python-runtime`.
 It verifies each source archive, recipe tag/commit, and the NDK r30 patches;
 source-builds the six native inputs; places only those outputs in
 `cross-build/downloads/`; then invokes the documented CPython helper commands
@@ -549,7 +550,8 @@ under `jniLibs/arm64-v8a/`, and the Python standard library and package sources
 are under `assets/python-runtime/`. The ignored
 `runtime-manifest.json` records source, native output, package, and runtime
 archive hashes plus ELF dependencies. The full build log stays under the same
-ignored work directory.
+ignored work directory. The runtime, source-build hashes, and APK packaging
+inspection are recorded in the [5A-03 evidence](gates/evidence/5a/5a-03-cpython-runtime.md).
 
 ## 5A-04 — Android arm64-v8a GPL FFmpeg 8.1.3
 
