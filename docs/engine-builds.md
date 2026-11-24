@@ -234,6 +234,37 @@ The previously attested Gate 0B Android build produced SHA-256
 CI checkout root. The 5A-05 evidence records the hash from its own checkout
 root; both builds use the same locked source and flags.
 
+## 5A-06 — Android arm64-v8a package provenance
+
+Stage the local outputs from 5A-03, 5A-04, and 5A-05 with
+`scripts/gate-5a/stage-android-package.ps1`. It checks the pinned CPython,
+yt-dlp/EJS, QuickJS, FFmpeg, LAME, and zlib source archives against the source
+lock; checks each runtime and executable hash against its source-build
+manifest; and requires a notice entry for all 22 transitive engine components.
+The generated `android-engine-manifest.json` records the package file hashes,
+source archive hashes, build record hashes, component licenses, and APK entry
+paths. The review copy is
+[`5a-06-apk-engine-manifest.json`](gates/evidence/5a/5a-06-apk-engine-manifest.json).
+
+Python's 114 nested extension modules and its standard library/package files
+are stored in `assets/python-runtime.zip`; the 5A-07 provider extracts the
+archive under app-private storage. A single archive preserves underscore-
+prefixed Python package directories that the Android asset merge omitted
+when staged as individual assets. The eight top-level CPython libraries plus
+the pinned QuickJS, FFmpeg, and ffprobe files are packaged under
+`lib/arm64-v8a/`. The verifier checks every runtime archive member and every
+native library against the manifest and rejects other APK ABIs or unexpected
+native entries.
+
+The `0.18.1` Maven AAR dependencies are removed. Until 5A-07 replaces the
+0C spike adapter, the package-only debug variant excludes those four legacy
+Kotlin classes from compilation. The debug APK is local inspection output;
+it is not a functional engine build and must not be shared. Run the stage
+script, set `JAVA_HOME` to the pinned Corretto 21 JDK as recorded in
+[`toolchain.md`](toolchain.md#5a-06-android-package-build), run
+`npm run android:debug`, then run
+`powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case package-provenance`.
+
 ## 0B-10 — Windows x64 LGPL FFmpeg configuration
 
 From the repository root, after the 0B-03/10A source acquisition and 0B-04

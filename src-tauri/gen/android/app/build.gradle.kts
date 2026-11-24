@@ -1,5 +1,6 @@
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
@@ -24,6 +25,9 @@ android {
         applicationId = "com.zownload.app"
         minSdk = 24
         targetSdk = 36
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -61,14 +65,19 @@ android {
         buildConfig = true
     }
     sourceSets.getByName("main").apply {
-        jniLibs.srcDir(file("../../../../work/android/0c-05/jniLibs"))
-        jniLibs.srcDir(file("../../../../work/android/gate-5a/5a-03-cpython/android-package/jniLibs"))
-        assets.srcDir(file("../../../../work/android/gate-5a/5a-03-cpython/android-package/assets"))
-        res.srcDir(file("../../../../work/android/0c-05/res"))
+        val enginePackage = file("../../../../work/android/gate-5a/5a-06-package/package")
+        require(enginePackage.isDirectory) {
+            "Run scripts/gate-5a/stage-android-package.ps1 before building Android."
+        }
+        jniLibs.srcDir(enginePackage.resolve("jniLibs"))
+        assets.srcDir(enginePackage.resolve("apk-assets"))
+
+        // The 0C spike still links to the opaque 0.18.1 AAR API. Keep it out of
+        // this package-only build; task 5A-07 replaces these classes with the
+        // production provider before engine functionality is compiled again.
     }
     packaging {
         jniLibs.useLegacyPackaging = true
-        jniLibs.pickFirsts.add("**/libqjs.so")
     }
 }
 
@@ -78,20 +87,22 @@ kotlin {
     }
 }
 
+tasks.withType<KotlinCompile>().configureEach {
+    if (name.contains("Debug", ignoreCase = true)) {
+        exclude(
+            "**/AndroidEngineAdapter.kt",
+            "**/AndroidSpikePlugin.kt",
+            "**/SpikeDownloadService.kt",
+            "**/VerifiedYtDlpUpdate.kt",
+        )
+    }
+}
+
 rust {
     rootDirRel = "../../../"
 }
 
 dependencies {
-    val androidEngineVersion = "0.18.1"
-    val pinnedQuickJs = file("../../../../work/android/0c-05/jniLibs/arm64-v8a/libqjs.so")
-    val pinnedYtDlp = file("../../../../work/android/0c-05/res/raw/ytdlp")
-    require(pinnedQuickJs.isFile && pinnedYtDlp.isFile) {
-        "Run scripts/gate-0c/package-quickjs.ps1 before building Android."
-    }
-    implementation("io.github.junkfood02.youtubedl-android:library:$androidEngineVersion")
-    implementation("io.github.junkfood02.youtubedl-android:common:$androidEngineVersion")
-    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:$androidEngineVersion")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")

@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance')]
     [string]$Case
 )
 
@@ -33,6 +33,24 @@ function Read-JsonFence {
     $match = [regex]::Match($Text, $pattern)
     Assert-True $match.Success "Missing JSON block '$FenceName'."
     return (ConvertFrom-Json -InputObject $match.Groups[1].Value)
+}
+
+function Get-Sha256 {
+    param([string]$Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-ZipEntrySha256 {
+    param([System.IO.Compression.ZipArchiveEntry]$Entry)
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $Entry.Open()
+    try {
+        return ([System.BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $stream.Dispose()
+        $algorithm.Dispose()
+    }
 }
 
 function Get-ConnectedAndroidDevice {
@@ -371,6 +389,143 @@ try {
         Write-Output "PASS: Android QuickJS $($quickJsLock.version) ELF and locked yt-dlp $($ytDlpLock.version)/EJS $($ejsLock.version) inputs are consistent."
         Write-Output "Android QuickJS SHA-256: $artifactHash"
         Write-Output 'YouTube JavaScript challenge execution on Android remains a device check after the Gate 5A adapter is wired.'
+    }
+    elseif ($Case -eq 'package-provenance') {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $manifestPath = Join-Path $root 'work/android/gate-5a/5a-06-package/android-engine-manifest.json'
+        $apkPath = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        $gradlePath = Join-Path $root 'src-tauri/gen/android/app/build.gradle.kts'
+        Assert-True (Test-Path -LiteralPath $manifestPath -PathType Leaf) 'The staged Android engine manifest is missing; run stage-android-package.ps1 first.'
+        Assert-True (Test-Path -LiteralPath $apkPath -PathType Leaf) 'The local Android debug APK is missing; run npm run android:debug first.'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Assert-Equal $manifest.schema 1 'Android package manifest schema'
+        Assert-Equal $manifest.package.abi 'arm64-v8a' 'Android package ABI'
+        Assert-Equal $manifest.package.apiLevel 24 'Android engine API level'
+        Assert-Equal $manifest.packageStatus 'staged; APK hash verification pending' 'Android package staging status'
+        Assert-Equal $manifest.stagedFileCount $manifest.stagedFiles.Count 'Staged engine file count'
+        Assert-True ($manifest.components.Count -ge 20) 'The transitive Android engine component inventory is incomplete.'
+        Assert-True ($manifest.sourceMaterials.Count -ge $manifest.components.Count) 'Corresponding source archive coverage is incomplete.'
+
+        $gradleText = Get-Content -LiteralPath $gradlePath -Raw
+        Assert-True ($gradleText -notmatch 'io\.github\.junkfood02\.youtubedl-android|implementation\s*\([^\r\n]*0\.18\.1') 'The Android app still declares the opaque 0.18.1 engine AARs.'
+        foreach ($source in $manifest.sourceMaterials) {
+            $sourcePath = Join-Path $root ($source.localPath -replace '/', '\')
+            Assert-True (Test-Path -LiteralPath $sourcePath -PathType Leaf) "Locked source archive is missing: $($source.name)"
+            Assert-Equal (Get-Sha256 $sourcePath) $source.sha256 "$($source.name) source archive SHA-256"
+        }
+        foreach ($record in $manifest.auditRecords) {
+            $recordPath = Join-Path $root ($record.path -replace '/', '\')
+            Assert-True (Test-Path -LiteralPath $recordPath -PathType Leaf) "Audited build record is missing: $($record.path)"
+            Assert-Equal (Get-Sha256 $recordPath) $record.sha256 "$($record.path) audit record SHA-256"
+        }
+        foreach ($component in $manifest.components) {
+            Assert-True ($noticesText.IndexOf([string]$component.name, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) "The third-party notice inventory omits '$($component.name)'."
+            Assert-True (@($manifest.sourceMaterials | Where-Object sha256 -CEQ $component.sourceSha256).Count -gt 0) "The source archive inventory omits '$($component.name)'."
+        }
+        foreach ($buildManifest in $manifest.buildManifests) {
+            $buildManifestPath = Join-Path $root ($buildManifest.path -replace '/', '\')
+            Assert-True (Test-Path -LiteralPath $buildManifestPath -PathType Leaf) "Source-build evidence is missing: $($buildManifest.path)"
+            if ($buildManifest.sha256) { Assert-Equal (Get-Sha256 $buildManifestPath) $buildManifest.sha256 "$($buildManifest.path) SHA-256" }
+        }
+        $quickJsPath = Join-Path $root 'work/engine/build/quickjs/android-arm64/qjs'
+        Assert-Equal (Get-Sha256 $quickJsPath) $manifest.buildManifests[2].artifactSha256 'QuickJS staged source-build artifact SHA-256'
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($apkPath)
+        try {
+            $entries = [System.Collections.Generic.Dictionary[string, System.IO.Compression.ZipArchiveEntry]]::new([System.StringComparer]::Ordinal)
+            foreach ($entry in $zip.Entries) {
+                if (-not $entry.FullName.EndsWith('/')) { $entries[$entry.FullName] = $entry }
+            }
+
+            Assert-True $entries.ContainsKey($manifest.assetArchive.apkPath) 'The APK is missing the Python runtime asset archive.'
+            $archiveEntry = $entries[$manifest.assetArchive.apkPath]
+            Assert-Equal $archiveEntry.Length $manifest.assetArchive.bytes 'Python runtime archive byte length'
+            Assert-Equal (Get-ZipEntrySha256 $archiveEntry) $manifest.assetArchive.sha256 'Python runtime archive SHA-256'
+            $archiveStream = $archiveEntry.Open()
+            $archiveMemory = [System.IO.MemoryStream]::new()
+            try {
+                $archiveStream.CopyTo($archiveMemory)
+                $archiveMemory.Position = 0
+                $runtimeZip = [System.IO.Compression.ZipArchive]::new($archiveMemory, [System.IO.Compression.ZipArchiveMode]::Read, $true)
+            }
+            finally {
+                $archiveStream.Dispose()
+            }
+            try {
+                $runtimeEntries = [System.Collections.Generic.Dictionary[string, System.IO.Compression.ZipArchiveEntry]]::new([System.StringComparer]::Ordinal)
+                foreach ($entry in $runtimeZip.Entries) {
+                    if (-not $entry.FullName.EndsWith('/')) { $runtimeEntries[$entry.FullName] = $entry }
+                }
+                Assert-Equal $runtimeEntries.Count $manifest.assetArchive.entryCount 'Python runtime archive entry count'
+
+                $expectedPaths = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+                foreach ($file in $manifest.stagedFiles) {
+                    if ($file.archivePath) {
+                        Assert-True ($expectedPaths.Add("$($file.apkPath)!$($file.archivePath)")) "Duplicate staged asset archive entry: $($file.archivePath)"
+                        Assert-True $runtimeEntries.ContainsKey($file.archivePath) "Python runtime archive is missing: $($file.archivePath)"
+                        $apkPayloadEntry = $runtimeEntries[$file.archivePath]
+                    }
+                    else {
+                        Assert-True ($expectedPaths.Add([string]$file.apkPath)) "Duplicate staged APK entry: $($file.apkPath)"
+                        Assert-True $entries.ContainsKey($file.apkPath) "APK engine payload is missing: $($file.apkPath)"
+                        $apkPayloadEntry = $entries[$file.apkPath]
+                    }
+                    Assert-Equal $apkPayloadEntry.Length $file.bytes "$($file.apkPath) byte length"
+                    Assert-Equal (Get-ZipEntrySha256 $apkPayloadEntry) $file.sha256 "$($file.apkPath) SHA-256"
+                }
+            }
+            finally {
+                $runtimeZip.Dispose()
+                $archiveMemory.Dispose()
+            }
+
+            $nativeEntries = @($entries.Keys | Where-Object { $_ -match '^lib/[^/]+/' })
+            $nativeAbis = @($nativeEntries | ForEach-Object { ($_ -split '/')[1] } | Sort-Object -Unique)
+            Assert-Equal ($nativeAbis -join ',') 'arm64-v8a' 'APK native ABI set'
+            foreach ($nativeEntry in $nativeEntries) {
+                Assert-True ($expectedPaths.Contains($nativeEntry) -or $manifest.appBuild.allowedGeneratedNativePaths -contains $nativeEntry) "Unexpected APK native library: $nativeEntry"
+            }
+            $stagedNativeEntries = @($manifest.stagedFiles | Where-Object { $_.apkPath -like 'lib/arm64-v8a/*' })
+            Assert-True ($nativeEntries.Count -eq ($stagedNativeEntries.Count + $manifest.appBuild.allowedGeneratedNativePaths.Count)) 'APK native library count differs from the manifest.'
+            Assert-True (-not ($entries.Keys | Where-Object { $_ -match '\.aar$|libpython\.so$|libpython\.zip\.so$' })) 'The APK contains an obsolete Android engine AAR payload.'
+            Assert-True (-not ($entries.Keys | Where-Object { $_ -match 'youtubedl-android|0\.18\.1' })) 'The APK contains an obsolete Android engine package marker.'
+            foreach ($dexEntry in @($entries.Values | Where-Object { $_.FullName -match '^classes(\d+)?\.dex$' })) {
+                $dexStream = $dexEntry.Open()
+                $memory = [System.IO.MemoryStream]::new()
+                try {
+                    $dexStream.CopyTo($memory)
+                    $dexText = [System.Text.Encoding]::ASCII.GetString($memory.ToArray())
+                    Assert-True ($dexText -notmatch 'com/yausername/youtubedl_android|com/yausername/ffmpeg|0\.18\.1') 'The APK still contains classes compiled from the 0.18.1 engine AARs.'
+                }
+                finally {
+                    $dexStream.Dispose()
+                    $memory.Dispose()
+                }
+            }
+
+            $apkHash = Get-Sha256 $apkPath
+            $manifest | Add-Member -NotePropertyName apkVerification -NotePropertyValue ([ordered]@{
+                path = 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+                sha256 = $apkHash
+                bytes = (Get-Item -LiteralPath $apkPath).Length
+                abi = 'arm64-v8a'
+                verifiedEngineEntries = $manifest.stagedFileCount
+                verifiedNativeEntries = $nativeEntries.Count
+                verifiedRuntimeArchiveEntries = $manifest.assetArchive.entryCount
+                status = 'passed'
+            }) -Force
+            $manifest.packageStatus = 'APK provenance verified'
+        }
+        finally {
+            $zip.Dispose()
+        }
+
+        $evidenceManifest = Join-Path $root 'docs/gates/evidence/5a/5a-06-apk-engine-manifest.json'
+        $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+        Copy-Item -LiteralPath $manifestPath -Destination $evidenceManifest -Force
+        $nativePayloadCount = @($manifest.stagedFiles | Where-Object { $_.component -like 'CPython native*' -or $_.apkPath -like 'lib/arm64-v8a/*' }).Count
+        Write-Output "PASS: APK engine provenance verified ($($manifest.stagedFileCount) engine files; $nativePayloadCount native runtime files; $($manifest.apkVerification.verifiedRuntimeArchiveEntries) ZIP entries)."
+        Write-Output "APK SHA-256: $apkHash"
+        Write-Output "Manifest: docs/gates/evidence/5a/5a-06-apk-engine-manifest.json"
     }
     else {
         $ffmpegLock = $sourceLock.ffmpeg

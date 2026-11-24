@@ -7,19 +7,19 @@
 
 Gate 5A delivers the production Android engine provider, Kotlin engine adapter, and Rust `AndroidEngine`, then proves contract-compatible single and playlist downloads on a physical `arm64-v8a` device. Rust remains the queue owner and source of truth. Kotlin provides the engine bridge and callbacks; it does not add queue or business rules.
 
-Gate 4B was accepted on 2026-11-22; see [its checkpoint](evidence/4b/checkpoint.md). Gate 5A is authorized by that checkpoint. **The owner accepted this plan and its budget checkpoint on 2026-11-22.** The owner also approved the CPython source-build and JNI packaging path under 5A-02; runtime integration begins in 5A-03.
+Gate 4B was accepted on 2026-11-22; see [its checkpoint](evidence/4b/checkpoint.md). Gate 5A is authorized by that checkpoint. **The owner accepted this plan and its budget checkpoint on 2026-11-22.** The owner approved the CPython source-build and JNI packaging path under 5A-02. Tasks 5A-03 through 5A-06 have produced and audited the local arm64 package; 5A-07 and 5A-08 integrate it with the production engine.
 
 Read only these `PROJECT.md` ranges for this gate: `180-195,341-358,368-393,394-461,555-597,618-645,646-693,787-793`. These define Android engine/lifecycle behavior, platform constraints, the selected Android ownership model, the engine boundary, API contract, security/licensing, tests, Android acceptance criteria, and the Phase 5A deliverable.
 
 ### Android binary release blocker
 
-The current `youtubedl-android` `0.18.1` `library`, `ffmpeg`, and transitive `common` artifacts do not have established corresponding source, exact build inputs, and notices. The 0C-04A waiver covers local feasibility only. See the [package audit](evidence/0c/engine-package.md) and [owner architecture decision](evidence/0c/architecture-decision.md).
+The old `youtubedl-android` `0.18.1` `library`, `ffmpeg`, and transitive `common` artifacts had no established corresponding source, exact build inputs, and notices. Task 5A-06 removed them from the debug package and verified the replacement package's source materials, build manifests, and transitive notices. See the [5A-06 package evidence](evidence/5a/5a-06-package-provenance.md), [machine manifest](evidence/5a/5a-06-apk-engine-manifest.json), the prior [package audit](evidence/0c/engine-package.md), and the [owner architecture decision](evidence/0c/architecture-decision.md).
 
-Before production-engine integration, replace those opaque native binaries with a pinned, traceable `arm64-v8a` Python runtime carrying pinned yt-dlp/ejs, the pinned Android QuickJS build, and minimal pinned FFmpeg/ffprobe without x264 or x265. Preserve the existing Kotlin package-provider boundary so binary versions, paths, and FFmpeg configuration stay out of the engine adapter. Keep the selected Android/GPL licensing posture from `PROJECT.md`; inventory every native and packaged dependency, its licence, notice, source, patches, and reproducible build inputs. Any change to the approved licensing or engine architecture requires an owner decision.
+The package uses the approved traceable `arm64-v8a` Python runtime with yt-dlp/ejs, Android QuickJS, and minimal FFmpeg/ffprobe without x264 or x265. Preserve the Kotlin package-provider boundary so binary versions, paths, and FFmpeg configuration stay out of engine-adapter logic. Keep the selected Android/GPL licensing posture from `PROJECT.md`; any change to the approved licensing or engine architecture requires an owner decision.
 
-**Hard stop:** no Android APK/build may be published, uploaded, attached to a release, or shared with anyone until corresponding source, build inputs, and notices are established and the transitive dependency audit is complete. Local-only APKs may be used for owner-device tests. This gate does not authorize an Android release; Gate 5C owns release packaging.
+**Hard stop:** task 5A-06 established the source, build-input, and notice audit for the local package, but APK/build sharing remains prohibited until the owner reviews the evidence and explicitly records blocker closure. Local-only APKs may be used for owner-device tests. This gate does not authorize an Android release; Gate 5C owns release packaging.
 
-The previous Gate 0C architecture estimate for an owned Android engine was about 20–35 work sessions. Gate 5A may use the existing adapter around newly traceable binaries, but the Python packaging path is not yet selected. The owner must review the expected effort and approve the Python runtime/package strategy before that strategy is implemented. If the source/build work exceeds the owner's budget, stop and ask whether to review the desktop-only first-release fallback recorded in `docs/STATE.md`.
+The previous Gate 0C architecture estimate for an owned Android engine was about 20–35 work sessions. Gate 5A follows the owner-approved runtime/package strategy. Review the [5A-06 package evidence](evidence/5a/5a-06-package-provenance.md) before any APK/build sharing; the owner may then record blocker closure. The existing adapter is not yet wired to this package; that is task 5A-07.
 
 ### Scope boundaries
 
@@ -88,7 +88,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Acceptance: the APK-bound runtime has the pinned version and expected arm64 ELF dependencies; a YouTube JS challenge fixture succeeds on device once the adapter is wired; source/build/notices are included.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case quickjs`.
 
-### 5A-06 — Replace opaque Android payloads and close provenance audit
+### 5A-06 — Replace opaque Android payloads and close provenance audit — COMPLETED 2026-11-23
 
 - Goal: stage the approved runtime outputs, remove the `0.18.1` Maven AAR payloads, produce a machine-checked APK engine manifest, and complete the transitive licence/source/notice audit before production adapter integration.
 - Files to touch: `src-tauri/gen/android/app/build.gradle.kts`, focused Android package configuration, focused `scripts/gate-5a/`, `docs/engine-sources.md`, `docs/engine-builds.md`, `docs/toolchain.md`, `docs/THIRD-PARTY-NOTICES.md`, and `docs/gates/evidence/5a/`.
@@ -96,6 +96,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Dependencies: 5A-03, 5A-04, and 5A-05. This task is the release-blocker exit check; failure stops the gate before engine integration.
 - Acceptance: `npm run android:debug` packages only the approved traceable arm64 payload; APK hashes match the source-build manifest; there are no `0.18.1` engine AARs/native payloads; exact corresponding sources/build materials/notices and full transitive inventory are reviewable. Android APK/build sharing remains prohibited until owner review records blocker closure.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case package-provenance`.
+- Result: `npm run android:debug` and V2 passed. The APK manifest covers 4,230 engine files, including a 4,219-entry Python runtime archive; 24 source materials and 22 transitive components are recorded. APK SHA-256: `03aca66c894c0f76fb08d79e24b1c980149448ffa1752503d7091b962bc77b91`. See the [package evidence](evidence/5a/5a-06-package-provenance.md) and [machine manifest](evidence/5a/5a-06-apk-engine-manifest.json). Owner review is still required before APK/build sharing.
 
 ### 5A-07 — Wire the Kotlin engine provider and Tauri plugin
 
