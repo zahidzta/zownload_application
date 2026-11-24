@@ -73,10 +73,24 @@ def analyze(request: dict[str, object]) -> dict[str, object]:
 
     if info.get("_type") in ("playlist", "multi_video") or isinstance(info.get("entries"), list):
         entries = [entry for entry in (info.get("entries") or []) if isinstance(entry, dict)]
+        entry_urls: list[str] = []
+        for entry in entries:
+            entry_url = entry.get("webpage_url") or entry.get("original_url") or entry.get("url")
+            if not entry_url:
+                entry_url = entry.get("id")
+            entry_url = str(entry_url or "")
+            if not entry_url.startswith(("http://", "https://")):
+                extractor = str(entry.get("ie_key") or "").lower()
+                if extractor in ("youtube", "youtubeplaylist") and entry_url:
+                    entry_url = "https://www.youtube.com/watch?v=" + entry_url
+            entry_urls.append(entry_url)
         base.update({
             "kind": "playlist",
             "itemCount": int(info.get("playlist_count") or len(entries)),
             "itemTitles": [str(entry.get("title") or entry.get("id") or "") for entry in entries],
+            # Private Rust queue metadata. Rust strips this field before the
+            # response crosses the public AnalyzeResult contract.
+            "itemUrls": entry_urls,
         })
         return base
 

@@ -367,7 +367,6 @@ fn emit_removed<R: Runtime>(app: &AppHandle<R>, id: &str) {
 }
 
 #[cfg(target_os = "android")]
-#[tauri::command]
 pub async fn enqueue_download<R: Runtime>(
     app: AppHandle<R>,
     request: DownloadRequest,
@@ -399,7 +398,6 @@ fn enqueue_download_blocking<R: Runtime>(
 }
 
 #[cfg(target_os = "android")]
-#[tauri::command]
 pub async fn resume_download<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || resume_download_blocking(app, id))
         .await
@@ -631,7 +629,6 @@ fn run_download_blocking<R: Runtime>(app: AppHandle<R>, item: QueueItem) -> Resu
 }
 
 #[cfg(target_os = "android")]
-#[tauri::command]
 pub fn get_queue(queue: State<'_, SpikeQueue>) -> Result<Vec<QueueItem>, String> {
     with_queue(&queue, |store| Ok(store.current()?.into_iter().collect()))
 }

@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 zahidzta
 
-#[cfg(any(test, not(target_os = "windows")))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+use crate::contract::EngineUpdateOutcome;
+#[cfg(any(
+    test,
+    not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    ))
+))]
 use crate::contract::{ItemStatus, Progress};
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use crate::engine::updater::ReleaseClient;
@@ -12,25 +22,26 @@ use crate::engine::{
     queue::{QueueCoordinator, QueueEvent},
     updater, EnginePaths, EngineStatus,
 };
+#[cfg(target_os = "android")]
+use crate::engine::{AndroidEngine, AndroidQueueCoordinator, Engine};
 use crate::{
     contract::{
-        AnalyzeResult, AppError, AppUpdateInfo, DownloadRequest, EngineUpdateInfo,
-        EngineUpdateOutcome, ErrorCode, ErrorNotification, Format, HistoryEntry, Quality,
-        QueueItem, Settings,
+        AnalyzeResult, AppError, AppUpdateInfo, DownloadRequest, EngineUpdateInfo, ErrorCode,
+        ErrorNotification, Format, HistoryEntry, Quality, QueueItem, Settings,
     },
     persistence::Database,
 };
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-use tauri::Manager;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 type CommandResult<T> = Result<T, AppError>;
 
 enum NativeEvent {
+    #[cfg(any(not(target_os = "android"), test))]
     QueueUpdated(QueueItem),
+    #[cfg(any(not(target_os = "android"), test))]
     QueueRemoved(String),
     HistoryChanged,
     NotificationsChanged,
@@ -40,7 +51,9 @@ impl NativeEvent {
     #[cfg(test)]
     fn name(&self) -> &'static str {
         match self {
+            #[cfg(any(not(target_os = "android"), test))]
             Self::QueueUpdated(_) => "queue:item-updated",
+            #[cfg(any(not(target_os = "android"), test))]
             Self::QueueRemoved(_) => "queue:item-removed",
             Self::HistoryChanged => "history:changed",
             Self::NotificationsChanged => "error-notifications:changed",
@@ -50,7 +63,9 @@ impl NativeEvent {
     #[cfg(test)]
     fn payload(&self) -> serde_json::Value {
         match self {
+            #[cfg(any(not(target_os = "android"), test))]
             Self::QueueUpdated(item) => serde_json::to_value(item).unwrap(),
+            #[cfg(any(not(target_os = "android"), test))]
             Self::QueueRemoved(id) => serde_json::to_value(id).unwrap(),
             Self::HistoryChanged | Self::NotificationsChanged => serde_json::Value::Null,
         }
@@ -64,7 +79,9 @@ trait EventSink {
 impl EventSink for AppHandle {
     fn emit(&self, event: NativeEvent) {
         let result = match event {
+            #[cfg(any(not(target_os = "android"), test))]
             NativeEvent::QueueUpdated(item) => Emitter::emit(self, "queue:item-updated", item),
+            #[cfg(any(not(target_os = "android"), test))]
             NativeEvent::QueueRemoved(id) => Emitter::emit(self, "queue:item-removed", id),
             NativeEvent::HistoryChanged => Emitter::emit(self, "history:changed", ()),
             NativeEvent::NotificationsChanged => {
@@ -159,7 +176,15 @@ fn validate_request(request: &DownloadRequest) -> CommandResult<()> {
     Ok(())
 }
 
-#[cfg(any(test, not(target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    ))
+))]
 fn enqueue(
     database: &mut Database,
     request: DownloadRequest,
@@ -190,7 +215,15 @@ fn enqueue(
     Ok((id, Some(NativeEvent::QueueUpdated(item))))
 }
 
-#[cfg(any(test, not(target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    ))
+))]
 fn remove(database: &mut Database, id: String) -> CommandResult<((), Option<NativeEvent>)> {
     let item = database
         .get_queue()
@@ -289,7 +322,29 @@ pub async fn analyze_url(app: AppHandle, url: String) -> CommandResult<AnalyzeRe
             )
         })?;
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    {
+        let engine = app
+            .try_state::<Arc<AndroidEngine<tauri::Wry>>>()
+            .ok_or_else(|| deferred("Android engine bridge is unavailable"))?;
+        let engine = Arc::clone(engine.inner());
+        return tauri::async_runtime::spawn_blocking(move || {
+            engine.analyze(&url).map(|analysis| analysis.result)
+        })
+        .await
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Unknown,
+                Some(format!("analysis worker: {error}")),
+            )
+        })?;
+    }
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     {
         let _ = (app, url);
         Err(deferred(
@@ -313,7 +368,21 @@ pub fn enqueue_download(
             .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?;
         return queue.enqueue(request);
     }
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    {
+        let _ = database;
+        validate_request(&request)?;
+        return app
+            .try_state::<Arc<AndroidQueueCoordinator<tauri::Wry>>>()
+            .ok_or_else(|| deferred("Android queue coordinator unavailable"))?
+            .enqueue(request);
+    }
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     mutate(database.inner(), &app, |db| enqueue(db, request))
 }
 
@@ -324,7 +393,17 @@ pub fn pause_download(app: AppHandle, id: String) -> CommandResult<()> {
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .pause(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    return app
+        .try_state::<Arc<AndroidQueueCoordinator<tauri::Wry>>>()
+        .ok_or_else(|| deferred("Android queue coordinator unavailable"))?
+        .pause(&id);
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     {
         let _ = (app, id);
         Err(deferred("pause requires a running download engine"))
@@ -338,7 +417,17 @@ pub fn resume_download(app: AppHandle, id: String) -> CommandResult<()> {
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .resume(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    return app
+        .try_state::<Arc<AndroidQueueCoordinator<tauri::Wry>>>()
+        .ok_or_else(|| deferred("Android queue coordinator unavailable"))?
+        .resume(&id);
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     {
         let _ = (app, id);
         Err(deferred("resume requires a running download engine"))
@@ -351,6 +440,8 @@ pub fn remove_download(
     app: AppHandle,
     id: String,
 ) -> CommandResult<()> {
+    #[cfg(target_os = "android")]
+    let _ = database;
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     let _ = database;
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
@@ -358,7 +449,17 @@ pub fn remove_download(
         .try_state::<Arc<QueueCoordinator>>()
         .ok_or_else(|| deferred("desktop queue coordinator unavailable"))?
         .remove(&id);
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    return app
+        .try_state::<Arc<AndroidQueueCoordinator<tauri::Wry>>>()
+        .ok_or_else(|| deferred("Android queue coordinator unavailable"))?
+        .remove(&id);
+    #[cfg(not(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android"
+    )))]
     mutate(database.inner(), &app, |db| remove(db, id))
 }
 
@@ -512,7 +613,43 @@ pub fn engine_update(
     Ok(status)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn engine_check_update(app: AppHandle) -> CommandResult<EngineUpdateInfo> {
+    let engine = app
+        .try_state::<Arc<AndroidEngine<tauri::Wry>>>()
+        .ok_or_else(|| deferred("Android engine bridge is unavailable"))?;
+    let engine = Arc::clone(engine.inner());
+    tauri::async_runtime::spawn_blocking(move || engine.check_update())
+        .await
+        .map_err(|error| {
+            AppError::new(
+                ErrorCode::Unknown,
+                Some(format!("engine update check: {error}")),
+            )
+        })?
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn engine_update(app: AppHandle) -> CommandResult<EngineUpdateInfo> {
+    let engine = app
+        .try_state::<Arc<AndroidEngine<tauri::Wry>>>()
+        .ok_or_else(|| deferred("Android engine bridge is unavailable"))?;
+    let engine = Arc::clone(engine.inner());
+    tauri::async_runtime::spawn_blocking(move || engine.update())
+        .await
+        .map_err(|error| {
+            AppError::new(ErrorCode::Unknown, Some(format!("engine update: {error}")))
+        })?
+}
+
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android"
+)))]
 #[tauri::command]
 pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
@@ -520,7 +657,12 @@ pub fn engine_check_update() -> CommandResult<EngineUpdateInfo> {
     ))
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android"
+)))]
 #[tauri::command]
 pub fn engine_update() -> CommandResult<EngineUpdateInfo> {
     Err(deferred(
@@ -615,16 +757,16 @@ mod tests {
     }
 
     #[test]
-    fn desktop_registers_every_shared_command_name() {
+    fn every_platform_registers_the_shared_command_names() {
         let source = include_str!("../lib.rs").replace("\r\n", "\n");
-        let desktop = source
-            .split("#[cfg(not(target_os = \"android\"))]\n    let builder = builder.invoke_handler")
+        let handler = source
+            .split("let builder = builder.invoke_handler(tauri::generate_handler![")
             .nth(1)
             .unwrap()
             .split("]);")
             .next()
             .unwrap();
-        let names: Vec<_> = desktop
+        let names: Vec<_> = handler
             .split("commands::")
             .skip(1)
             .map(|part| {
@@ -750,7 +892,12 @@ mod tests {
         let error = mutate(&database, &sink, |db| enqueue(db, valid)).unwrap_err();
         assert_eq!(error.code, ErrorCode::Unknown);
         assert!(sink.events.borrow().is_empty());
-        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(
+            target_os = "windows",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "android"
+        )))]
         {
             assert_eq!(
                 engine_check_update().unwrap_err().code,

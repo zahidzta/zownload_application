@@ -157,7 +157,7 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
             sink.lock().unwrap().push(event);
         }),
     );
-    let first = coordinator.enqueue(request("one")).unwrap();
+    let first = coordinator.enqueue(request("hold-for-pause")).unwrap();
     until(|| {
         db.lock()
             .unwrap()
@@ -205,11 +205,17 @@ fn sequential_pause_resume_settlement_and_reopen_are_durable() {
     coordinator.resume(&first).unwrap();
     until(|| db.lock().unwrap().get_history().unwrap().len() == 2);
     assert!(!part.exists());
-    assert_eq!(root.join("Chosen/one.mp4").metadata().unwrap().len(), 20);
+    assert_eq!(
+        root.join("Chosen/hold-for-pause.mp4")
+            .metadata()
+            .unwrap()
+            .len(),
+        20
+    );
     assert_eq!(root.join("Later/two.mp4").metadata().unwrap().len(), 20);
     let history = db.lock().unwrap().get_history().unwrap();
     assert_eq!(history.len(), 2);
-    assert!(history[0].request.url.ends_with("/one"));
+    assert!(history[0].request.url.ends_with("/hold-for-pause"));
     let events = events.lock().unwrap();
     let removals: Vec<_> = events
         .iter()
