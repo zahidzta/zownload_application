@@ -4,7 +4,7 @@
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
 - **Gate 5A plan:** Accepted by the owner on 2026-11-22, including its budget checkpoint. The owner selected CPython `3.14.10` for Android; the traceable runtime build is complete.
-- **Next task:** 5A-08 — implement Rust `AndroidEngine` and contract integration over the accepted Kotlin bridge; 5A-07 V3 passed.
+- **Next task:** 5A-09 — prove single MP3, single MP4, and playlist downloads on a physical `arm64-v8a` device; 5A-08 V3 passed.
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
 - **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
 - **Completed 5A-03:** Built locked CPython 3.14.10 with yt-dlp/EJS for arm64; work commit `3b34df2`; [runtime build evidence](gates/evidence/5a/5a-03-cpython-runtime.md).
@@ -12,6 +12,7 @@
 - **Completed 5A-05:** Rebuilt locked QuickJS `2026-06-04` for Android arm64 and verified its ELF dependencies and yt-dlp/EJS pairing; commit `843e056`; [build evidence](gates/evidence/5a/5a-05-quickjs.md).
 - **Completed 5A-06:** Replaced opaque Android payloads and verified the arm64 APK provenance; work commit `fdd69d4`; [package evidence](gates/evidence/5a/5a-06-package-provenance.md) and [manifest](gates/evidence/5a/5a-06-apk-engine-manifest.json).
 - **Completed 5A-07:** Added the Kotlin provider/plugin, JNI runner, progress/cancel bridge, and verified updater; commit `4059152`; V3 passed; [evidence](gates/evidence/5a/5a-07-kotlin-engine.md).
+- **Completed 5A-08:** Added Rust Android engine, shared queue/history/settings command wiring, and private playlist bridge metadata; commit `cc06661`; V3 passed; [evidence](gates/evidence/5a/5a-08-android-rust-engine.md).
 - Android CI maintenance: while the 5A-06 distribution blocker remains open, CI checks pinned Android toolchains without building APKs; Android checks passed in [Actions run 45317287226](https://github.com/zahidzta/zownload_application/actions/runs/45317287226) and [45317294613](https://github.com/zahidzta/zownload_application/actions/runs/45317294613), workflow fix `67a0012`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
