@@ -5,6 +5,7 @@ package com.zownload.app
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,9 +34,47 @@ class AndroidEngineAdapterTest {
         }
     }
 
+    @Test
+    fun adapterForwardsDownloadProgressAndReturnsEngineResult() {
+        val provider = FakePackage()
+        val adapter = AndroidEngineAdapter(provider)
+        var progress: JSONObject? = null
+        val request = JSONObject()
+
+        val result = adapter.downloadOne(request, "queue-entry-1", "cache/song.mp3") {
+            progress = it
+        }
+
+        assertEquals("queue-entry-1", provider.downloadOperationId)
+        assertSame(request, provider.downloadRequest)
+        assertEquals("cache/song.mp3", provider.outputTemplate)
+        assertSame(provider.progressPayload, progress)
+        assertSame(provider.downloadResult, result)
+    }
+
+    @Test
+    fun adapterForwardsEngineUpdateCalls() {
+        val provider = FakePackage()
+        val adapter = AndroidEngineAdapter(provider)
+
+        assertSame(provider.updateInfo, adapter.checkUpdate())
+        assertSame(provider.updateResult, adapter.update())
+        assertEquals(1, provider.checkUpdateCalls)
+        assertEquals(1, provider.updateCalls)
+    }
+
     private class FakePackage : AndroidEnginePackage {
         var cancelledId: String? = null
         var analysisError: EngineBridgeException? = null
+        var downloadOperationId: String? = null
+        var downloadRequest: JSONObject? = null
+        var outputTemplate: String? = null
+        var checkUpdateCalls = 0
+        var updateCalls = 0
+        val progressPayload = JSONObject()
+        val downloadResult = JSONObject()
+        val updateInfo = JSONObject()
+        val updateResult = JSONObject()
         override fun initialize() = Unit
 
         override fun analyze(url: String): JSONObject {
@@ -48,15 +87,27 @@ class AndroidEngineAdapterTest {
             operationId: String,
             outputTemplate: String,
             onProgress: (JSONObject) -> Unit,
-        ): JSONObject = throw AssertionError("Download is not used in this unit test")
+        ): JSONObject {
+            downloadOperationId = operationId
+            downloadRequest = request
+            this.outputTemplate = outputTemplate
+            onProgress(progressPayload)
+            return downloadResult
+        }
 
         override fun cancel(operationId: String): Boolean {
             cancelledId = operationId
             return true
         }
 
-        override fun checkUpdate(): JSONObject = throw AssertionError("Update is not used in this unit test")
+        override fun checkUpdate(): JSONObject {
+            checkUpdateCalls += 1
+            return updateInfo
+        }
 
-        override fun update(): JSONObject = throw AssertionError("Update is not used in this unit test")
+        override fun update(): JSONObject {
+            updateCalls += 1
+            return updateResult
+        }
     }
 }

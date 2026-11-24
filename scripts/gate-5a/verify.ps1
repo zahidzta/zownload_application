@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance', 'kotlin-engine')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance', 'kotlin-engine', 'rust-engine')]
     [string]$Case
 )
 
@@ -346,6 +346,84 @@ try {
             throw "Android Kotlin/JNI bridge verification failed with exit code $gradleStatus."
         }
         Write-Output 'PASS: Android Kotlin provider/plugin, JNI bridge, and focused unit tests compiled successfully.'
+    }
+    elseif ($Case -eq 'rust-engine') {
+        Assert-True $HostIsWindows 'The focused Android Rust bridge check is configured for Windows with the pinned local NDK.'
+        $rustPath = Join-Path $root 'src-tauri/src/engine/android.rs'
+        $contractPath = Join-Path $root 'src-tauri/src/engine/android_contract.rs'
+        $libPath = Join-Path $root 'src-tauri/src/lib.rs'
+        $commandsPath = Join-Path $root 'src-tauri/src/commands/mod.rs'
+        foreach ($path in @($rustPath, $contractPath, $libPath, $commandsPath)) {
+            Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Android Rust engine source is missing: $path"
+        }
+        $rustText = Get-Content -LiteralPath $rustPath -Raw
+        $contractText = Get-Content -LiteralPath $contractPath -Raw
+        $libText = Get-Content -LiteralPath $libPath -Raw
+        foreach ($operation in @('analyze', 'downloadOne', 'cancel', 'checkUpdate', 'update')) {
+            Assert-True ($rustText.Contains("`"$operation`"")) "Rust Android engine omits '$operation'."
+        }
+        Assert-True ($rustText.Contains('AndroidQueueCoordinator') -and $rustText.Contains('settle_queue_item')) 'Rust does not own Android queue settlement and history persistence.'
+        Assert-True ($rustText.Contains('queue:item-updated') -and $rustText.Contains('history:changed')) 'Rust Android events do not use the shared event contract.'
+        Assert-True ($contractText.Contains('itemUrls') -and $contractText.Contains('map_failure')) 'The private playlist and typed-error bridge mappings are missing.'
+        Assert-True ($libText.Contains('commands::analyze_url') -and $libText.Contains('commands::get_settings')) 'The Android handler is not wired to the shared commands.'
+
+        $workDir = Join-Path $root 'work/android/gate-5a/5a-08-rust-engine'
+        New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+        $contractLog = Join-Path $workDir 'check-contracts.log'
+        $cargoTestLog = Join-Path $workDir 'cargo-test.log'
+        $cargoCheckLog = Join-Path $workDir 'cargo-android-check.log'
+        $kotlinLog = Join-Path $workDir 'kotlin-bridge.log'
+
+        $contractCommand = "npm run check:contracts > `"$contractLog`" 2>&1"
+        $contractProcess = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/s', '/c', $contractCommand) `
+            -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
+        if ($contractProcess.ExitCode -ne 0) {
+            Get-Content -LiteralPath $contractLog -Tail 50 | Write-Output
+            throw "Contract parity check failed with exit code $($contractProcess.ExitCode)."
+        }
+        $manifest = Join-Path $root 'src-tauri/Cargo.toml'
+        $testCommand = "cargo test --manifest-path `"$manifest`" > `"$cargoTestLog`" 2>&1"
+        $testProcess = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/s', '/c', $testCommand) `
+            -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
+        if ($testProcess.ExitCode -ne 0) {
+            Get-Content -LiteralPath $cargoTestLog -Tail 50 | Write-Output
+            throw "Rust desktop and contract regression tests failed with exit code $($testProcess.ExitCode)."
+        }
+
+        $sdk = Join-Path $env:LOCALAPPDATA 'Android/Sdk'
+        $ndk = Join-Path $sdk 'ndk/30.0.16248370'
+        $ndkBin = Join-Path $ndk 'toolchains/llvm/prebuilt/windows-x86_64/bin'
+        $clang = Join-Path $ndkBin 'aarch64-linux-android24-clang.cmd'
+        $archiver = Join-Path $ndkBin 'llvm-ar.exe'
+        Assert-True (Test-Path -LiteralPath $clang -PathType Leaf) 'Pinned Android NDK Clang wrapper is missing.'
+        Assert-True (Test-Path -LiteralPath $archiver -PathType Leaf) 'Pinned Android NDK LLVM archiver is missing.'
+        $env:ANDROID_NDK_HOME = $ndk
+        $env:ANDROID_HOME = $sdk
+        $env:ANDROID_SDK_ROOT = $sdk
+        $env:NDK_HOME = $ndk
+        $env:CC_aarch64_linux_android = $clang
+        $env:AR_aarch64_linux_android = $archiver
+        $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
+        $checkCommand = "cargo check --manifest-path `"$manifest`" --target aarch64-linux-android > `"$cargoCheckLog`" 2>&1"
+        $checkProcess = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/s', '/c', $checkCommand) `
+            -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
+        if ($checkProcess.ExitCode -ne 0) {
+            Get-Content -LiteralPath $cargoCheckLog -Tail 50 | Write-Output
+            throw "Android Rust cross-target check failed with exit code $($checkProcess.ExitCode)."
+        }
+
+        $jdk = Join-Path $root 'work/android/gate-5a/5a-03-cpython/host-tools/corretto-windows/jdk21.0.11_10'
+        Assert-True (Test-Path -LiteralPath (Join-Path $jdk 'bin/java.exe') -PathType Leaf) 'Pinned Corretto 21 JDK is missing.'
+        $env:JAVA_HOME = $jdk
+        $env:PATH = "$jdk\bin;$env:PATH"
+        $kotlinCommand = "powershell -NoProfile -File `"$PSCommandPath`" -Case kotlin-engine > `"$kotlinLog`" 2>&1"
+        $kotlinProcess = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/s', '/c', $kotlinCommand) `
+            -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
+        if ($kotlinProcess.ExitCode -ne 0) {
+            Get-Content -LiteralPath $kotlinLog -Tail 50 | Write-Output
+            throw "Kotlin/JNI bridge verification failed with exit code $($kotlinProcess.ExitCode)."
+        }
+        Write-Output 'PASS: contract parity, Rust desktop tests, Android Rust cross-target, and Kotlin/JNI bridge checks passed.'
     }
     elseif ($Case -eq 'python-runtime') {
         Assert-True $HostIsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'

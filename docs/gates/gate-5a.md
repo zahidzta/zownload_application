@@ -108,7 +108,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case kotlin-engine`.
 - Result: V3 passed: focused Kotlin/JNI verifier, contract parity, and Rust tests. See the [5A-07 evidence](evidence/5a/5a-07-kotlin-engine.md). Physical-device behavior remains in 5A-09.
 
-### 5A-08 — Implement Rust `AndroidEngine` and contract integration
+### 5A-08 — Implement Rust `AndroidEngine` and contract integration — COMPLETED 2026-11-24
 
 - Goal: implement the Android side of the existing Rust `Engine` boundary and wire it into the shared queue, history, settings, and commands while preserving the public contract and desktop implementations.
 - Files to touch: focused `src-tauri/src/engine/`, `src-tauri/src/lib.rs`, Android bridge tests, and `docs/gates/evidence/5a/`.
@@ -116,6 +116,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Dependencies: 5A-07; no edits to `shared/contract.ts` or `src-tauri/src/contract.rs` unless an owner-approved requirement change is made.
 - Acceptance: Rust owns all queue state and persistence; existing command/event names and payloads remain identical; tests cover bridge results, progress, cancellation, typed failures, engine update calls, and desktop regression.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case rust-engine`.
+- Result: V3 passed. See [Rust Android engine evidence](evidence/5a/5a-08-android-rust-engine.md). Physical-device and public Downloads proof remain in 5A-09 and Gate 5B.
 
 ### 5A-09 — Device proof and Gate 5A checkpoint
 
