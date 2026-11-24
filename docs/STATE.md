@@ -4,7 +4,7 @@
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
 - **Gate 5A plan:** Accepted by the owner on 2026-11-22, including its budget checkpoint. The owner selected CPython `3.14.10` for Android; the traceable runtime build is complete.
-- **Next task:** 5A-09 — prove single MP3, single MP4, and playlist downloads on a physical `arm64-v8a` device; 5A-08 V3 passed.
+- **Next task:** 5A-09 — prove single MP3, single MP4, and playlist downloads on a physical `arm64-v8a` device; the owner accepted the [5A-08 progress checkpoint](gates/evidence/5a/5a-08-progress-checkpoint.md) on 2026-11-24. Gate 5A acceptance still requires V4 and the final owner checkpoint.
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
 - **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
 - **Completed 5A-03:** Built locked CPython 3.14.10 with yt-dlp/EJS for arm64; work commit `3b34df2`; [runtime build evidence](gates/evidence/5a/5a-03-cpython-runtime.md).
