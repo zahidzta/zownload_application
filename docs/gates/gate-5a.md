@@ -106,6 +106,7 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Dependencies: 5A-06; no new library or framework without owner approval.
 - Acceptance: provider uses manifest-verified package inputs without embedding their versions, paths, or FFmpeg flags in adapter logic; cancellation and progress cross the bridge once; failures remain typed; Kotlin owns no queue/history/settings behavior.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case kotlin-engine`.
+- Result: V3 passed: focused Kotlin/JNI verifier, contract parity, and Rust tests. See the [5A-07 evidence](evidence/5a/5a-07-kotlin-engine.md). Physical-device behavior remains in 5A-09.
 
 ### 5A-08 — Implement Rust `AndroidEngine` and contract integration
 
