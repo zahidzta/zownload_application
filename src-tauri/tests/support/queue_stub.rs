@@ -2,7 +2,14 @@
 // SPDX-FileCopyrightText: 2026 zahidzta
 
 //! Deterministic yt-dlp stand-in for the Windows queue integration test.
-use std::{env, fs::{self, OpenOptions}, io::{self, Write}, path::PathBuf, thread, time::Duration};
+use std::{
+    env,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::PathBuf,
+    thread,
+    time::{Duration, Instant},
+};
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -53,6 +60,15 @@ fn main() {
         fs::write(&partial, b"1234567890").unwrap();
         println!("ZP1|{id}|downloading|10|20");
         io::stdout().flush().unwrap();
+        if id == "hold-for-pause" {
+            // Keep the pause/resume integration test deterministic even on a
+            // busy runner. The test's supervisor should stop this process.
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(20));
+            }
+            panic!("pause test did not stop the held download");
+        }
         thread::sleep(Duration::from_millis(700));
     } else {
         assert_eq!(offset, 10, "resume must see the saved byte offset");

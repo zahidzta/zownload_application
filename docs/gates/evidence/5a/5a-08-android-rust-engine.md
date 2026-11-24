@@ -32,6 +32,11 @@ retains the physical-device proof through the validated Gate 0C output path.
   NDK r30 / API 24 Clang and LLVM archiver.
 - The focused Android build passed Kotlin compilation, JNI native build, and
   `testArmDebugUnitTest` under the pinned Corretto 21 JDK.
+- Foundation CI run [45444928954](https://github.com/zahidzta/zownload_application/actions/runs/45444928954)
+  exposed a Windows queue-test race: the 700 ms media stub could finish before
+  the pause call. The pause fixture now waits for the supervisor to stop it;
+  all five `queue_lifecycle` tests and the full local Foundation verification
+  pass on Windows.
 - `git diff --check` passed. No APK or build output was shared.
 
 ## Limits
