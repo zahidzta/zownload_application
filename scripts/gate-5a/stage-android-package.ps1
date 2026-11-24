@@ -295,7 +295,7 @@ $manifest = [ordered]@{
     schema = 1
     spdx = 'GPL-3.0-or-later'
     package = [ordered]@{ name = 'Zownload Android engine'; version = 'Gate 5A-06'; target = 'aarch64-linux-android'; abi = 'arm64-v8a'; apiLevel = 24 }
-    appBuild = [ordered]@{ minSdk = 24; targetSdk = 36; allowedGeneratedNativePaths = @('lib/arm64-v8a/libzownload_lib.so') }
+    appBuild = [ordered]@{ minSdk = 24; targetSdk = 36; allowedGeneratedNativePaths = @('lib/arm64-v8a/libzownload_lib.so', 'lib/arm64-v8a/libzownload_python_bridge.so') }
     assetArchive = [ordered]@{
         apkPath = 'assets/python-runtime.zip'
         packagePath = 'work/android/gate-5a/5a-06-package/package/apk-assets/python-runtime.zip'

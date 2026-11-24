@@ -72,9 +72,13 @@ android {
         jniLibs.srcDir(enginePackage.resolve("jniLibs"))
         assets.srcDir(enginePackage.resolve("apk-assets"))
 
-        // The 0C spike still links to the opaque 0.18.1 AAR API. Keep it out of
-        // this package-only build; task 5A-07 replaces these classes with the
-        // production provider before engine functionality is compiled again.
+        // The 0C spike files remain as historical device-test sources. The
+        // production Kotlin plugin uses the staged 5A-06 package below.
+    }
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/jni/Android.mk")
+        }
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -88,14 +92,11 @@ kotlin {
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    if (name.contains("Debug", ignoreCase = true)) {
-        exclude(
-            "**/AndroidEngineAdapter.kt",
-            "**/AndroidSpikePlugin.kt",
-            "**/SpikeDownloadService.kt",
-            "**/VerifiedYtDlpUpdate.kt",
-        )
-    }
+    exclude(
+        "**/AndroidSpikePlugin.kt",
+        "**/SpikeDownloadService.kt",
+        "**/VerifiedYtDlpUpdate.kt",
+    )
 }
 
 rust {

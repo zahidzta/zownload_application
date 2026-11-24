@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance', 'kotlin-engine')]
     [string]$Case
 )
 
@@ -294,7 +294,60 @@ try {
     Assert-True ($toolchainText.Contains('ANDROID_API_LEVEL=24')) 'Runtime API level setup is missing.'
     Assert-True ($toolchainText.Contains('30.0.16248370')) 'Pinned NDK setup is missing.'
 
-    if ($Case -eq 'python-runtime') {
+    if ($Case -eq 'kotlin-engine') {
+        $androidRoot = Join-Path $root 'src-tauri/gen/android'
+        $adapterPath = Join-Path $androidRoot 'app/src/main/java/com/zownload/app/AndroidEngineAdapter.kt'
+        $providerPath = Join-Path $androidRoot 'app/src/main/java/com/zownload/app/BundledEnginePackage.kt'
+        $pluginPath = Join-Path $androidRoot 'app/src/main/java/com/zownload/app/AndroidEnginePlugin.kt'
+        $nativePath = Join-Path $androidRoot 'app/src/main/jni/python_bridge.c'
+        $makePath = Join-Path $androidRoot 'app/src/main/jni/Android.mk'
+        $runnerPath = Join-Path $androidRoot 'app/src/main/assets/engine_runner.py'
+        $manifestPath = Join-Path $root 'docs/gates/evidence/5a/5a-06-apk-engine-manifest.json'
+        foreach ($path in @($adapterPath, $providerPath, $pluginPath, $nativePath, $makePath, $runnerPath, $manifestPath)) {
+            Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Android engine bridge file is missing: $path"
+        }
+
+        $adapterText = Get-Content -LiteralPath $adapterPath -Raw
+        $providerText = Get-Content -LiteralPath $providerPath -Raw
+        $pluginText = Get-Content -LiteralPath $pluginPath -Raw
+        $nativeText = Get-Content -LiteralPath $nativePath -Raw
+        $runnerText = Get-Content -LiteralPath $runnerPath -Raw
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+
+        Assert-True ($adapterText.Contains('AndroidEnginePackage')) 'The adapter is not behind the approved package provider.'
+        Assert-True (-not ($adapterText -match 'com\.yausername|0\.18\.1|libffmpeg|libqjs|python-runtime')) 'Package paths or retired AAR details leaked into the adapter.'
+        foreach ($operation in @('analyze', 'downloadOne', 'cancel', 'checkUpdate', 'update')) {
+            Assert-True ($pluginText.Contains("fun $operation(")) "The Kotlin plugin omits '$operation'."
+        }
+        Assert-True ($pluginText.Contains('Channel?') -and $pluginText.Contains('onProgress?.send')) 'Progress is not sent over the Tauri channel.'
+        Assert-True ($pluginText.Contains('result.put("ok", false)') -and $pluginText.Contains('detail.put("code"')) 'Kotlin failures are not returned as typed bridge errors.'
+        Assert-True ($providerText.Contains('NativePythonBridge.run')) 'The package provider does not enter the embedded Python runtime.'
+        Assert-True ($providerText.Contains('activeOperations') -and $providerText.Contains('marker.createNewFile')) 'Cancellation is not scoped to a transient engine operation.'
+        Assert-True ($providerText.Contains('canonicalRoot') -and $providerText.Contains('python-runtime')) 'The runtime asset extraction is not guarded against unsafe archive paths.'
+        Assert-True ($runnerText.Contains('yt_dlp.YoutubeDL') -and $runnerText.Contains('progress_hooks')) 'The Python engine runner lacks yt-dlp calls or progress callbacks.'
+        Assert-True ($runnerText.Contains('quickjs:') -and $runnerText.Contains('ffmpeg_location')) 'The Python runner does not use the package-provided JS and FFmpeg paths.'
+        Assert-True ($nativeText.Contains('Py_Initialize') -and $nativeText.Contains('PyEval_SaveThread')) 'The JNI bridge does not initialize and release the embedded interpreter.'
+        Assert-True ($nativeText.Contains('PyGILState_Ensure') -and $nativeText.Contains('PyRun_SimpleStringFlags')) 'The JNI bridge does not serialize Python calls safely across native threads.'
+        Assert-True ($makePath -and (Get-Content -LiteralPath $makePath -Raw).Contains('zownload_python_bridge')) 'The NDK build does not define the JNI bridge library.'
+        Assert-True (@($manifest.stagedFiles | Where-Object { $_.apkPath -eq 'lib/arm64-v8a/libpython3.so' }).Count -eq 1) 'The package manifest does not verify the Python runtime library.'
+        Assert-True ((Get-Content -LiteralPath (Join-Path $PSScriptRoot 'stage-android-package.ps1') -Raw).Contains('libzownload_python_bridge.so')) 'The Android package verifier does not allow the source-built JNI library.'
+
+        $workDir = Join-Path $root 'work/android/gate-5a/5a-07-kotlin-engine'
+        New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+        $gradleLog = Join-Path $workDir "gradle-$PID.log"
+        $gradle = Join-Path $androidRoot 'gradlew.bat'
+        Assert-True (Test-Path -LiteralPath $gradle -PathType Leaf) 'The generated Android Gradle wrapper is missing.'
+        $gradleCommand = ".\gradlew.bat --no-daemon --console=plain :app:compileArmDebugKotlin :app:externalNativeBuildArmDebug :app:testArmDebugUnitTest > `"$gradleLog`" 2>&1"
+        $gradleProcess = Start-Process -FilePath $env:ComSpec -ArgumentList @('/d', '/s', '/c', $gradleCommand) `
+            -WorkingDirectory $androidRoot -WindowStyle Hidden -Wait -PassThru
+        $gradleStatus = $gradleProcess.ExitCode
+        if ($gradleStatus -ne 0) {
+            if (Test-Path -LiteralPath $gradleLog) { Get-Content -LiteralPath $gradleLog -Tail 50 | Write-Output }
+            throw "Android Kotlin/JNI bridge verification failed with exit code $gradleStatus."
+        }
+        Write-Output 'PASS: Android Kotlin provider/plugin, JNI bridge, and focused unit tests compiled successfully.'
+    }
+    elseif ($Case -eq 'python-runtime') {
         Assert-True $HostIsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'
         $buildScript = Join-Path $PSScriptRoot 'build-python-runtime.sh'
         Assert-True (Test-Path -LiteralPath $buildScript -PathType Leaf) 'The CPython runtime build script is missing.'
