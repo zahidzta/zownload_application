@@ -11,7 +11,7 @@
 - **Completed 5A-04:** Built pinned Android arm64 FFmpeg/ffprobe and verified MP3/MP4 paths; commit `af2217e`; [build evidence](gates/evidence/5a/5a-04-ffmpeg.md).
 - **Completed 5A-05:** Rebuilt locked QuickJS `2026-06-04` for Android arm64 and verified its ELF dependencies and yt-dlp/EJS pairing; commit `843e056`; [build evidence](gates/evidence/5a/5a-05-quickjs.md).
 - **Completed 5A-06:** Replaced opaque Android payloads and verified the arm64 APK provenance; work commit `fdd69d4`; [package evidence](gates/evidence/5a/5a-06-package-provenance.md) and [manifest](gates/evidence/5a/5a-06-apk-engine-manifest.json).
-- Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
+- Android CI maintenance: while the 5A-06 distribution blocker remains open, CI checks pinned Android toolchains without building APKs; Android checks passed in [Actions run 45317287226](https://github.com/zahidzta/zownload_application/actions/runs/45317287226) and [45317294613](https://github.com/zahidzta/zownload_application/actions/runs/45317294613), workflow fix `67a0012`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
 
