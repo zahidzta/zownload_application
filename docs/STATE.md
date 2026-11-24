@@ -4,12 +4,13 @@
 
 - **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
 - **Gate 5A plan:** Accepted by the owner on 2026-11-22, including its budget checkpoint. The owner selected CPython `3.14.10` for Android; the traceable runtime build is complete.
-- **Next task:** 5A-06 — replace opaque Android payloads and close the package provenance audit; prerequisites 5A-03, 5A-04, and 5A-05 are complete.
+- **Next task:** 5A-07 — wire the Kotlin engine provider and Tauri plugin using the audited 5A-06 package; prerequisites 5A-03 through 5A-06 are complete.
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
 - **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
 - **Completed 5A-03:** Built locked CPython 3.14.10 with yt-dlp/EJS for arm64; work commit `3b34df2`; [runtime build evidence](gates/evidence/5a/5a-03-cpython-runtime.md).
 - **Completed 5A-04:** Built pinned Android arm64 FFmpeg/ffprobe and verified MP3/MP4 paths; commit `af2217e`; [build evidence](gates/evidence/5a/5a-04-ffmpeg.md).
 - **Completed 5A-05:** Rebuilt locked QuickJS `2026-06-04` for Android arm64 and verified its ELF dependencies and yt-dlp/EJS pairing; commit `843e056`; [build evidence](gates/evidence/5a/5a-05-quickjs.md).
+- **Completed 5A-06:** Replaced opaque Android payloads and verified the arm64 APK provenance; work commit `fdd69d4`; [package evidence](gates/evidence/5a/5a-06-package-provenance.md) and [manifest](gates/evidence/5a/5a-06-apk-engine-manifest.json).
 - Android CI maintenance: Platform-Tools assertion now matches `37.0.3`; SDK/NDK checks and the debug APK build passed in [Actions run 44972489307](https://github.com/zahidzta/zownload_application/actions/runs/44972489307), fix commit `e9796cb`.
 - **Windows app fix:** The engine-hash correction is merged to `main`, but published Windows v0.0.2 still has the mismatched resources. A new signed Windows build and update/install review remain pending.
 - **Owner direction:** The v0.0.2 desktop window is horizontal 1350×770; the stable release was authorized for update review.
@@ -43,14 +44,13 @@
 
 ## RELEASE BLOCKER — Android distribution
 
-- Corresponding source, exact build inputs, and third-party notices for youtubedl-android 0.18.1 `library`, `ffmpeg`, and `common` binaries are **not established**. The 0C-04A waiver is for local feasibility only. **Do not publish, upload, attach to a release, or share any Android APK/build until this gap is resolved.**
-- Before the production Android engine (first Phase 5 task block), replace those binaries with traceable minimal pinned arm64 FFmpeg/ffprobe without x264/x265, pinned QuickJS, and a traceable Python runtime with yt-dlp; provide corresponding source, build inputs, and notices. If this exceeds budget, a desktop-only first release is a fallback for owner review; it does not clear the blocker.
-- Other open release items: legal review before public release; full transitive dependency licence audit; release APK size measurement after binary replacement; per-release source bundle and Microsoft runtime entitlement checks. Gate 3C must prove NSIS/MSI installed upgrades; if an installer cannot update reliably, evaluate the FR-75 direct-link fallback.
+- The former opaque `0.18.1` AAR source/build/notice gap and package provenance audit were resolved locally in 5A-06; see its [evidence](gates/evidence/5a/5a-06-package-provenance.md). **Do not share any Android APK/build until the owner reviews this evidence and explicitly closes the distribution blocker.**
+- Other open release items: legal review before public release; release APK size measurement; per-release source bundle and Microsoft runtime entitlement checks. Gate 3C must prove NSIS/MSI installed upgrades; if an installer cannot update reliably, evaluate the FR-75 direct-link fallback.
 - Deferred Android follow-ups: recheck classified CI/deprecation warnings on Tauri or AGP upgrades and replace the deprecated production foreground-service notification builder; test WebView Back/predictive Back on a physical device at `targetSdk 36`; keep the Kotlin adapter independent of bundled binary paths, versions, and FFmpeg configuration.
 
 ## Open owner questions
 
 - Physical-device touch and assistive-technology review remains open for the accepted 1B/1C UI; see their checkpoints.
 - Gate 0B records automated VLC playback, not a human listening/viewing claim. If human playback remains required, the owner's review is not recorded; see the [checkpoint](gates/evidence/0b/checkpoint.md).
-- If Android binary replacement exceeds budget, the owner must review whether to choose the desktop-only first-release fallback. The distribution blocker remains until the source/build/notice gap is resolved.
+- Owner review of the 5A-06 package evidence and explicit distribution-blocker closure remain pending before APK/build sharing.
 - The Gate 2C native review left the test-created `C:/Users/zahid/Downloads/effect-alarm-siren.mp3` after deletion was rejected. Preserve it unless the owner directs otherwise; path and hash are in the [native review](gates/evidence/2c/native-downloads.md).
