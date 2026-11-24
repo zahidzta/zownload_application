@@ -30,7 +30,7 @@ The local SDK initially had r27c (`27.2.12479018`), a dated observation of this 
 
 `npm run tauri -- android init --ci --skip-targets-install` with Tauri CLI 2.12.0 generated `src-tauri/gen/android`. The generated wrapper pins **Gradle 9.6.1**, and both generated build scripts pin **Android Gradle Plugin 9.3.1**; the root build script pins **Kotlin Gradle Plugin 2.2.10**. These generated versions are retained. [Tauri 2.12's Android template notes](https://github.com/tauri-apps/tauri-docs/blob/v2/src/content/docs/blog/tauri-2.12.mdx) describe the move to Gradle 9 and Kotlin 2; [Android's AGP compatibility guidance](https://developer.android.com/build/releases/about-agp) documents the Gradle/JDK relationship.
 
-The generated app module explicitly sets `compileSdk = 36`, `targetSdk = 36`, `minSdk = 24`, `buildToolsVersion = "36.0.0"`, and `ndkVersion = "30.0.16248370"`, matching the selected SDK, Build-Tools, NDK and OS pins above. The template's API 37 defaults were changed to API 36 because API 36 is the Gate 0A platform pin. Java and Kotlin compile targets remain 17 while Gradle runs on pinned Corretto 21 through `JAVA_HOME`; [Android's JDK guidance](https://developer.android.com/build/jdks) distinguishes the Gradle runtime from source and target compatibility. No Kotlin engine plugin is present.
+The generated app module explicitly sets `compileSdk = 36`, `targetSdk = 36`, `minSdk = 24`, `buildToolsVersion = "36.0.0"`, and `ndkVersion = "30.0.16248370"`, matching the selected SDK, Build-Tools, NDK and OS pins above. The template's API 37 defaults were changed to API 36 because API 36 is the Gate 0A platform pin. Java and Kotlin compile targets remain 17 while Gradle runs on pinned Corretto 21 through `JAVA_HOME`; [Android's JDK guidance](https://developer.android.com/build/jdks) distinguishes the Gradle runtime from source and target compatibility. The existing 0C spike bridge is not the production engine; 5A-06 excludes its four AAR-dependent Kotlin classes from the package-only debug variant.
 
 After installing the pinned Corretto JDK/SDK and running the Rust target setup above, use these commands from the repository root on Windows:
 
@@ -853,3 +853,28 @@ powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case quickjs
 
 Build evidence is recorded in
 [`gates/evidence/5a/5a-05-quickjs.md`](gates/evidence/5a/5a-05-quickjs.md).
+
+## 5A-06 Android package build
+
+On Windows, stage the built CPython, FFmpeg, and QuickJS outputs before
+building the local debug APK. Use the Corretto 21.0.11.10.1 JDK unpacked by
+5A-03 under `work/android/gate-5a/5a-03-cpython/host-tools/`; do not inherit a
+stale Android Studio `JAVA_HOME`.
+
+```powershell
+$jdk = (Resolve-Path 'work/android/gate-5a/5a-03-cpython/host-tools/corretto-windows/jdk21.0.11_10').Path
+$env:JAVA_HOME = $jdk
+$env:PATH = "$jdk\bin;$env:PATH"
+powershell -NoProfile -File scripts/gate-5a/stage-android-package.ps1
+npm run android:debug
+powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case package-provenance
+```
+
+The stage script checks every locked source archive and build manifest, then
+generates `work/android/gate-5a/5a-06-package/android-engine-manifest.json`.
+The APK keeps the eight top-level CPython libraries, pinned QuickJS, FFmpeg,
+and ffprobe in `arm64-v8a`; Python's full runtime tree, including nested
+native extension modules, is in `assets/python-runtime.zip`. The 5A-07 provider
+extracts that archive to app-private storage. The package verifier compares
+every ZIP member hash and every direct native library against the manifest,
+checks the ABI allowlist, and rejects the old 0.18.1 package payloads.

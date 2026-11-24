@@ -116,12 +116,12 @@ The runtime package retains upstream package metadata and license files under
 | trove-classifiers `2026.9.21.13` | Apache-2.0 | Host-only Hatchling dependency. |
 | vcs-versioning `2.6.0` | MIT | Host-only setuptools-scm dependency. |
 
-This inventory records the approved 5A-02 source lock and 5A-03 runtime build;
-see the [5A-03 build evidence](gates/evidence/5a/5a-03-cpython-runtime.md) for
-the package hashes and APK inspection.
-The later 5A-06 APK provenance task still audits the complete transitive
-license set and confirms every corresponding source and notice in the final
-package.
+The [5A-06 package provenance evidence](gates/evidence/5a/5a-06-package-provenance.md)
+and [machine-readable APK manifest](gates/evidence/5a/5a-06-apk-engine-manifest.json)
+record the complete arm64 engine payload, all 22 transitive engine components,
+the 24 pinned corresponding source materials, source-build hashes, and notice
+coverage. The local package verifier passed. Owner review is still required
+before any Android APK/build is shared or the distribution blocker is closed.
 
 ## QuickJS
 
