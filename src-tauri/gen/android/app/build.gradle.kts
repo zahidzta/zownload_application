@@ -96,6 +96,18 @@ tasks.withType<KotlinCompile>().configureEach {
         "**/AndroidSpikePlugin.kt",
         "**/SpikeDownloadService.kt",
         "**/VerifiedYtDlpUpdate.kt",
+        // Gate 0C instrumentation sources remain as historical evidence, but
+        // depend on the retired spike plugin and the removed 0.18.1 AARs.
+        "**/ForegroundServiceDeviceTest.kt",
+        "**/ForegroundTimeoutDeviceTest.kt",
+        "**/HomeContinuationDeviceTest.kt",
+        "**/MediaStoreZipDeviceTest.kt",
+        "**/ProcessDeathDeviceTest.kt",
+        "**/QuickJsDeviceTest.kt",
+        "**/RecentsRemovalDeviceTest.kt",
+        "**/WebViewRecreationDeviceTest.kt",
+        "**/YtDlpUpdateDeviceTest.kt",
+        "**/YoutubeMp3DeviceTest.kt",
     )
 }
 

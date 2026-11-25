@@ -167,7 +167,25 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
             .put(cancelFile.absolutePath)
             .toString()
         val encodedArgs = Base64.encodeToString(argv.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        val source = "import base64,runpy,sys; sys.argv=[v.decode('utf-8') for v in base64.b64decode('$encodedArgs')]; runpy.run_path(sys.argv[0], run_name='__main__')"
+        val resultPathLiteral = "'${resultFile.absolutePath.replace("\\", "\\\\").replace("'", "\\'")}'"
+        val source = """
+            try:
+                import base64, json, runpy, sys
+                sys.argv = json.loads(base64.b64decode('$encodedArgs').decode('utf-8'))
+                runpy.run_path(sys.argv[0], run_name='__main__')
+            except BaseException as error:
+                try:
+                    import traceback
+                    detail = traceback.format_exc()
+                except BaseException:
+                    detail = type(error).__name__ + ': ' + str(error)
+                try:
+                    with open($resultPathLiteral, 'w', encoding='utf-8') as output:
+                        output.write(detail)
+                except BaseException:
+                    pass
+                raise
+        """.trimIndent()
 
         val runStatus = try {
             NativePythonBridge.run(pythonLibrary.absolutePath, runtimeRoot.absolutePath, source)
@@ -176,7 +194,8 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
             watcher?.join(5_000)
         }
         if (runStatus != 0) {
-            throw EngineBridgeException("engine_missing", "Embedded Python failed with status $runStatus")
+            val detail = if (resultFile.isFile) resultFile.readText(Charsets.UTF_8).take(4_000) else "no Python traceback was written"
+            throw EngineBridgeException("engine_missing", "Embedded Python failed with status $runStatus: $detail")
         }
         if (!resultFile.isFile) {
             throw EngineBridgeException("engine_missing", "Embedded Python did not return an engine result")
@@ -269,9 +288,12 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
 
     private fun copyRunner(root: File): File {
         val target = File(root, "engine_runner.py")
-        if (!target.isFile) {
-            context.assets.open("engine_runner.py").use { input ->
-                FileOutputStream(target).use { output -> input.copyTo(output) }
+        // This small script ships with the app, so refresh it on app update
+        // even when the larger extracted Python runtime is already present.
+        context.assets.open("engine_runner.py").use { input ->
+            FileOutputStream(target).use { output ->
+                input.copyTo(output)
+                output.fd.sync()
             }
         }
         return target
