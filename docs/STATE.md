@@ -2,9 +2,10 @@
 
 ## Current checkpoint and next task
 
-- **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, and Gate 4B on 2026-11-22; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), and [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md). Gate 5A V4 passed on 2026-11-24; owner checkpoint review is pending. `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
+- **Checkpoint:** Gate 3C was accepted on 2026-11-02, Gate 4A on 2026-11-12, Gate 4B on 2026-11-22, and Gate 5A on 2026-11-25; see the [Gate 3C checkpoint](gates/evidence/3c/checkpoint.md), [Gate 4A checkpoint](gates/evidence/4a/checkpoint.md), [Gate 4B checkpoint](gates/evidence/4b/checkpoint.md), and [Gate 5A checkpoint](gates/evidence/5a/checkpoint.md). `app-v0.0.1` remains an unchanged draft; stable `app-v0.0.2` remains the Linux update-review candidate.
 - **Gate 5A plan:** Accepted by the owner on 2026-11-22, including its budget checkpoint. The owner selected CPython `3.14.10` for Android; the traceable runtime build is complete.
-- **Next task:** Owner review and explicit acceptance of the Gate 5A checkpoint; do not start Gate 5B before acceptance. V4 passed for 5A-09; the playlist's media rights were not independently verified.
+- **Next task:** Owner review and acceptance of the Gate 5B plan and budget checkpoint; do not begin Gate 5B implementation before approval. The 5A-09 playlist's media rights were not independently verified.
+- **Completed 5B-01:** Recorded Gate 5A acceptance and drafted the Gate 5B plan/budget; commit `f72b580`; [plan](gates/gate-5b.md) and [checkpoint](gates/evidence/5a/checkpoint.md).
 - **Completed 5A-01:** Documented the Android engine scope, source/build/notice hard gate, task sequence, and budget checkpoint; commit `d32d5cb`; [Gate 5A plan](gates/gate-5a.md).
 - **Completed 5A-02:** Approved CPython source/JNI strategy and pinned its sources, dependencies, patches, and toolchain; commit `ed15956`; [decision and lock evidence](gates/evidence/5a/python-runtime-decision.md).
 - **Completed 5A-03:** Built locked CPython 3.14.10 with yt-dlp/EJS for arm64; work commit `3b34df2`; [runtime build evidence](gates/evidence/5a/5a-03-cpython-runtime.md).
@@ -35,6 +36,7 @@
 - 3C — accepted 2026-11-02; commit `1c9c221`; [checkpoint](gates/evidence/3c/checkpoint.md) and [task evidence](gates/evidence/3c/tasks.md).
 - 4A — accepted by owner 2026-11-12; [checkpoint](gates/evidence/4a/checkpoint.md) and [task evidence](gates/evidence/4a/tasks.md).
 - 4B — accepted by owner 2026-11-22; [checkpoint](gates/evidence/4b/checkpoint.md) and [task evidence](gates/evidence/4b/tasks.md).
+- 5A — accepted by owner 2026-11-25; [checkpoint](gates/evidence/5a/checkpoint.md).
 
 ## Standing decisions
 
