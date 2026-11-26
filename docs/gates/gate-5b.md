@@ -5,10 +5,10 @@
 
 ## Scope and checkpoint
 
-This draft plans production Android Downloads output and lifecycle handling.
+This plan covers production Android Downloads output and lifecycle handling.
 Gate 5A was accepted by the owner on 2026-11-25; see its [checkpoint](evidence/5a/checkpoint.md).
-The owner has not yet accepted this plan or its budget checkpoint. Do not begin
-implementation until both are approved.
+The owner accepted this plan and its eight-session budget checkpoint on
+2026-11-25. Implementation may begin with task 5B-02.
 
 Gate 5B delivers individual and ZIP output through MediaStore, a foreground
 service with progress notification, Home/background continuation, cancellation
@@ -43,10 +43,9 @@ Stage 5B deliverable.
 
 ### Budget and dependencies
 
-Proposed budget: eight tasks, each planned as one roughly 30-minute session
+Approved budget: eight tasks, each planned as one roughly 30-minute session
 (about four planned hours). Android builds, physical-device setup, and long
-playlist runs can extend elapsed time. This estimate is a budget checkpoint for
-owner review, not a time guarantee.
+playlist runs can extend elapsed time. This estimate is not a time guarantee.
 
 Before device acceptance, the owner must provide a physical `arm64-v8a`
 Android 15 (API 35) device and a rights-cleared large-playlist fixture. The
@@ -72,6 +71,7 @@ start a dependent task before its predecessor and required owner decisions pass.
 - Acceptance: Gate 5A acceptance is recorded; this plan identifies requirements,
   dependencies, tasks, verification, and a budget proposal for owner review.
 - Exact verification: `git diff --check`.
+- Result: Owner accepted the Gate 5B plan and budget checkpoint on 2026-11-25.
 
 ### 5B-02 — MediaStore single-file output
 
@@ -81,7 +81,7 @@ start a dependent task before its predecessor and required owner decisions pass.
   Android integration, focused Kotlin/Rust tests, and Gate 5B evidence.
 - Read: `PROJECT.md:156-168,180-195,394-461,618-629`; consult current Android
   and Tauri mobile-plugin documentation through Context7 before code changes.
-- Dependencies: owner accepts this plan and budget. No contract changes or new
+- Dependencies: Gate 5B plan and budget accepted. No contract changes or new
   dependencies without owner approval.
 - Acceptance: successful content is visible in Downloads; collisions are
   numbered; failed writes leave no incomplete visible item and map to the

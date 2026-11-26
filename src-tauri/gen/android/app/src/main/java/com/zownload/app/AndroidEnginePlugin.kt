@@ -46,6 +46,13 @@ class AndroidCancelArgs {
     lateinit var operationId: String
 }
 
+@InvokeArg
+class AndroidPublishOutputArgs {
+    lateinit var path: String
+    lateinit var displayName: String
+    lateinit var format: String
+}
+
 @TauriPlugin
 class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
     private val adapter by lazy { AndroidEngineAdapter(activity.applicationContext) }
@@ -100,6 +107,33 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) { JSONObject().put("cancelled", adapter.cancel(args.operationId)) }
+    }
+
+    @Command
+    fun publishOutput(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidPublishOutputArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val cacheRoot = File(activity.cacheDir, "zownload-engine").canonicalFile
+            val source = File(args.path).canonicalFile
+            if (!source.path.startsWith(cacheRoot.path + File.separator)) {
+                throw EngineBridgeException("engine_missing", "Android output is outside the private engine cache")
+            }
+            val published = publishMediaStoreOutput(
+                activity.applicationContext,
+                source,
+                args.displayName,
+                args.format,
+            )
+            JSONObject()
+                .put("displayName", published.displayName)
+                .put("mimeType", published.mimeType)
+                .put("bytes", published.bytes)
+        }
     }
 
     @Command
