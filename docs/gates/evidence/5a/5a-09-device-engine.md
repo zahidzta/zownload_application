@@ -7,8 +7,9 @@
 
 V4 passed on the physical OnePlus BE2011. Android now selects the native Tauri
 transport, so React reads the same Rust queue, history, and settings state as
-the device engine. Gate 5A checkpoint acceptance remains pending the owner's
-explicit review; Gate 5B has not started.
+the device engine. The owner accepted Gate 5A on 2026-11-25; see the
+[checkpoint](checkpoint.md). Gate 5B implementation awaits plan and budget
+approval.
 
 ## Device and build
 

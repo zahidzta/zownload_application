@@ -125,9 +125,9 @@ Each task is one roughly 30-minute session, on its own `task-<id>` branch, with 
 - Read: `PROJECT.md:180-195,394-461,555-597,630-645,646-693,787-793`; accepted 5A-02..08 evidence and the Gate 0C checkpoint limits.
 - Dependencies: 5A-08; owner-provided physical `arm64-v8a` test device and rights-cleared YouTube/playlist fixtures. Keep Android 5B lifecycle/storage acceptance out of this task.
 - Acceptance: V4 passes for single MP3, single MP4, and playlist downloads; UI recreation uses the shared queue state; queue/history/settings behavior is correct; no new contract fields are needed; evidence states exact device, fixture, binary hashes, test outcomes, and limits. Owner explicitly accepts the checkpoint before 5B begins.
-- Result: The V4 device run passed on OnePlus BE2011 / Android API 29; the owner-provided playlist's rights were not independently verified. See [5A-09 device evidence](evidence/5a/5a-09-device-engine.md). Gate 5A checkpoint acceptance remains pending the owner's explicit review; do not start Gate 5B.
+- Result: V4 passed on OnePlus BE2011 / Android API 29. The owner accepted Gate 5A on 2026-11-25; see the [checkpoint](evidence/5a/checkpoint.md) and [device evidence](evidence/5a/5a-09-device-engine.md). The playlist's rights were not independently verified, and the Android distribution blocker remains open.
 - Exact verification command: `powershell -NoProfile -File scripts/gate-5a/verify.ps1 -Case device-engine`.
 
 ## Delivery
 
-Commit each verified task, update and commit `docs/STATE.md`, and open a PR on its `task-<id>` branch. Do not publish Android artifacts. After V4, request explicit owner acceptance of the Gate 5A checkpoint. Stop before Gate 5B until that acceptance is recorded.
+Commit each verified task, update and commit `docs/STATE.md`, and open a PR on its `task-<id>` branch. Do not publish Android artifacts. Gate 5A was accepted by the owner on 2026-11-25. Gate 5B implementation requires its own accepted plan and budget checkpoint.
