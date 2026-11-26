@@ -3,12 +3,12 @@
 
 import type { AppTransport } from './types'
 
-/** Android still runs the separate Gate 0C spike handlers in this Windows stage. */
-export function usesDesktopNativeTransport(tauri: boolean, userAgent: string): boolean {
-  return tauri && !/Android/i.test(userAgent)
+/** Every Tauri target uses Rust; only the browser preview uses the simulator. */
+export function usesTauriNativeTransport(tauri: boolean): boolean {
+  return tauri
 }
 
-/** Desktop native commands always go through Rust; browser preview stays offline. */
+/** Native commands always go through Rust; browser preview stays offline. */
 export function createRuntimeTransport({ native, nativeTransport, simulatorTransport }: {
   native: boolean
   nativeTransport: AppTransport

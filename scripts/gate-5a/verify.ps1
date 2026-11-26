@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance', 'kotlin-engine', 'rust-engine')]
+    [ValidateSet('python-source-lock', 'python-runtime', 'ffmpeg', 'quickjs', 'package-provenance', 'kotlin-engine', 'rust-engine', 'device-engine')]
     [string]$Case
 )
 
@@ -325,7 +325,8 @@ try {
         Assert-True ($providerText.Contains('activeOperations') -and $providerText.Contains('marker.createNewFile')) 'Cancellation is not scoped to a transient engine operation.'
         Assert-True ($providerText.Contains('canonicalRoot') -and $providerText.Contains('python-runtime')) 'The runtime asset extraction is not guarded against unsafe archive paths.'
         Assert-True ($runnerText.Contains('yt_dlp.YoutubeDL') -and $runnerText.Contains('progress_hooks')) 'The Python engine runner lacks yt-dlp calls or progress callbacks.'
-        Assert-True ($runnerText.Contains('quickjs:') -and $runnerText.Contains('ffmpeg_location')) 'The Python runner does not use the package-provided JS and FFmpeg paths.'
+        Assert-True ($runnerText.Contains('"js_runtimes": {"quickjs": {"path": str(request["quickJsPath"])}}') -and $runnerText.Contains('ffmpeg_location')) 'The Python runner does not use the package-provided JS and FFmpeg paths.'
+        Assert-True ($runnerText.Contains('options["merge_output_format"] = "mp4"')) 'Android MP4 requests do not force the accepted MP4 merge container.'
         Assert-True ($nativeText.Contains('Py_Initialize') -and $nativeText.Contains('PyEval_SaveThread')) 'The JNI bridge does not initialize and release the embedded interpreter.'
         Assert-True ($nativeText.Contains('PyGILState_Ensure') -and $nativeText.Contains('PyRun_SimpleStringFlags')) 'The JNI bridge does not serialize Python calls safely across native threads.'
         Assert-True ($makePath -and (Get-Content -LiteralPath $makePath -Raw).Contains('zownload_python_bridge')) 'The NDK build does not define the JNI bridge library.'
@@ -424,6 +425,150 @@ try {
             throw "Kotlin/JNI bridge verification failed with exit code $($kotlinProcess.ExitCode)."
         }
         Write-Output 'PASS: contract parity, Rust desktop tests, Android Rust cross-target, and Kotlin/JNI bridge checks passed.'
+    }
+    elseif ($Case -eq 'device-engine') {
+        Assert-True $HostIsWindows 'The Gate 5A device verifier runs from Windows with the Android SDK.'
+        $sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+        $adb = Join-Path $sdk 'platform-tools/adb.exe'
+        Assert-True (Test-Path -LiteralPath $adb -PathType Leaf) "Android platform-tools adb is missing: $adb"
+        $serial = if ($env:ANDROID_SERIAL) { $env:ANDROID_SERIAL } else { Get-ConnectedAndroidDevice -AdbPath $adb }
+        Assert-True (-not [string]::IsNullOrWhiteSpace($serial)) 'Connect a physical arm64 Android device or set ANDROID_SERIAL.'
+
+        $deviceState = (& $adb -s $serial get-state 2>&1 | Out-String).Trim()
+        Assert-Equal $deviceState 'device' 'Physical Android device state'
+        $abi = (& $adb -s $serial shell getprop ro.product.cpu.abi | Out-String).Trim()
+        $api = (& $adb -s $serial shell getprop ro.build.version.sdk | Out-String).Trim()
+        $model = (& $adb -s $serial shell getprop ro.product.model | Out-String).Trim()
+        Assert-Equal $abi 'arm64-v8a' 'Physical Android ABI'
+        Assert-True ([int]$api -ge 29) "Gate 5A device proof requires API 29+; found API $api."
+
+        $mp3Url = if ($env:ZOWNLOAD_5A_MP3_URL) { $env:ZOWNLOAD_5A_MP3_URL } else { 'https://www.youtube.com/watch?v=uW13KuRrg1g' }
+        $mp4Url = if ($env:ZOWNLOAD_5A_MP4_URL) { $env:ZOWNLOAD_5A_MP4_URL } else { 'https://www.youtube.com/watch?v=Dkx4LYeFnVY' }
+        $playlistUrl = if ($env:ZOWNLOAD_5A_PLAYLIST_URL) { $env:ZOWNLOAD_5A_PLAYLIST_URL } else { 'https://music.youtube.com/playlist?list=OLAK5uy_mg1CCHw9rqPEBSPT1Yb4TcvArZLsQDndU&si=rf35jGZWQgZ255mz&drli=1' }
+        $cancelUrl = if ($env:ZOWNLOAD_5A_CANCEL_URL) { $env:ZOWNLOAD_5A_CANCEL_URL } else { 'https://www.youtube.com/watch?v=eRsGyueVLvQ' }
+        foreach ($fixture in @(@{ Name = 'MP3'; Url = $mp3Url }, @{ Name = 'MP4'; Url = $mp4Url }, @{ Name = 'cancel'; Url = $cancelUrl })) {
+            $uri = [uri]$fixture.Url
+            Assert-True ($uri.Scheme -eq 'https' -and $uri.Host -in @('www.youtube.com', 'youtube.com', 'youtu.be')) "$($fixture.Name) fixture must be an HTTPS YouTube single."
+        }
+        $playlistUri = [uri]$playlistUrl
+        Assert-True ($playlistUri.Scheme -eq 'https' -and $playlistUri.Host -in @('www.youtube.com', 'youtube.com', 'music.youtube.com') -and $playlistUri.AbsolutePath -eq '/playlist' -and $playlistUri.Query.Contains('list=')) 'Playlist fixture must be an HTTPS YouTube playlist URL.'
+
+        $adapterPath = Join-Path $root 'src-tauri/gen/android/app/src/main/java/com/zownload/app/AndroidEngineAdapter.kt'
+        $pluginPath = Join-Path $root 'src-tauri/gen/android/app/src/main/java/com/zownload/app/AndroidEnginePlugin.kt'
+        $providerPath = Join-Path $root 'src-tauri/gen/android/app/src/main/java/com/zownload/app/BundledEnginePackage.kt'
+        $rustPath = Join-Path $root 'src-tauri/src/engine/android.rs'
+        $sharedContractPath = Join-Path $root 'shared/contract.ts'
+        $rustContractPath = Join-Path $root 'src-tauri/src/contract.rs'
+        foreach ($path in @($adapterPath, $pluginPath, $providerPath, $rustPath, $sharedContractPath, $rustContractPath)) {
+            Assert-True (Test-Path -LiteralPath $path -PathType Leaf) "Android engine source is missing: $path"
+        }
+        foreach ($path in @($adapterPath, $pluginPath, $providerPath)) {
+            $text = Get-Content -LiteralPath $path -Raw
+            Assert-True (-not ($text -match '\bQueueItem\b|\bHistoryEntry\b|\bQueueManager\b|\bSQLiteDatabase\b')) "Kotlin engine owns queue/history state: $path"
+        }
+        $rustText = Get-Content -LiteralPath $rustPath -Raw
+        Assert-True ($rustText.Contains('AndroidQueueCoordinator') -and $rustText.Contains('settle_queue_item')) 'Rust queue ownership and history settlement are missing.'
+        foreach ($contractPath in @($sharedContractPath, $rustContractPath)) {
+            Assert-True (-not (Get-Content -LiteralPath $contractPath -Raw).Contains('itemUrls')) "Private playlist URLs leaked into public contract: $contractPath"
+        }
+
+        $logs = Join-Path $root 'work/android/gate-5a/5a-09-device-engine'
+        New-Item -ItemType Directory -Force -Path $logs | Out-Null
+        $env:ANDROID_HOME = $sdk
+        $env:ANDROID_SDK_ROOT = $sdk
+        $jdk = Join-Path $root 'work/android/gate-5a/5a-03-cpython/host-tools/corretto-windows/jdk21.0.11_10'
+        if (Test-Path -LiteralPath (Join-Path $jdk 'bin/java.exe') -PathType Leaf) {
+            $env:JAVA_HOME = $jdk
+            $env:PATH = "$jdk\bin;$env:PATH"
+        }
+
+        Push-Location $root
+        try {
+            $buildLog = Join-Path $logs 'android-build.log'
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try { & npm.cmd run android:debug 2>&1 | Out-File -LiteralPath $buildLog }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Android debug build failed:`n$((Get-Content -LiteralPath $buildLog | Select-Object -Last 50) -join "`n")" }
+        }
+        finally { Pop-Location }
+
+        $androidRoot = Join-Path $root 'src-tauri/gen/android'
+        $gradleLog = Join-Path $logs 'android-test-build.log'
+        Push-Location $androidRoot
+        try {
+            $prior = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            try {
+                & .\gradlew.bat :app:assembleUniversalDebugAndroidTest --no-configuration-cache `
+                    -x :app:rustBuildUniversalDebug -x :app:rustBuildArm64Debug `
+                    -x :app:rustBuildArmDebug -x :app:rustBuildX86Debug `
+                    -x :app:rustBuildX86_64Debug 2>&1 | Out-File -LiteralPath $gradleLog
+            }
+            finally { $ErrorActionPreference = $prior }
+            if ($LASTEXITCODE -ne 0) { throw "Device test APK build failed:`n$((Get-Content -LiteralPath $gradleLog | Select-Object -Last 50) -join "`n")" }
+        }
+        finally { Pop-Location }
+
+        $apk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk'
+        $testApk = Join-Path $root 'src-tauri/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk'
+        Assert-True (Test-Path -LiteralPath $apk -PathType Leaf) 'Android debug APK is missing.'
+        Assert-True (Test-Path -LiteralPath $testApk -PathType Leaf) 'Android instrumentation APK is missing.'
+        & $adb -s $serial install -r $apk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the local debug APK on the physical device.' }
+        & $adb -s $serial install -r $testApk | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the local instrumentation APK on the physical device.' }
+
+        & $adb -s $serial logcat -c | Out-Null
+        $testLog = Join-Path $logs 'instrumentation.log'
+        $mp3Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($mp3Url))
+        $mp4Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($mp4Url))
+        $playlistEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($playlistUrl))
+        $cancelEncoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($cancelUrl))
+        $playlistItems = if ($env:ZOWNLOAD_5A_PLAYLIST_ITEMS) { $env:ZOWNLOAD_5A_PLAYLIST_ITEMS } else { '3' }
+        Assert-True ([int]$playlistItems -ge 2) 'The locked playlist fixture must have at least two expected entries.'
+        $deviceLog = Join-Path $logs 'device-logcat.log'
+        $instrumentArgs = @(
+            '-s', $serial, 'shell', 'am', 'instrument', '-w', '-r',
+            '-e', 'class', 'com.zownload.app.AndroidEngineDeviceTest#productionEngineRunsSingleMp3Mp4PlaylistAndQueueLifecycle',
+            '-e', 'mp3UrlB64', $mp3Encoded, '-e', 'mp4UrlB64', $mp4Encoded,
+            '-e', 'playlistUrlB64', $playlistEncoded, '-e', 'playlistItems', $playlistItems,
+            '-e', 'cancelUrlB64', $cancelEncoded
+        )
+        if ($env:ZOWNLOAD_5A_PRIOR_FAILURE_NOTIFICATION_ID) {
+            $instrumentArgs += @('-e', 'priorFailureNotificationId', $env:ZOWNLOAD_5A_PRIOR_FAILURE_NOTIFICATION_ID)
+        }
+        $instrumentArgs += 'com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner'
+        $logcatError = Join-Path $logs 'device-logcat.stderr.log'
+        $logcatProcess = Start-Process -FilePath $adb `
+            -ArgumentList @('-s', $serial, 'logcat', '-v', 'threadtime', '-s', 'Zownload5A09:I', '*:S') `
+            -WindowStyle Hidden -PassThru -RedirectStandardOutput $deviceLog -RedirectStandardError $logcatError
+        Assert-True ($null -ne $logcatProcess) 'Could not start live device log capture.'
+        try {
+            Start-Sleep -Milliseconds 750
+            & $adb @instrumentArgs 2>&1 | Out-File -LiteralPath $testLog
+            $instrumentExit = $LASTEXITCODE
+        }
+        finally {
+            if (-not $logcatProcess.HasExited) { Stop-Process -Id $logcatProcess.Id -Force }
+            try { Wait-Process -Id $logcatProcess.Id -Timeout 5 -ErrorAction SilentlyContinue } catch { }
+        }
+        $deviceLogExit = if ((Test-Path -LiteralPath $deviceLog -PathType Leaf) -and (Get-Item -LiteralPath $deviceLog).Length -gt 0) { 0 } else { 1 }
+        if ($instrumentExit -ne 0 -or $deviceLogExit -ne 0 -or -not ((Get-Content -LiteralPath $testLog -Raw).Contains('OK (1 test)'))) {
+            $instrumentTail = (Get-Content -LiteralPath $testLog | Select-Object -Last 50) -join "`n"
+            $deviceTail = if (Test-Path -LiteralPath $deviceLog) { (Get-Content -LiteralPath $deviceLog | Select-Object -Last 50) -join "`n" } else { '(device log unavailable)' }
+            throw "Physical-device instrumentation failed (exit $instrumentExit):`n$instrumentTail`n--- device log ---`n$deviceTail"
+        }
+
+        $report = Get-Content -LiteralPath $deviceLog -Raw
+        foreach ($term in @('SETTINGS_ROUND_TRIP', 'FIXTURES', 'PHASE_BEGIN label=single-mp3', 'PHASE_BEGIN label=single-mp4',
+                'PHASE_BEGIN label=playlist-mp3', 'OUTPUT label=single-mp3', 'OUTPUT label=single-mp4',
+                'OUTPUT label=playlist-mp3', 'WEBVIEW_RECREATION', 'CANCELLATION removed=true',
+                'QUEUE_HISTORY mp3=true mp4=true playlist=true cancelled=false queueEmpty=true', 'PROOF_COMPLETE')) {
+            if (-not $report.Contains($term)) { throw "Device log is missing required proof: $term" }
+        }
+        $apkHash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Output "PASS: Gate 5A device engine on $model, Android API $api, ABI $abi, serial $serial."
+        Write-Output "APK SHA-256: $apkHash; outputs and instrumentation logs remain local under work/android/gate-5a/5a-09-device-engine/."
+        Get-Content -LiteralPath $deviceLog | Where-Object { $_ -match 'SETTINGS_ROUND_TRIP|ANALYSIS|OUTPUT label=|WEBVIEW_RECREATION|CANCELLATION|QUEUE_HISTORY|PROOF_COMPLETE' } | Select-Object -Last 30
     }
     elseif ($Case -eq 'python-runtime') {
         Assert-True $HostIsLinux 'The CPython runtime build must run on the pinned Ubuntu Linux host.'

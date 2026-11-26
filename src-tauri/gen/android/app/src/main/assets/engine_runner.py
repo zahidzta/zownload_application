@@ -47,7 +47,7 @@ def engine_options(request: dict[str, object]) -> dict[str, object]:
         "continuedl": True,
         "part": True,
         "ffmpeg_location": str(request["ffmpegPath"]),
-        "js_runtimes": ["quickjs:" + str(request["quickJsPath"])],
+        "js_runtimes": {"quickjs": {"path": str(request["quickJsPath"])}},
     }
     return options
 
@@ -148,6 +148,8 @@ def download(request: dict[str, object], progress_path: str, cancel_path: str) -
 
     options = engine_options(request)
     options["format"] = format_selector(request)
+    if str(request.get("format") or "mp3").lower() == "mp4":
+        options["merge_output_format"] = "mp4"
     options["outtmpl"] = output_template
     options["progress_hooks"] = [progress_hook]
     if str(request.get("format") or "mp3").lower() == "mp3":

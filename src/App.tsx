@@ -14,7 +14,7 @@ import type { ShellPage } from './state/shell'
 import { createDownloadFlowStore } from './state/downloadFlow'
 import { createSimulatorTransport } from './transport/simulator'
 import { createBrowserMockStorage, createMemoryMockStorage } from './transport/mockStorage'
-import { createRuntimeTransport, usesDesktopNativeTransport } from './transport/runtime'
+import { createRuntimeTransport, usesTauriNativeTransport } from './transport/runtime'
 import { tauriTransport } from './transport/tauri'
 import type { AppTransport } from './transport/types'
 import { isTauri } from '@tauri-apps/api/core'
@@ -30,7 +30,7 @@ function runningMockStorage() {
   }
 }
 
-const native = usesDesktopNativeTransport(isTauri(), typeof navigator === 'undefined' ? '' : navigator.userAgent)
+const native = usesTauriNativeTransport(isTauri())
 const simulator = native ? null : createSimulatorTransport({ storage: runningMockStorage() })
 // Keep browser preview loading inspectable while native analysis runs in Rust.
 const previewTransport: AppTransport | null = simulator && {

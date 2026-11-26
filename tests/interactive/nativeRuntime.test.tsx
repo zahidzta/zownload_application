@@ -8,7 +8,7 @@ import { AppView } from '../../src/App'
 import { createDownloadFlowStore } from '../../src/state/downloadFlow'
 import { analysisUrls } from '../../src/transport/fixtures'
 import { createMemoryMockStorage } from '../../src/transport/mockStorage'
-import { createRuntimeTransport, usesDesktopNativeTransport } from '../../src/transport/runtime'
+import { createRuntimeTransport, usesTauriNativeTransport } from '../../src/transport/runtime'
 import { createManualSimulatorClock, createSimulatorTransport } from '../../src/transport/simulator'
 
 test('native development sends analysis and durable activity to the Rust boundary', async () => {
@@ -73,9 +73,8 @@ test('native analysis stays on Rust and browser preview stays isolated', async (
     native: false, nativeTransport: native, simulatorTransport: preview,
   })
   expect(browser).toBe(preview)
-  expect(usesDesktopNativeTransport(true, 'Mozilla/5.0 (Windows NT 10.0)')).toBe(true)
-  expect(usesDesktopNativeTransport(true, 'Mozilla/5.0 (Linux; Android 15)')).toBe(false)
-  expect(usesDesktopNativeTransport(false, 'Mozilla/5.0 (Windows NT 10.0)')).toBe(false)
+  expect(usesTauriNativeTransport(true)).toBe(true)
+  expect(usesTauriNativeTransport(false)).toBe(false)
 })
 
 test('mounted native activity routes controls and reloads a translated failure', async () => {
