@@ -10,7 +10,7 @@ use crate::{
         EngineProgress, EngineUpdateResult,
     },
     contract::{
-        AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, ErrorCode, ItemStatus,
+        AnalyzeResult, AppError, DownloadRequest, EngineUpdateInfo, ErrorCode, Format, ItemStatus,
         Progress, QueueItem,
     },
     persistence::{notifications::TerminalOutcome, Database},
@@ -39,6 +39,11 @@ pub(crate) trait Engine<R: Runtime>: Send + Sync {
         operation_id: &str,
         on_progress: Arc<dyn Fn(EngineProgress) + Send + Sync>,
     ) -> Result<DownloadResult, AppError>;
+    fn publish_output(
+        &self,
+        result: &DownloadResult,
+        request: &DownloadRequest,
+    ) -> Result<(), AppError>;
     fn cancel(&self, operation_id: &str) -> Result<bool, AppError>;
     fn check_update(&self) -> Result<EngineUpdateInfo, AppError>;
     fn update(&self) -> Result<EngineUpdateInfo, AppError>;
@@ -65,6 +70,14 @@ struct DownloadArgs<'a> {
 #[serde(rename_all = "camelCase")]
 struct CancelArgs<'a> {
     operation_id: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PublishOutputArgs<'a> {
+    path: &'a str,
+    display_name: String,
+    format: &'static str,
 }
 
 impl<R: Runtime> AndroidEngine<R> {
@@ -112,6 +125,30 @@ impl<R: Runtime> Engine<R> for AndroidEngine<R> {
                 on_progress,
             },
         )
+    }
+
+    fn publish_output(
+        &self,
+        result: &DownloadResult,
+        request: &DownloadRequest,
+    ) -> Result<(), AppError> {
+        let path = result.path.to_str().ok_or_else(|| {
+            AppError::new(
+                ErrorCode::EngineMissing,
+                Some("Android engine output path is not valid UTF-8".into()),
+            )
+        })?;
+        let format = match request.format {
+            Format::Mp3 => "mp3",
+            Format::Mp4 => "mp4",
+        };
+        let args = PublishOutputArgs {
+            path,
+            display_name: crate::android_contract::safe_output_name(&result.title, request.format),
+            format,
+        };
+        let _: serde_json::Value = self.call("publishOutput", args)?;
+        Ok(())
     }
 
     fn cancel(&self, operation_id: &str) -> Result<bool, AppError> {
@@ -362,10 +399,8 @@ impl<R: Runtime> AndroidQueueCoordinator<R> {
         }
     }
 
-    fn copy_result(
+    fn publish_result(
         &self,
-        id: &str,
-        index: usize,
         request: &DownloadRequest,
         result: &DownloadResult,
     ) -> Result<(), AppError> {
@@ -375,50 +410,28 @@ impl<R: Runtime> AndroidQueueCoordinator<R> {
                 Some("Android engine reported a missing output file".into()),
             ));
         }
-        let directory = self.app_data.join("android-engine-outputs").join(id);
-        std::fs::create_dir_all(&directory).map_err(io_failure)?;
-        let name = crate::android_contract::safe_output_name(
-            &result.title,
-            &format!("{id}-{index}"),
-            request.format,
-        );
-        let destination = directory.join(name);
-        if !result.path.is_file()
-            || std::fs::metadata(&result.path).map_err(io_failure)?.len() != result.bytes
-        {
-            return Err(AppError::new(
-                ErrorCode::EngineMissing,
-                Some("Android engine output size does not match its result".into()),
-            ));
-        }
-        let mut input = std::fs::File::open(&result.path).map_err(io_failure)?;
-        let mut output = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&destination)
-            .map_err(io_failure)?;
-        let copied = match std::io::copy(&mut input, &mut output) {
-            Ok(copied) => copied,
+        let actual_bytes = match std::fs::metadata(&result.path) {
+            Ok(metadata) => metadata.len(),
             Err(error) => {
-                drop(output);
-                let _ = std::fs::remove_file(&destination);
+                let _ = std::fs::remove_file(&result.path);
                 return Err(io_failure(error));
             }
         };
-        if let Err(error) = output.sync_all() {
-            drop(output);
-            let _ = std::fs::remove_file(&destination);
-            return Err(io_failure(error));
-        }
-        if copied != result.bytes {
-            let _ = std::fs::remove_file(&destination);
+        if result.bytes == 0 || actual_bytes != result.bytes {
+            let _ = std::fs::remove_file(&result.path);
             return Err(AppError::new(
                 ErrorCode::EngineMissing,
-                Some("Android output copy was incomplete".into()),
+                Some("Android engine output is empty or its size does not match the result".into()),
             ));
         }
-        // The engine's temporary directory is private to this operation.
-        std::fs::remove_file(&result.path).map_err(io_failure)?;
+        let published = self.engine.publish_output(result, request);
+        if let Err(error) = published {
+            let _ = std::fs::remove_file(&result.path);
+            return Err(error);
+        }
+        if let Err(error) = std::fs::remove_file(&result.path) {
+            eprintln!("could not remove published Android engine source: {error}");
+        }
         Ok(())
     }
 
@@ -468,7 +481,7 @@ impl<R: Runtime> AndroidQueueCoordinator<R> {
         let result = (|| -> Result<(u32, u32), AppError> {
             if !item.request.is_playlist {
                 let file = self.download_one(&item.id, 0, 1, &item.request, false)?;
-                self.copy_result(&item.id, 0, &item.request, &file)?;
+                self.publish_result(&item.request, &file)?;
                 item.title = Some(file.title);
                 if let Some(thumbnail) = file.thumbnail {
                     item.thumbnail = Some(thumbnail);
@@ -514,8 +527,16 @@ impl<R: Runtime> AndroidQueueCoordinator<R> {
                 let request =
                     entry_request(entry.url, item.request.format, item.request.quality.clone());
                 match self.download_one(&item.id, index, total, &request, true) {
-                    Ok(file) => match self.copy_result(&item.id, index, &request, &file) {
+                    Ok(file) => match self.publish_result(&request, &file) {
                         Ok(()) => done += 1,
+                        Err(error)
+                            if matches!(
+                                error.code,
+                                ErrorCode::DiskFull | ErrorCode::PermissionDenied
+                            ) =>
+                        {
+                            return Err(error)
+                        }
                         Err(error) => {
                             eprintln!(
                                 "Android playlist output failed: {}",

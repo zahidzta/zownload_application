@@ -205,7 +205,7 @@ impl From<EngineUpdateResult> for EngineUpdateInfo {
     }
 }
 
-pub(crate) fn safe_output_name(title: &str, id: &str, format: Format) -> String {
+pub(crate) fn safe_output_name(title: &str, format: Format) -> String {
     let stem = title
         .chars()
         .map(|character| {
@@ -229,7 +229,7 @@ pub(crate) fn safe_output_name(title: &str, id: &str, format: Format) -> String 
         Format::Mp3 => "mp3",
         Format::Mp4 => "mp4",
     };
-    format!("{stem} [{id}].{extension}")
+    format!("{stem}.{extension}")
 }
 
 #[cfg(test)]
@@ -302,6 +302,7 @@ mod tests {
             ("disk_full", ErrorCode::DiskFull),
             ("permission_denied", ErrorCode::PermissionDenied),
             ("engine_missing", ErrorCode::EngineMissing),
+            ("unknown", ErrorCode::Unknown),
         ];
         for (code, expected) in codes {
             let error = BridgeReply::<serde_json::Value> {
@@ -326,9 +327,6 @@ mod tests {
             "thumbnail": null, "site": "s", "itemCount": 1, "itemTitles": ["x"]
         }))
         .is_err());
-        assert_eq!(
-            safe_output_name("../song?.mp3", "abc", Format::Mp3),
-            "_song_.mp3 [abc].mp3"
-        );
+        assert_eq!(safe_output_name("../song?", Format::Mp3), "_song_.mp3");
     }
 }
