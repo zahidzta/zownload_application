@@ -14,7 +14,7 @@
         android:theme="@style/Theme.zownload"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <service
-            android:name=".SpikeDownloadService"
+            android:name=".DownloadForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <activity

@@ -8,7 +8,10 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import signal
 import sys
+import threading
+import time
 import traceback
 
 
@@ -52,11 +55,81 @@ def engine_options(request: dict[str, object]) -> dict[str, object]:
     return options
 
 
-def analyze(request: dict[str, object]) -> dict[str, object]:
+def direct_child_pids(parent_pid: int) -> list[int]:
+    children: list[int] = []
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return children
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        pid = int(entry)
+        if pid == parent_pid:
+            continue
+        try:
+            with open(f"/proc/{pid}/stat", "r", encoding="utf-8", errors="ignore") as stat_file:
+                stat_text = stat_file.read()
+            rparen = stat_text.rfind(")")
+            if rparen < 0:
+                continue
+            fields = stat_text[rparen + 2 :].split()
+            if len(fields) >= 2 and int(fields[1]) == parent_pid:
+                children.append(pid)
+        except (OSError, ValueError):
+            continue
+    return children
+
+
+def terminate_direct_children(parent_pid: int) -> None:
+    pids = direct_child_pids(parent_pid)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    if not pids:
+        return
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        remaining = [pid for pid in direct_child_pids(parent_pid) if pid in pids]
+        if not remaining:
+            return
+        time.sleep(0.05)
+    for pid in direct_child_pids(parent_pid):
+        if pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
+
+def watch_cancel(cancel_path: str, stop_event: threading.Event) -> threading.Thread:
+    parent_pid = os.getpid()
+
+    def _run() -> None:
+        while not stop_event.is_set():
+            if os.path.exists(cancel_path):
+                terminate_direct_children(parent_pid)
+                return
+            stop_event.wait(0.15)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return thread
+
+
+def analyze(request: dict[str, object], cancel_path: str) -> dict[str, object]:
     import yt_dlp
 
-    with yt_dlp.YoutubeDL(engine_options(request)) as downloader:
-        info = downloader.extract_info(str(request["url"]), download=False)
+    stop_event = threading.Event()
+    watcher = watch_cancel(cancel_path, stop_event)
+    try:
+        with yt_dlp.YoutubeDL(engine_options(request)) as downloader:
+            info = downloader.extract_info(str(request["url"]), download=False)
+    finally:
+        stop_event.set()
+        watcher.join(1.0)
 
     if not isinstance(info, dict):
         raise RuntimeError("yt-dlp returned no video information")
@@ -146,12 +219,25 @@ def download(request: dict[str, object], progress_path: str, cancel_path: str) -
             "title": str(event.get("info_dict", {}).get("title") or ""),
         })
 
+    def postprocessor_hook(event: dict[str, object]) -> None:
+        if os.path.exists(cancel_path):
+            raise yt_dlp.utils.DownloadError("Zownload cancellation requested")
+        if str(event.get("status") or "") == "started":
+            append_progress(progress_path, {
+                "status": "postProcessing",
+                "percent": 100.0,
+                "downloadedBytes": 0,
+                "totalBytes": 0,
+                "title": str(event.get("info_dict", {}).get("title") or ""),
+            })
+
     options = engine_options(request)
     options["format"] = format_selector(request)
     if str(request.get("format") or "mp3").lower() == "mp4":
         options["merge_output_format"] = "mp4"
     options["outtmpl"] = output_template
     options["progress_hooks"] = [progress_hook]
+    options["postprocessor_hooks"] = [postprocessor_hook]
     if str(request.get("format") or "mp3").lower() == "mp3":
         options["postprocessors"] = [{
             "key": "FFmpegExtractAudio",
@@ -159,22 +245,28 @@ def download(request: dict[str, object], progress_path: str, cancel_path: str) -
             "preferredquality": str(bitrate),
         }]
 
-    with yt_dlp.YoutubeDL(options) as downloader:
-        info = downloader.extract_info(str(request["url"]), download=True)
-        if not isinstance(info, dict):
-            raise RuntimeError("yt-dlp completed without returning an output file")
-        path = info.get("filepath") or info.get("_filename") or downloader.prepare_filename(info)
-        if str(request.get("format") or "mp3").lower() == "mp3":
-            path = str(pathlib.Path(str(path)).with_suffix(".mp3"))
-        output = pathlib.Path(str(path))
-        if not output.is_file():
-            raise RuntimeError("yt-dlp reported success but the output file is missing")
-        return {
-            "path": str(output),
-            "title": str(info.get("title") or ""),
-            "thumbnail": info.get("thumbnail"),
-            "bytes": output.stat().st_size,
-        }
+    stop_event = threading.Event()
+    watcher = watch_cancel(cancel_path, stop_event)
+    try:
+        with yt_dlp.YoutubeDL(options) as downloader:
+            info = downloader.extract_info(str(request["url"]), download=True)
+            if not isinstance(info, dict):
+                raise RuntimeError("yt-dlp completed without returning an output file")
+            path = info.get("filepath") or info.get("_filename") or downloader.prepare_filename(info)
+            if str(request.get("format") or "mp3").lower() == "mp3":
+                path = str(pathlib.Path(str(path)).with_suffix(".mp3"))
+            output = pathlib.Path(str(path))
+            if not output.is_file():
+                raise RuntimeError("yt-dlp reported success but the output file is missing")
+            return {
+                "path": str(output),
+                "title": str(info.get("title") or ""),
+                "thumbnail": info.get("thumbnail"),
+                "bytes": output.stat().st_size,
+            }
+    finally:
+        stop_event.set()
+        watcher.join(1.0)
 
 
 def error_code(error: BaseException, cancelled: bool) -> str:
@@ -205,7 +297,7 @@ def main() -> None:
         prepare_imports(request)
         operation = str(request["operation"])
         if operation == "analyze":
-            value = analyze(request)
+            value = analyze(request, cancel_path)
         elif operation == "download":
             value = download(request, progress_path, cancel_path)
         elif operation == "versions":

@@ -177,6 +177,52 @@ pub(crate) struct CancelResult {
     pub cancelled: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PendingZipHandle {
+    pub uri: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PendingZipFd {
+    pub fd: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PublishedZipResult {
+    pub uri: String,
+    pub display_name: String,
+    pub bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LifecycleSignal {
+    pub kind: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ForegroundServiceArgs<'a> {
+    pub title: &'a str,
+    pub detail: &'a str,
+    pub percent: i32,
+    pub indeterminate: bool,
+    pub timeout_detail: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ForegroundProgressArgs<'a> {
+    pub title: &'a str,
+    pub detail: &'a str,
+    pub percent: i32,
+    pub indeterminate: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct EngineUpdateResult {
@@ -206,6 +252,19 @@ impl From<EngineUpdateResult> for EngineUpdateInfo {
 }
 
 pub(crate) fn safe_output_name(title: &str, format: Format) -> String {
+    let stem = sanitize_stem(title);
+    let extension = match format {
+        Format::Mp3 => "mp3",
+        Format::Mp4 => "mp4",
+    };
+    format!("{stem}.{extension}")
+}
+
+pub(crate) fn safe_zip_name(title: &str) -> String {
+    format!("{}.zip", sanitize_stem(title))
+}
+
+fn sanitize_stem(title: &str) -> String {
     let stem = title
         .chars()
         .map(|character| {
@@ -224,12 +283,11 @@ pub(crate) fn safe_output_name(title: &str, format: Format) -> String {
         .collect::<String>()
         .trim_matches([' ', '.'])
         .to_owned();
-    let stem = if stem.is_empty() { "download" } else { &stem };
-    let extension = match format {
-        Format::Mp3 => "mp3",
-        Format::Mp4 => "mp4",
-    };
-    format!("{stem}.{extension}")
+    if stem.is_empty() {
+        "download".to_owned()
+    } else {
+        stem
+    }
 }
 
 #[cfg(test)]
@@ -328,5 +386,24 @@ mod tests {
         }))
         .is_err());
         assert_eq!(safe_output_name("../song?", Format::Mp3), "_song_.mp3");
+        assert_eq!(safe_zip_name("../mix:?"), "_mix__.zip");
+
+        let pending: PendingZipHandle = serde_json::from_value(serde_json::json!({
+            "uri": "content://media/external/downloads/1", "displayName": "mix.zip"
+        }))
+        .unwrap();
+        assert_eq!(pending.display_name, "mix.zip");
+        let fd: PendingZipFd = serde_json::from_value(serde_json::json!({ "fd": 42 })).unwrap();
+        assert_eq!(fd.fd, 42);
+        let published: PublishedZipResult = serde_json::from_value(serde_json::json!({
+            "uri": "content://media/external/downloads/1",
+            "displayName": "mix (1).zip",
+            "bytes": 1024
+        }))
+        .unwrap();
+        assert_eq!(published.bytes, 1024);
+        let signal: LifecycleSignal =
+            serde_json::from_value(serde_json::json!({ "kind": "foreground_timeout" })).unwrap();
+        assert_eq!(signal.kind, "foreground_timeout");
     }
 }

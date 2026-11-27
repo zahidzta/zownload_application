@@ -4,7 +4,15 @@
 #[path = "engine/android_contract.rs"]
 #[allow(dead_code)]
 pub mod android_contract;
+#[cfg(any(test, target_os = "android"))]
+#[path = "engine/android_queue.rs"]
+#[allow(dead_code)]
+pub(crate) mod android_queue;
 pub mod android_spike;
+#[cfg(any(test, target_os = "android"))]
+#[path = "engine/android_zip.rs"]
+#[allow(dead_code)]
+pub(crate) mod android_zip;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub mod app_update;
 mod commands;
