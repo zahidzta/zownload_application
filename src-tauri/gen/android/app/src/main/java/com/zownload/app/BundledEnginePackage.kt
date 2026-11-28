@@ -71,6 +71,7 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
             )
         } finally {
             activeOperations.remove(operationId, cancelFile)
+            File(context.cacheDir, "zownload-engine/$operationId").deleteRecursively()
         }
     }
 
@@ -107,6 +108,22 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
             false
         }
     }
+
+    override fun cancelAllActive(): Int {
+        var count = 0
+        for (marker in activeOperations.values) {
+            try {
+                marker.parentFile?.mkdirs()
+                if (marker.createNewFile() || marker.exists()) {
+                    count += 1
+                }
+            } catch (_: IOException) {
+            }
+        }
+        return count
+    }
+
+    override fun hasActiveOperations(): Boolean = activeOperations.isNotEmpty()
 
     override fun checkUpdate(): JSONObject {
         ensureReady()
@@ -315,10 +332,17 @@ internal class BundledEnginePackage(private val context: Context) : AndroidEngin
         if (!::versions.isInitialized) initialize()
     }
 
-    private fun loadVersions(): JSONObject = runRequest(
-        JSONObject().put("operation", "versions"),
-        UUID.randomUUID().toString(),
-    )
+    private fun loadVersions(): JSONObject {
+        val operationId = UUID.randomUUID().toString()
+        return try {
+            runRequest(
+                JSONObject().put("operation", "versions"),
+                operationId,
+            )
+        } finally {
+            File(context.cacheDir, "zownload-engine/$operationId").deleteRecursively()
+        }
+    }
 
     private fun registerOperation(operationId: String): File {
         validateOperationId(operationId)

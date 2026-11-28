@@ -16,6 +16,8 @@ internal interface AndroidEnginePackage {
         onProgress: (JSONObject) -> Unit,
     ): JSONObject
     fun cancel(operationId: String): Boolean
+    fun cancelAllActive(): Int = 0
+    fun hasActiveOperations(): Boolean = false
     fun checkUpdate(): JSONObject
     fun update(): JSONObject
 }
@@ -46,6 +48,10 @@ internal class AndroidEngineAdapter(
     ): JSONObject = packageProvider.downloadOne(request, operationId, outputTemplate, onProgress)
 
     fun cancel(operationId: String): Boolean = packageProvider.cancel(operationId)
+
+    fun cancelAllActive(): Int = packageProvider.cancelAllActive()
+
+    fun hasActiveOperations(): Boolean = packageProvider.hasActiveOperations()
 
     fun checkUpdate(): JSONObject = packageProvider.checkUpdate()
 

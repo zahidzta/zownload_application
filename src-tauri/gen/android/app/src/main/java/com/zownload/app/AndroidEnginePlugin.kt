@@ -4,6 +4,7 @@
 package com.zownload.app
 
 import android.app.Activity
+import android.content.Context
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -13,6 +14,7 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 @InvokeArg
 class AndroidAnalyzeArgs {
@@ -53,9 +55,90 @@ class AndroidPublishOutputArgs {
     lateinit var format: String
 }
 
+@InvokeArg
+class AndroidCreatePendingZipArgs {
+    lateinit var displayName: String
+}
+
+@InvokeArg
+class AndroidOpenPendingZipArgs {
+    lateinit var uri: String
+}
+
+@InvokeArg
+class AndroidPublishPendingZipArgs {
+    lateinit var uri: String
+    var expectedBytes: Long = 0
+}
+
+@InvokeArg
+class AndroidCleanupQueueArgs {
+    lateinit var queueId: String
+}
+
+@InvokeArg
+class AndroidLifecycleChannelArgs {
+    var onSignal: Channel? = null
+}
+
+@InvokeArg
+class AndroidForegroundServiceArgs {
+    lateinit var title: String
+    lateinit var detail: String
+    var percent: Int = 0
+    var indeterminate: Boolean = true
+    lateinit var timeoutDetail: String
+}
+
+@InvokeArg
+class AndroidForegroundProgressArgs {
+    lateinit var title: String
+    lateinit var detail: String
+    var percent: Int = 0
+    var indeterminate: Boolean = true
+}
+
 @TauriPlugin
 class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
-    private val adapter by lazy { AndroidEngineAdapter(activity.applicationContext) }
+    private val appContext: Context = activity.applicationContext
+    private val adapter: AndroidEngineAdapter
+        get() = getOrCreateAdapter(appContext)
+
+    companion object {
+        private val lifecycleChannel = AtomicReference<Channel?>(null)
+        private val activeAdapter = AtomicReference<AndroidEngineAdapter?>(null)
+        private val adapterLock = Any()
+
+        private fun getOrCreateAdapter(context: Context): AndroidEngineAdapter {
+            activeAdapter.get()?.let { return it }
+            synchronized(adapterLock) {
+                activeAdapter.get()?.let { return it }
+                return AndroidEngineAdapter(context.applicationContext).also { activeAdapter.set(it) }
+            }
+        }
+
+        internal fun onTaskRemoved(): Boolean = dispatchLifecycleSignal("task_removed")
+
+        internal fun onForegroundTimeout(): Boolean = dispatchLifecycleSignal("foreground_timeout")
+
+        internal fun hasActiveOperations(): Boolean = activeAdapter.get()?.hasActiveOperations() == true
+
+        private fun dispatchLifecycleSignal(kind: String): Boolean {
+            activeAdapter.get()?.cancelAllActive()
+            val channel = lifecycleChannel.get() ?: return false
+            // Never block the Android main thread inside onTaskRemoved/onTimeout:
+            // Rust calls back into Tauri mobile plugin commands on the main Looper.
+            Thread({
+                try {
+                    val payload = JSObject()
+                    payload.put("kind", kind)
+                    channel.send(payload)
+                } catch (_: Exception) {
+                }
+            }, "zownload-lifecycle-$kind").start()
+            return true
+        }
+    }
 
     // These methods bridge a single engine call. Queue state and retry policy
     // stay in Rust; worker threads keep blocking Python calls off the UI thread.
@@ -78,7 +161,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve(failure(error))
             return
         }
-        val outputDirectory = File(activity.cacheDir, "zownload-engine/${args.operationId}")
+        val outputDirectory = File(appContext.cacheDir, "zownload-engine/${args.operationId}")
         val outputTemplate = File(outputDirectory, "%(title).200B [%(id)s].%(ext)s").absolutePath
         val request = requestJson(args.request)
         runOnWorker(invoke) {
@@ -118,13 +201,13 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val cacheRoot = File(activity.cacheDir, "zownload-engine").canonicalFile
+            val cacheRoot = File(appContext.cacheDir, "zownload-engine").canonicalFile
             val source = File(args.path).canonicalFile
             if (!source.path.startsWith(cacheRoot.path + File.separator)) {
                 throw EngineBridgeException("engine_missing", "Android output is outside the private engine cache")
             }
             val published = publishMediaStoreOutput(
-                activity.applicationContext,
+                appContext,
                 source,
                 args.displayName,
                 args.format,
@@ -134,6 +217,161 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
                 .put("mimeType", published.mimeType)
                 .put("bytes", published.bytes)
         }
+    }
+
+    @Command
+    fun createPendingZip(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidCreatePendingZipArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val pending = createPendingMediaStoreZip(appContext, args.displayName)
+            JSONObject()
+                .put("uri", pending.uri)
+                .put("displayName", pending.displayName)
+        }
+    }
+
+    @Command
+    fun openPendingZipFd(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidOpenPendingZipArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val fd = openPendingMediaStoreZipFd(appContext, args.uri)
+            JSONObject().put("fd", fd)
+        }
+    }
+
+    @Command
+    fun publishPendingZip(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidPublishPendingZipArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val published = publishPendingMediaStoreZip(
+                appContext,
+                args.uri,
+                args.expectedBytes,
+            )
+            JSONObject()
+                .put("uri", published.uri)
+                .put("displayName", published.displayName)
+                .put("bytes", published.bytes)
+        }
+    }
+
+    @Command
+    fun deletePendingZip(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidOpenPendingZipArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val deleted = deletePendingMediaStoreZip(appContext, args.uri)
+            JSONObject().put("deleted", deleted)
+        }
+    }
+
+    @Command
+    fun cleanupOperation(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidCancelArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val cleaned = deleteOperationWorkDir(appContext.cacheDir, args.operationId)
+            JSONObject().put("cleaned", cleaned)
+        }
+    }
+
+    @Command
+    fun cleanupQueueCache(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidCleanupQueueArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        runOnWorker(invoke) {
+            val cleaned = deleteQueueCacheDirs(appContext.cacheDir, args.queueId)
+            JSONObject().put("cleaned", cleaned)
+        }
+    }
+
+    @Command
+    fun registerLifecycleChannel(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidLifecycleChannelArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        lifecycleChannel.set(args.onSignal)
+        invoke.resolve(success(JSONObject().put("registered", args.onSignal != null)))
+    }
+
+    @Command
+    fun startForegroundService(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidForegroundServiceArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        val ack = DownloadForegroundService.start(
+            appContext,
+            args.title,
+            args.detail,
+            args.percent,
+            args.indeterminate,
+            args.timeoutDetail,
+        )
+        runOnWorker(invoke) {
+            val error = ack.await()
+            if (error != null) {
+                DownloadForegroundService.stop(appContext)
+                throw EngineBridgeException("permission_denied", error)
+            }
+            JSONObject().put("started", true)
+        }
+    }
+
+    @Command
+    fun updateForegroundProgress(invoke: Invoke) {
+        val args = try {
+            invoke.parseArgs(AndroidForegroundProgressArgs::class.java)
+        } catch (error: Exception) {
+            invoke.resolve(failure(error))
+            return
+        }
+        DownloadForegroundService.updateProgress(
+            appContext,
+            args.title,
+            args.detail,
+            args.percent,
+            args.indeterminate,
+        )
+        invoke.resolve(success(JSONObject().put("updated", true)))
+    }
+
+    @Command
+    fun stopForegroundService(invoke: Invoke) {
+        DownloadForegroundService.stop(appContext)
+        invoke.resolve(success(JSONObject().put("stopped", true)))
     }
 
     @Command

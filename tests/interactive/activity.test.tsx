@@ -185,3 +185,74 @@ test('mounted app announces a translated snapshot error and offers retry', async
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   view.unmount()
 })
+
+test('recreated UI restores multi-item queue via get_queue and tracks live progress without duplicates', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const simulator = createSimulatorTransport({ clock, storage })
+  const activeId = await simulator.call('enqueue_download', { request: singleRequest })
+  const queuedId = await simulator.call('enqueue_download', { request: {
+    url: analysisUrls.playlist, format: 'mp4', quality: { type: 'max' }, isPlaylist: true,
+  } })
+  clock.advanceBy(2000)
+
+  const recreated = createDownloadFlowStore(simulator)
+  const off = recreated.getState().connectActivity()
+  await waitFor(() => expect(recreated.getState().queueItems).toHaveLength(2))
+  expect(recreated.getState().queueItems.map((item) => item.id)).toEqual([activeId, queuedId])
+  const beforePercent = recreated.getState().queueItems[0].progress.kind === 'single'
+    ? recreated.getState().queueItems[0].progress.percent : -1
+  expect(beforePercent).toBeGreaterThan(0)
+
+  clock.advanceBy(1000)
+  await waitFor(() => {
+    const first = recreated.getState().queueItems.find((item) => item.id === activeId)
+    expect(first?.progress.kind).toBe('single')
+    if (first?.progress.kind === 'single') {
+      expect(first.progress.percent).toBeGreaterThan(beforePercent)
+    }
+  })
+  expect(recreated.getState().queueItems.map((item) => item.id)).toEqual([activeId, queuedId])
+  off()
+})
+
+test('visibility reconciliation refreshes queue and history on foreground return without duplicating listeners', async () => {
+  const clock = createManualSimulatorClock()
+  const storage = createMemoryMockStorage()
+  const simulator = createSimulatorTransport({ clock, storage })
+  const on = vi.spyOn(simulator, 'on')
+  const call = vi.spyOn(simulator, 'call')
+  const flow = createDownloadFlowStore(simulator)
+  const off = flow.getState().connectActivity()
+  await waitFor(() => expect(on).toHaveBeenCalledTimes(4))
+  await waitFor(() => expect(flow.getState().settings).not.toBeNull())
+
+  const originalDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState')
+  let currentVisibility: DocumentVisibilityState = 'hidden'
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => currentVisibility,
+  })
+  try {
+    document.dispatchEvent(new Event('visibilitychange'))
+    const callsBeforeVisible = call.mock.calls.length
+
+    const id = await simulator.call('enqueue_download', { request: singleRequest })
+    clock.advanceBy(1000)
+    expect(flow.getState().queueItems.map((item) => item.id)).toEqual([id])
+
+    currentVisibility = 'visible'
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() => expect(call.mock.calls.length).toBeGreaterThan(callsBeforeVisible))
+    await waitFor(() => expect(flow.getState().queueItems.map((item) => item.id)).toEqual([id]))
+    expect(on).toHaveBeenCalledTimes(4)
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(document, 'visibilityState', originalDescriptor)
+    } else {
+      delete (document as unknown as Record<string, unknown>).visibilityState
+    }
+    off()
+  }
+})

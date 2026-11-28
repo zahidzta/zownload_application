@@ -462,6 +462,14 @@ export function createDownloadFlowStore(transport: AppTransport) {
               offs.forEach((off) => off())
               return
             }
+            if (typeof document !== 'undefined') {
+              const onVisibilityChange = () => {
+                if (version !== connectionVersion || document.visibilityState !== 'visible') return
+                void get().retryActivity()
+              }
+              document.addEventListener('visibilitychange', onVisibilityChange)
+              offs.push(() => document.removeEventListener('visibilitychange', onVisibilityChange))
+            }
             disconnectors = offs
             void get().retryActivity()
           } catch (reason) {
