@@ -47,4 +47,54 @@ class DownloadForegroundServiceTest {
         }
         assertEquals("Mix (2).zip", selected)
     }
+
+    @Test
+    fun notificationUpdatesDeduplicateIdenticalProgressSnapshots() {
+        val initial = formatNotificationContent(
+            title = "Sample Track",
+            detail = "15%",
+            percent = 15,
+            indeterminate = false,
+            ongoing = true,
+        )
+        val identical = formatNotificationContent(
+            title = "Sample Track",
+            detail = "15%",
+            percent = 15,
+            indeterminate = false,
+            ongoing = true,
+        )
+        val nextPercent = formatNotificationContent(
+            title = "Sample Track",
+            detail = "16%",
+            percent = 16,
+            indeterminate = false,
+            ongoing = true,
+        )
+        assertTrue(shouldPostNotificationUpdate(null, initial))
+        assertFalse(shouldPostNotificationUpdate(initial, identical))
+        assertTrue(shouldPostNotificationUpdate(initial, nextPercent))
+    }
+
+    @Test
+    fun mediaStorePublishedDisplayNameAcceptsExactAndScopedStorageNumberedCollisions() {
+        assertTrue(isExpectedPublishedDisplayName("track.mp3", "track.mp3", "mp3"))
+        assertTrue(isExpectedPublishedDisplayName("track.mp3", "track (1).mp3", "mp3"))
+        assertTrue(isExpectedPublishedDisplayName("track.mp3", "track (12).mp3", "mp3"))
+        assertFalse(isExpectedPublishedDisplayName("track.mp3", "track (0).mp3", "mp3"))
+        assertFalse(isExpectedPublishedDisplayName("track.mp3", "track (abc).mp3", "mp3"))
+        assertFalse(isExpectedPublishedDisplayName("track.mp3", "other (1).mp3", "mp3"))
+        assertFalse(isExpectedPublishedDisplayName("track.mp3", "track (1).mp4", "mp3"))
+    }
+
+    @Test
+    fun insertFallbackRetriesWithNumberedCandidatesWhenMediaStoreReturnsNull() {
+        val tried = mutableListOf<String>()
+        val result = insertWithNumberedFallback("track.mp3") { candidate ->
+            tried += candidate
+            if (candidate == "track (2).mp3") "content://media/external/downloads/99" else null
+        }
+        assertEquals(listOf("track.mp3", "track (1).mp3", "track (2).mp3"), tried)
+        assertEquals("track (2).mp3" to "content://media/external/downloads/99", result)
+    }
 }

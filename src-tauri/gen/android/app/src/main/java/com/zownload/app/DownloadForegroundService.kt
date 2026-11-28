@@ -48,6 +48,11 @@ internal fun formatNotificationContent(
     )
 }
 
+internal fun shouldPostNotificationUpdate(
+    previous: NotificationContent?,
+    next: NotificationContent,
+): Boolean = previous != next
+
 // Stateless Android foreground service for active Rust-owned queue work.
 // Holds no queue items, retry state, or business rules.
 class DownloadForegroundService : Service() {
@@ -126,6 +131,7 @@ class DownloadForegroundService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var timedOut = false
     @Volatile private var timeoutDetail = DEFAULT_TIMEOUT_DETAIL
+    @Volatile private var lastPostedContent: NotificationContent? = null
     private var stopFallback: Runnable? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -161,6 +167,7 @@ class DownloadForegroundService : Service() {
                 0
             }
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+            lastPostedContent = content
             activeInstance = this
             Log.i(TAG, "SERVICE_STARTED type=dataSync startId=$startId")
         } catch (error: Exception) {
@@ -183,6 +190,8 @@ class DownloadForegroundService : Service() {
         if (timedOut) return
         ensureChannel()
         val content = formatNotificationContent(title, detail, percent, indeterminate, ongoing = true)
+        if (!shouldPostNotificationUpdate(lastPostedContent, content)) return
+        lastPostedContent = content
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(content))
     }
 
@@ -213,6 +222,7 @@ class DownloadForegroundService : Service() {
     internal fun handleForegroundTimeout(startId: Int, fgsType: Int) {
         Log.i(TAG, "SERVICE_TIMEOUT startId=$startId type=$fgsType")
         timedOut = true
+        lastPostedContent = null
         try {
             AndroidEnginePlugin.onForegroundTimeout()
             ensureChannel()
@@ -234,6 +244,7 @@ class DownloadForegroundService : Service() {
     override fun onDestroy() {
         stopFallback?.let { mainHandler.removeCallbacks(it) }
         stopFallback = null
+        lastPostedContent = null
         if (activeInstance === this) {
             activeInstance = null
         }

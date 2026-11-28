@@ -4,6 +4,7 @@
 package com.zownload.app
 
 import android.app.Activity
+import android.content.Context
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -99,13 +100,22 @@ class AndroidForegroundProgressArgs {
 
 @TauriPlugin
 class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
-    private val adapter by lazy {
-        AndroidEngineAdapter(activity.applicationContext).also { activeAdapter.set(it) }
-    }
+    private val appContext: Context = activity.applicationContext
+    private val adapter: AndroidEngineAdapter
+        get() = getOrCreateAdapter(appContext)
 
     companion object {
         private val lifecycleChannel = AtomicReference<Channel?>(null)
         private val activeAdapter = AtomicReference<AndroidEngineAdapter?>(null)
+        private val adapterLock = Any()
+
+        private fun getOrCreateAdapter(context: Context): AndroidEngineAdapter {
+            activeAdapter.get()?.let { return it }
+            synchronized(adapterLock) {
+                activeAdapter.get()?.let { return it }
+                return AndroidEngineAdapter(context.applicationContext).also { activeAdapter.set(it) }
+            }
+        }
 
         internal fun onTaskRemoved(): Boolean = dispatchLifecycleSignal("task_removed")
 
@@ -151,7 +161,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve(failure(error))
             return
         }
-        val outputDirectory = File(activity.cacheDir, "zownload-engine/${args.operationId}")
+        val outputDirectory = File(appContext.cacheDir, "zownload-engine/${args.operationId}")
         val outputTemplate = File(outputDirectory, "%(title).200B [%(id)s].%(ext)s").absolutePath
         val request = requestJson(args.request)
         runOnWorker(invoke) {
@@ -191,13 +201,13 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val cacheRoot = File(activity.cacheDir, "zownload-engine").canonicalFile
+            val cacheRoot = File(appContext.cacheDir, "zownload-engine").canonicalFile
             val source = File(args.path).canonicalFile
             if (!source.path.startsWith(cacheRoot.path + File.separator)) {
                 throw EngineBridgeException("engine_missing", "Android output is outside the private engine cache")
             }
             val published = publishMediaStoreOutput(
-                activity.applicationContext,
+                appContext,
                 source,
                 args.displayName,
                 args.format,
@@ -218,7 +228,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val pending = createPendingMediaStoreZip(activity.applicationContext, args.displayName)
+            val pending = createPendingMediaStoreZip(appContext, args.displayName)
             JSONObject()
                 .put("uri", pending.uri)
                 .put("displayName", pending.displayName)
@@ -234,7 +244,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val fd = openPendingMediaStoreZipFd(activity.applicationContext, args.uri)
+            val fd = openPendingMediaStoreZipFd(appContext, args.uri)
             JSONObject().put("fd", fd)
         }
     }
@@ -249,7 +259,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
         }
         runOnWorker(invoke) {
             val published = publishPendingMediaStoreZip(
-                activity.applicationContext,
+                appContext,
                 args.uri,
                 args.expectedBytes,
             )
@@ -269,7 +279,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val deleted = deletePendingMediaStoreZip(activity.applicationContext, args.uri)
+            val deleted = deletePendingMediaStoreZip(appContext, args.uri)
             JSONObject().put("deleted", deleted)
         }
     }
@@ -283,7 +293,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val cleaned = deleteOperationWorkDir(activity.cacheDir, args.operationId)
+            val cleaned = deleteOperationWorkDir(appContext.cacheDir, args.operationId)
             JSONObject().put("cleaned", cleaned)
         }
     }
@@ -297,7 +307,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         runOnWorker(invoke) {
-            val cleaned = deleteQueueCacheDirs(activity.cacheDir, args.queueId)
+            val cleaned = deleteQueueCacheDirs(appContext.cacheDir, args.queueId)
             JSONObject().put("cleaned", cleaned)
         }
     }
@@ -323,7 +333,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         val ack = DownloadForegroundService.start(
-            activity.applicationContext,
+            appContext,
             args.title,
             args.detail,
             args.percent,
@@ -333,7 +343,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
         runOnWorker(invoke) {
             val error = ack.await()
             if (error != null) {
-                DownloadForegroundService.stop(activity.applicationContext)
+                DownloadForegroundService.stop(appContext)
                 throw EngineBridgeException("permission_denied", error)
             }
             JSONObject().put("started", true)
@@ -349,7 +359,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
             return
         }
         DownloadForegroundService.updateProgress(
-            activity.applicationContext,
+            appContext,
             args.title,
             args.detail,
             args.percent,
@@ -360,7 +370,7 @@ class AndroidEnginePlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
     fun stopForegroundService(invoke: Invoke) {
-        DownloadForegroundService.stop(activity.applicationContext)
+        DownloadForegroundService.stop(appContext)
         invoke.resolve(success(JSONObject().put("stopped", true)))
     }
 

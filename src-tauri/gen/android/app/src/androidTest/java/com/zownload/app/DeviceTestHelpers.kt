@@ -214,7 +214,12 @@ internal object DeviceTestHelpers {
             .activeNotifications
             .firstOrNull { it.id == DownloadForegroundService.NOTIFICATION_ID }
 
-    fun readSqliteQueueStatus(context: Context, id: String): String? {
+    data class SqliteQueueSnapshot(val status: String, val percent: Double)
+
+    fun readSqliteQueueStatus(context: Context, id: String): String? =
+        readSqliteQueueSnapshot(context, id)?.status
+
+    fun readSqliteQueueSnapshot(context: Context, id: String): SqliteQueueSnapshot? {
         val candidates = listOf(
             File(context.filesDir, "zownload.sqlite3"),
             File(context.dataDir, "zownload.sqlite3"),
@@ -222,8 +227,16 @@ internal object DeviceTestHelpers {
         val dbFile = candidates.firstOrNull { it.isFile } ?: return null
         return try {
             SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                db.rawQuery("SELECT status FROM queue_items WHERE id = ?", arrayOf(id)).use { cursor ->
-                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                db.rawQuery("SELECT status, progress FROM queue_items WHERE id = ?", arrayOf(id)).use { cursor ->
+                    if (!cursor.moveToFirst()) return null
+                    val status = cursor.getString(0)
+                    val progress = JSONObject(cursor.getString(1))
+                    val percent = if (progress.has("percent")) {
+                        progress.optDouble("percent", 0.0)
+                    } else {
+                        progress.optDouble("currentPercent", 0.0)
+                    }
+                    SqliteQueueSnapshot(status, percent)
                 }
             }
         } catch (_: Exception) {

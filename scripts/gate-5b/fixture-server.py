@@ -20,6 +20,8 @@ def build_silent_mp3(frame_count: int = 1250) -> bytes:
 
 
 MP3_PAYLOAD = build_silent_mp3()
+RECREATE_MP3_PAYLOAD = build_silent_mp3(frame_count=5400)
+HOME_MP3_PAYLOAD = build_silent_mp3(frame_count=13000)
 CHUNK_SIZE = 4096
 RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
@@ -70,11 +72,21 @@ class FixtureHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
             return
 
-        if clean_path not in ("/track-1.mp3", "/track-2.mp3", "/entry-1/fixture.mp3", "/entry-2/fixture.mp3", "/long.mp3"):
+        payloads = {
+            "/track-1.mp3": MP3_PAYLOAD,
+            "/track-2.mp3": MP3_PAYLOAD,
+            "/entry-1/fixture.mp3": MP3_PAYLOAD,
+            "/entry-2/fixture.mp3": MP3_PAYLOAD,
+            "/long.mp3": MP3_PAYLOAD,
+            "/recreate-long.mp3": RECREATE_MP3_PAYLOAD,
+            "/home-long.mp3": HOME_MP3_PAYLOAD,
+        }
+        payload = payloads.get(clean_path)
+        if payload is None:
             self.send_error(404, "Not found")
             return
 
-        total = len(MP3_PAYLOAD)
+        total = len(payload)
         range_header = self.headers.get("Range")
         start = 0
         end = total - 1
@@ -117,7 +129,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
         try:
             while pos <= end:
                 stop = min(end + 1, pos + CHUNK_SIZE)
-                chunk = MP3_PAYLOAD[pos:stop]
+                chunk = payload[pos:stop]
                 self.wfile.write(chunk)
                 self.wfile.flush()
                 pos = stop

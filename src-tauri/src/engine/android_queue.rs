@@ -1752,4 +1752,69 @@ mod tests {
         assert!(matches!(calls.last(), Some(ServiceCall::Stop)));
         let _ = fs::remove_dir_all(root);
     }
+
+    #[test]
+    fn monotonic_progress_updates_foreground_notification_without_regression() {
+        let (root, db, backend, sink, core) = setup();
+        let gate = Arc::new(AtomicBool::new(false));
+        *backend.wait_on_download.lock().unwrap() = Some(Arc::clone(&gate));
+
+        let id = core
+            .enqueue(DownloadRequest {
+                url: "https://example.test/single".into(),
+                format: Format::Mp3,
+                quality: Quality::Audio { bitrate: 128 },
+                is_playlist: false,
+            })
+            .unwrap();
+        wait_until(|| {
+            backend
+                .service_calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|call| matches!(call, ServiceCall::Update { percent: 25, .. }))
+        });
+        core.update_progress(&id, 60.0, "downloading", None, false);
+        core.update_progress(&id, 40.0, "downloading", None, false);
+        let item = db
+            .lock()
+            .unwrap()
+            .get_queue()
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id)
+            .unwrap();
+        assert!(matches!(
+            item.progress,
+            Progress::Single { percent } if (percent - 60.0).abs() < f32::EPSILON
+        ));
+        core.update_progress(&id, 85.0, "downloading", None, false);
+        gate.store(true, Ordering::SeqCst);
+
+        wait_until(|| {
+            db.lock().unwrap().get_queue().unwrap().is_empty()
+                && core.control.lock().unwrap().active.is_none()
+                && !core.control.lock().unwrap().service_running
+        });
+
+        let update_percents: Vec<i32> = backend
+            .service_calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|call| match call {
+                ServiceCall::Update { percent, .. } => Some(*percent),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(update_percents, vec![25, 60, 85]);
+        assert!(sink
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event == &format!("removed:{id}")));
+        let _ = fs::remove_dir_all(root);
+    }
 }

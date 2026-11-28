@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('mediastore-single', 'mediastore-zip', 'foreground-service', 'lifecycle-recovery', 'foreground-timeout')]
+    [ValidateSet('mediastore-single', 'mediastore-zip', 'foreground-service', 'lifecycle-recovery', 'home-and-recreation', 'foreground-timeout')]
     [string]$Case
 )
 
@@ -54,7 +54,8 @@ function Invoke-Instrumentation {
         [string]$Serial,
         [string]$ClassSpec,
         [string[]]$ExtraArgs = @(),
-        [string]$LogName = 'device'
+        [string]$LogName = 'device',
+        [int]$TimeoutMs = 300000
     )
 
     $testLog = Join-Path $logDirectory "$Case-$LogName.log"
@@ -64,10 +65,10 @@ function Invoke-Instrumentation {
         @('com.zownload.app.test/androidx.test.runner.AndroidJUnitRunner')
     $proc = Start-Process -FilePath $Adb -ArgumentList $args -PassThru `
         -RedirectStandardOutput $testLog -RedirectStandardError $testErr -WindowStyle Hidden
-    $null = $proc.WaitForExit(300000)
+    $null = $proc.WaitForExit($TimeoutMs)
     if (-not $proc.HasExited) {
         $proc.Kill()
-        throw "Instrumentation $ClassSpec exceeded 5 minutes."
+        throw "Instrumentation $ClassSpec exceeded $([int]($TimeoutMs / 1000)) seconds."
     }
     $report = Get-Content -LiteralPath $testLog -Raw
     if (-not $report.Contains('OK (') -or -not $report.Contains('INSTRUMENTATION_CODE: -1')) {
@@ -311,6 +312,41 @@ try {
         $httpText = Get-Content -LiteralPath $fixtureLog -Raw
         if (-not $httpText.Contains('range=bytes=')) {
             throw 'Expected HTTP Range request on Continue after process death.'
+        }
+    }
+    elseif ($Case -eq 'home-and-recreation') {
+        $homeUrlB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("http://127.0.0.1:$fixturePort/home-long.mp3"))
+        $recreateUrlB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("http://127.0.0.1:$fixturePort/recreate-long.mp3"))
+        $queuedUrlB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("http://127.0.0.1:$fixturePort/track-1.mp3"))
+
+        # Phase 1: Home continuation (AC-31)
+        Reset-AppState -Adb $adb -Serial $serial -Api $api
+        & $adb -s $serial logcat -c | Out-Null
+        Invoke-Instrumentation -Adb $adb -Serial $serial `
+            -ClassSpec 'com.zownload.app.HomeAndRecreationProductionDeviceTest#homeContinuationAdvancesNotificationAndCompletesAfterReturning' `
+            -ExtraArgs @('-e', 'homeUrlB64', $homeUrlB64) `
+            -LogName 'home' `
+            -TimeoutMs 420000
+        $homeLogcat = Join-Path $logDirectory "$Case-home-logcat.log"
+        & $adb -s $serial logcat -d -s 'Zownload5B06:I' '*:S' | Out-File -LiteralPath $homeLogcat
+        Get-Content -LiteralPath $homeLogcat -Tail 15
+
+        # Phase 2: Activity/WebView recreation (AC-34)
+        Reset-AppState -Adb $adb -Serial $serial -Api $api
+        & $adb -s $serial logcat -c | Out-Null
+        if (Test-Path -LiteralPath $fixtureLog) { Remove-Item -LiteralPath $fixtureLog -Force }
+        Invoke-Instrumentation -Adb $adb -Serial $serial `
+            -ClassSpec 'com.zownload.app.HomeAndRecreationProductionDeviceTest#recreatedActivityRestoresQueueAndReceivesLiveEventsWithoutDuplicates' `
+            -ExtraArgs @('-e', 'recreateUrlB64', $recreateUrlB64, '-e', 'queuedUrlB64', $queuedUrlB64) `
+            -LogName 'recreation' `
+            -TimeoutMs 300000
+        $recreateLogcat = Join-Path $logDirectory "$Case-recreation-logcat.log"
+        & $adb -s $serial logcat -d -s 'Zownload5B06:I' '*:S' | Out-File -LiteralPath $recreateLogcat
+        Get-Content -LiteralPath $recreateLogcat -Tail 10
+
+        $recreateGets = @(Get-Content -LiteralPath $fixtureLog | Select-String '"GET /recreate-long\.mp3 ')
+        if ($recreateGets.Count -lt 1 -or $recreateGets.Count -gt 2) {
+            throw "Expected single download GET sequence (1-2 requests incl. probe) for /recreate-long.mp3 across Activity recreation, saw $($recreateGets.Count)."
         }
     }
     elseif ($Case -eq 'foreground-timeout') {

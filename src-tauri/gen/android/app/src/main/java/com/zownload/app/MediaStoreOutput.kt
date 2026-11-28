@@ -98,14 +98,16 @@ internal fun publishMediaStoreOutput(
         throw mapMediaStoreFailure(error)
     }
 
-    val values = ContentValues().apply {
-        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
-        put(MediaStore.Downloads.MIME_TYPE, mimeType)
-        put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
-        put(MediaStore.Downloads.IS_PENDING, 1)
-    }
-    val uri = try {
-        resolver.insert(downloads, values)
+    val (insertedName, uri) = try {
+        insertWithNumberedFallback(safeName) { candidate ->
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, candidate)
+                put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            resolver.insert(downloads, values)
+        }
     } catch (error: Exception) {
         throw mapMediaStoreFailure(error)
     } ?: throw EngineBridgeException("unknown", "MediaStore refused to create a Downloads item")
@@ -119,6 +121,7 @@ internal fun publishMediaStoreOutput(
         }
         if (copied != sourceBytes) throw IOException("MediaStore output size does not match the engine result")
 
+        var actualName: String? = null
         val pending = resolver.query(
             uri,
             arrayOf(
@@ -130,8 +133,10 @@ internal fun publishMediaStoreOutput(
             null,
             null,
         )?.use { cursor ->
-            cursor.moveToFirst() &&
-                cursor.getString(0) == safeName &&
+            if (!cursor.moveToFirst()) return@use false
+            actualName = cursor.getString(0)
+            actualName != null &&
+                isExpectedPublishedDisplayName(insertedName, actualName!!, extension) &&
                 cursor.getString(1) == mimeType &&
                 cursor.getInt(2) == 1
         } ?: false
@@ -141,7 +146,7 @@ internal fun publishMediaStoreOutput(
         if (resolver.update(uri, visible, null, null) != 1) {
             throw IOException("MediaStore could not publish the completed Downloads item")
         }
-        return PublishedMediaStoreOutput(uri.toString(), safeName, mimeType, copied)
+        return PublishedMediaStoreOutput(uri.toString(), actualName!!, mimeType, copied)
     } catch (error: Exception) {
         try {
             resolver.delete(uri, null, null)
@@ -172,18 +177,20 @@ internal fun createPendingMediaStoreZip(
     } catch (error: Exception) {
         throw mapMediaStoreFailure(error)
     }
-    val values = ContentValues().apply {
-        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
-        put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-        put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
-        put(MediaStore.Downloads.IS_PENDING, 1)
-    }
-    val uri = try {
-        resolver.insert(downloads, values)
+    val (insertedName, uri) = try {
+        insertWithNumberedFallback(safeName) { candidate ->
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, candidate)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, relativePath)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            resolver.insert(downloads, values)
+        }
     } catch (error: Exception) {
         throw mapMediaStoreFailure(error)
     } ?: throw EngineBridgeException("unknown", "MediaStore refused to create a pending ZIP row")
-    return PendingMediaStoreZip(uri.toString(), safeName)
+    return PendingMediaStoreZip(uri.toString(), insertedName)
 }
 
 internal fun openPendingMediaStoreZipFd(
@@ -383,6 +390,39 @@ private fun parseOwnedPendingDownloadsUri(uriText: String): Uri {
         throw EngineBridgeException("permission_denied", "Invalid MediaStore Downloads URI")
     }
     return Uri.parse(uriText)
+}
+
+internal fun <T> insertWithNumberedFallback(
+    initialName: String,
+    maxAttempts: Int = 64,
+    tryInsert: (String) -> T?,
+): Pair<String, T>? {
+    val dot = initialName.lastIndexOf('.')
+    val stem = if (dot > 0) initialName.substring(0, dot) else initialName
+    val extension = if (dot > 0) initialName.substring(dot) else ""
+    var candidate = initialName
+    var suffix = 1
+    repeat(maxAttempts) {
+        val created = tryInsert(candidate)
+        if (created != null) return candidate to created
+        candidate = "$stem ($suffix)$extension"
+        suffix += 1
+    }
+    return null
+}
+
+internal fun isExpectedPublishedDisplayName(
+    requestedName: String,
+    actualName: String,
+    extension: String,
+): Boolean {
+    if (!isSafeDisplayName(actualName, extension)) return false
+    if (actualName == requestedName) return true
+    val suffix = ".$extension"
+    val stem = requestedName.removeSuffix(suffix)
+    if (!actualName.startsWith("$stem (") || !actualName.endsWith(")$suffix")) return false
+    val number = actualName.substring(stem.length + 2, actualName.length - suffix.length - 1)
+    return number.isNotEmpty() && number.all(Char::isDigit) && number.toIntOrNull()?.let { it >= 1 } == true
 }
 
 private fun isSafeDisplayName(name: String, extension: String): Boolean =
