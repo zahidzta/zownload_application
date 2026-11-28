@@ -350,6 +350,7 @@ try {
         }
     }
     elseif ($Case -eq 'foreground-timeout') {
+        $timeoutUrlB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("http://127.0.0.1:$fixturePort/long-timeout.mp3"))
         Reset-AppState -Adb $adb -Serial $serial -Api $api
         & $adb -s $serial logcat -c | Out-Null
         if ($api -ge 35) {
@@ -359,7 +360,7 @@ try {
                 & $adb -s $serial shell device_config put activity_manager $setting 15000 | Out-Null
                 Invoke-Instrumentation -Adb $adb -Serial $serial `
                     -ClassSpec 'com.zownload.app.ForegroundTimeoutProductionDeviceTest#android15SystemTimeoutPausesQueueAndPreservesPart' `
-                    -ExtraArgs @('-e', 'singleUrlB64', $singleUrlB64)
+                    -ExtraArgs @('-e', 'singleUrlB64', $timeoutUrlB64)
             }
             finally {
                 if ($original -eq 'null') {
@@ -372,7 +373,7 @@ try {
             Write-Output "NOTICE: Physical device $model is API $api (< 35); running live service timeout callback verification. Physical API 35 device sign-off remains required for AC-35."
             Invoke-Instrumentation -Adb $adb -Serial $serial `
                 -ClassSpec 'com.zownload.app.ForegroundTimeoutProductionDeviceTest#simulatedTimeoutCallbackPausesQueueAndPreservesPart' `
-                -ExtraArgs @('-e', 'singleUrlB64', $singleUrlB64)
+                -ExtraArgs @('-e', 'singleUrlB64', $timeoutUrlB64)
         }
     }
 }

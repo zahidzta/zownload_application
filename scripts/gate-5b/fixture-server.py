@@ -20,6 +20,7 @@ def build_silent_mp3(frame_count: int = 1250) -> bytes:
 
 
 MP3_PAYLOAD = build_silent_mp3()
+TIMEOUT_MP3_PAYLOAD = build_silent_mp3(frame_count=2600)
 RECREATE_MP3_PAYLOAD = build_silent_mp3(frame_count=5400)
 HOME_MP3_PAYLOAD = build_silent_mp3(frame_count=13000)
 CHUNK_SIZE = 4096
@@ -78,6 +79,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
             "/entry-1/fixture.mp3": MP3_PAYLOAD,
             "/entry-2/fixture.mp3": MP3_PAYLOAD,
             "/long.mp3": MP3_PAYLOAD,
+            "/long-timeout.mp3": TIMEOUT_MP3_PAYLOAD,
             "/recreate-long.mp3": RECREATE_MP3_PAYLOAD,
             "/home-long.mp3": HOME_MP3_PAYLOAD,
         }
